@@ -1,0 +1,22 @@
+# Configuration pour le développement local avec la CLI Supabase (facultatif).
+# En production, les mêmes réglages se font dans le tableau de bord Supabase.
+project_id = "cely-crm"
+
+[api]
+schemas = ["public"]
+max_rows = 1000
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000"]
+# Pas d'inscription publique : le compte est créé à la main.
+enable_signup = false
+
+[auth.email]
+enable_signup = false
+
+[auth.oauth_server]
+# Serveur OAuth 2.1 utilisé par le connecteur Claude
+enabled = true
+authorization_url_path = "/oauth/consent"
+allow_dynamic_registration = true

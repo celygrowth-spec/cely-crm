@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+/* Charte Cely Growth (celygrowth.com) : fond blanc, encre violette profonde, accent violet. */
+:root {
+  --background: #ffffff;
+  --surface: #f7f5fa;
+  --ink: #1a1128;
+  --muted: #6b6178;
+  --border: #ddd3f0;
+  --violet: #8b5bff;
+  --violet-strong: #682dfe;
+  --violet-soft: #f3eaff;
+  --violet-line: #e9d7ff;
+  --success: #1f9d5c;
+  --danger: #b5386a;
+  --warning: #9a6a00;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--border);
+  --color-violet: var(--violet);
+  --color-violet-strong: var(--violet-strong);
+  --color-violet-soft: var(--violet-soft);
+  --color-violet-line: var(--violet-line);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --font-sans: var(--font-manrope), -apple-system, system-ui, sans-serif;
+  --font-label: var(--font-space-grotesk), ui-monospace, sans-serif;
+  --font-display: var(--font-rounded), system-ui, sans-serif;
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--violet-line);
+}
+
+:focus-visible {
+  outline: 2px solid var(--violet);
+  outline-offset: 2px;
+}
+
+dialog::backdrop {
+  background: rgb(26 17 40 / 0.35);
+}
