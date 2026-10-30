@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { CheckSquare, Columns3, LogOut, Plus, Search, Settings, Users } from "lucide-react";
+import { CheckSquare, Columns3, LogOut, Plus, Search, Settings, Users, Wallet } from "lucide-react";
 import type { LeadSource, List, PipelineWithStages } from "@/lib/crm/types";
 import { signOutAction } from "@/app/actions";
 import { cn } from "./ui";
@@ -39,9 +39,20 @@ export const PROSPECTION_NAV = [
   { href: "/prospection/import", label: "Import / export" },
 ];
 
+export const FINANCE_NAV = [
+  { href: "/finance", label: "Vue d'ensemble", exact: true },
+  { href: "/finance/clients", label: "Clients actifs" },
+  { href: "/finance/revenus", label: "Revenus" },
+  { href: "/finance/charges", label: "Charges" },
+  { href: "/finance/urssaf", label: "URSSAF" },
+  { href: "/finance/rentabilite", label: "Rentabilité" },
+  { href: "/finance/parametres", label: "Réglages Finance" },
+];
+
 const NAV = [
   { href: "/prospection", label: "Prospection", icon: Users },
   { href: "/pipelines", label: "Pipelines", icon: Columns3 },
+  { href: "/finance", label: "Finance", icon: Wallet },
   { href: "/a-faire", label: "À faire", icon: CheckSquare },
   { href: "/parametres", label: "Paramètres", icon: Settings },
 ];
@@ -179,6 +190,22 @@ function Shell({
                             {n.href.endsWith("aujourdhui") && dueCount > 0 && (
                               <span className="rounded-full bg-violet px-1.5 font-label text-[10px] font-bold text-white">{dueCount}</span>
                             )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {href === "/finance" && active && (
+                    <div className="mt-0.5 mb-1 ml-[22px] hidden border-l border-line pl-2 md:block">
+                      {FINANCE_NAV.map((n) => {
+                        const on = n.exact ? pathname === n.href : pathname === n.href || pathname.startsWith(n.href + "/");
+                        return (
+                          <Link
+                            key={n.href}
+                            href={n.href}
+                            className={cn("flex items-center rounded-md px-2 py-1 text-[13px]", on ? "font-semibold text-ink" : "text-muted hover:text-ink")}
+                          >
+                            {n.label}
                           </Link>
                         );
                       })}
