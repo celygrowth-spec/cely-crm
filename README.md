@@ -7,6 +7,8 @@ de prospection aux pipelines sans jamais être copiée.
 - **Prospection** : base de prospects, listes, modèles de séquences, campagnes manuelles, doublons, import/export CSV.
 - **Pipelines** : pipelines et étapes personnalisables, kanban avec glisser-déposer, gagné/perdu.
 - **À faire** : tâches et relances (en retard, aujourd'hui, à venir).
+- **Finance** : missions par fiche CRM, revenus (factures émises ailleurs) et paiements partiels, charges et
+  abonnements, suivi URSSAF (estimé / déclaré / payé), trésorerie, prévisions, EBITDA indicatif, simulation.
 - **Paramètres** : sources du lead, connexion à Claude, compte.
 - **Connecteur Claude (MCP)** : rechercher, consulter, créer, noter, déplacer, lister les relances, depuis Claude.
 
@@ -160,6 +162,12 @@ Révoquer l'accès : Supabase › Authentication › OAuth Apps.
 - **Import CSV** : correspondance des colonnes, regroupement des personnes d'une même entreprise,
   détection des doublons (fichier et base), choix explicite créer / compléter / exclure, résumé avec
   erreurs par ligne. Chaque ligne a une empreinte : réimporter le même fichier ne recrée rien.
+- **Finance** : les clients sont les fiches CRM (aucune seconde base). Montants en `numeric(12,2)` en base et en
+  centimes entiers côté TypeScript (`src/lib/finance/`). Factures et paiements ne se suppriment pas : avoirs,
+  remboursements et annulations explicites. Un abonnement est un modèle ; seules ses échéances validées comptent
+  comme payées. Une cotisation URSSAF payée ne sort qu'une fois de la trésorerie (vue `finance_cash_movements`).
+  Les déclarations URSSAF saisies sont figées ; un changement de taux ne les modifie pas, les écarts sont signalés.
+  Taux officiels encodés avec source et date de vérification (Réglages Finance) ; pour un autre statut, suivi manuel.
 - **Archivage** plutôt que suppression ; les fiches archivées sont masquées et restaurables.
 
 ## Tests
