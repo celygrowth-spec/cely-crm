@@ -2,15 +2,15 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { ButtonLink, Card, EmptyState, PageHeader } from "@/components/ui";
 import { requireOwner } from "@/lib/auth";
-import { CHANNEL_LABELS } from "@/lib/format";
-import type { Channel } from "@/lib/crm/types";
+import { STEP_META, type StepType } from "@/lib/prospection/steps";
+
 import { TemplateRowActions } from "./row-actions";
 
 export default async function ModelesPage() {
   const { supabase } = await requireOwner();
   const { data, error } = await supabase
     .from("templates")
-    .select("id, name, updated_at, template_steps(position, name, channel, delay_days)")
+    .select("id, name, updated_at, template_steps(position, name, step_type, delay_days)")
     .order("name");
   if (error) return <p className="text-danger">{error.message}</p>;
   return (
@@ -29,7 +29,7 @@ export default async function ModelesPage() {
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {data.map((t) => {
-            const steps = [...(t.template_steps as { position: number; name: string; channel: Channel; delay_days: number }[])].sort((a, b) => a.position - b.position);
+            const steps = [...(t.template_steps as { position: number; name: string; step_type: StepType; delay_days: number }[])].sort((a, b) => a.position - b.position);
             return (
               <Card key={t.id} className="p-4">
                 <div className="flex items-start justify-between gap-2">
@@ -41,7 +41,7 @@ export default async function ModelesPage() {
                     <li key={s.position} className="flex gap-2">
                       <span className="w-5 font-label text-xs text-muted">{s.position}.</span>
                       <span className="flex-1">{s.name}</span>
-                      <span className="text-xs text-muted">{CHANNEL_LABELS[s.channel]}{s.position > 1 ? ` · +${s.delay_days} j` : ""}</span>
+                      <span className="text-xs text-muted">{STEP_META[s.step_type].label}{s.position > 1 ? ` · +${s.delay_days} j` : ""}</span>
                     </li>
                   ))}
                 </ol>

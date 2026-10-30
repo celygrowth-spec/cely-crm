@@ -28,6 +28,17 @@ export function useCrm() {
   return c;
 }
 
+export const PROSPECTION_NAV = [
+  { href: "/prospection/aujourdhui", label: "Aujourd'hui" },
+  { href: "/prospection/reponses", label: "Réponses à traiter" },
+  { href: "/prospection/campagnes", label: "Campagnes" },
+  { href: "/prospection/base", label: "Base de prospects" },
+  { href: "/prospection/listes", label: "Listes" },
+  { href: "/prospection/modeles", label: "Modèles" },
+  { href: "/prospection/doublons", label: "Doublons" },
+  { href: "/prospection/import", label: "Import / export" },
+];
+
 const NAV = [
   { href: "/prospection", label: "Prospection", icon: Users },
   { href: "/pipelines", label: "Pipelines", icon: Columns3 },
@@ -40,6 +51,8 @@ export function AppShell(props: {
   lists: List[];
   pipelines: PipelineWithStages[];
   todoCount: number;
+  dueCount: number;
+  repliesCount: number;
   children: ReactNode;
 }) {
   return (
@@ -54,12 +67,16 @@ function Shell({
   lists,
   pipelines,
   todoCount,
+  dueCount,
+  repliesCount,
   children,
 }: {
   sources: LeadSource[];
   lists: List[];
   pipelines: PipelineWithStages[];
   todoCount: number;
+  dueCount: number;
+  repliesCount: number;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -104,7 +121,7 @@ function Shell({
   return (
     <Ctx.Provider value={value}>
       <div className="flex min-h-dvh flex-col md:flex-row">
-        <aside className="sticky top-0 z-20 flex shrink-0 items-center gap-1 border-b border-line bg-white px-3 py-2 md:h-dvh md:w-56 md:flex-col md:items-stretch md:border-r md:border-b-0 md:px-3 md:py-5">
+        <aside className="sticky top-0 z-20 flex shrink-0 items-center gap-1 border-b border-line bg-white px-3 py-2 md:h-dvh md:w-60 md:overflow-y-auto md:flex-col md:items-stretch md:border-r md:border-b-0 md:px-3 md:py-5">
           <Link href="/prospection" className="mr-2 shrink-0 md:mr-0 md:mb-6 md:px-2">
             <Image src="/brand/cely-logo.svg" alt="Cely Growth" width={84} height={29} priority />
           </Link>
@@ -128,20 +145,46 @@ function Shell({
             {NAV.map(({ href, label, icon: Icon }) => {
               const active = pathname === href || pathname.startsWith(href + "/");
               return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={cn(
-                    "flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold md:flex-row md:gap-2.5 md:py-2 md:text-sm",
-                    active ? "bg-violet-soft text-ink" : "text-muted hover:bg-surface hover:text-ink",
+                <div key={href} className="contents md:block">
+                  <Link
+                    href={href}
+                    className={cn(
+                      "flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold md:flex-row md:gap-2.5 md:py-1.5 md:text-sm",
+                      active ? "bg-violet-soft text-ink" : "text-muted hover:bg-surface hover:text-ink",
+                    )}
+                  >
+                    <Icon size={17} className={active ? "text-violet-strong" : undefined} />
+                    <span className="flex-1">{label}</span>
+                    {href === "/a-faire" && todoCount > 0 && (
+                      <span className="hidden rounded-full bg-violet px-1.5 font-label text-[10px] text-white md:inline">{todoCount}</span>
+                    )}
+                  </Link>
+                  {href === "/prospection" && active && (
+                    <div className="mt-0.5 mb-1 ml-[22px] hidden border-l border-line pl-2 md:block">
+                      {PROSPECTION_NAV.map((n) => {
+                        const on = pathname === n.href || pathname.startsWith(n.href + "/") || (n.href.endsWith("aujourdhui") && pathname.startsWith("/prospection/focus"));
+                        return (
+                          <Link
+                            key={n.href}
+                            href={n.href}
+                            className={cn(
+                              "flex items-center justify-between rounded-md px-2 py-1 text-[13px]",
+                              on ? "font-semibold text-ink" : "text-muted hover:text-ink",
+                            )}
+                          >
+                            {n.label}
+                            {n.href.endsWith("reponses") && repliesCount > 0 && (
+                              <span className="rounded-full bg-amber-100 px-1.5 font-label text-[10px] font-bold text-amber-800">{repliesCount}</span>
+                            )}
+                            {n.href.endsWith("aujourdhui") && dueCount > 0 && (
+                              <span className="rounded-full bg-violet px-1.5 font-label text-[10px] font-bold text-white">{dueCount}</span>
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
                   )}
-                >
-                  <Icon size={17} className={active ? "text-violet-strong" : undefined} />
-                  <span className="flex-1">{label}</span>
-                  {href === "/a-faire" && todoCount > 0 && (
-                    <span className="hidden rounded-full bg-violet px-1.5 font-label text-[10px] text-white md:inline">{todoCount}</span>
-                  )}
-                </Link>
+                </div>
               );
             })}
           </nav>
