@@ -113,7 +113,7 @@ export async function getCompanyDetail(sb: SupabaseClient, id: string): Promise<
     sb.from("tasks").select("*").eq("company_id", id).order("done_at", { nullsFirst: true }).order("due_date"),
     sb
       .from("campaign_participants")
-      .select("*, campaign:campaigns(id,name,archived_at, steps:campaign_steps(position,name,channel,delay_days,message))")
+      .select("*, campaign:campaigns(id,name,archived_at,status, steps:campaign_steps(position,version,name,step_type,channel,delay_days,message))")
       .eq("company_id", id)
       .order("created_at", { ascending: false }),
     sb.from("list_members").select("list:lists(id,name)").eq("company_id", id),

@@ -14,7 +14,7 @@ export function CompanySheet({ id, onClose }: { id: string; onClose: () => void 
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end">
+    <div className="fixed inset-0 z-50 flex justify-end">
       <button className="absolute inset-0 bg-ink/25" aria-label="Fermer la fiche" onClick={onClose} />
       <section
         role="dialog"

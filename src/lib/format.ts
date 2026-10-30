@@ -12,6 +12,7 @@ export const PROSPECT_STATUS_LABELS: Record<ProspectStatus, string> = {
 };
 
 export const PARTICIPANT_STATUS_LABELS: Record<ParticipantStatus, string> = {
+  a_preparer: "À préparer",
   a_contacter: "À contacter",
   en_cours: "En cours",
   a_repondu: "A répondu",
@@ -123,4 +124,10 @@ function tzOffsetMinutes(d: Date): number {
   const m = s.match(/GMT([+-])(\d{2}):?(\d{2})?/);
   if (!m) return 0;
   return (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3] ?? 0));
+}
+
+/** Pourcentage avec dénominateur explicite ; « — » si le dénominateur est nul. */
+export function pct(num: number, den: number): string {
+  if (!den) return "—";
+  return `${Math.round((num / den) * 100)} %`;
 }

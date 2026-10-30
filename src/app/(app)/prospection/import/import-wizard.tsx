@@ -278,7 +278,7 @@ export function ImportWizard() {
           )}
           <div className="mt-4 flex gap-2">
             <Button variant="primary" onClick={() => { setStep(1); setSummary(null); }}>Nouvel import</Button>
-            <a href="/prospection" className="inline-flex h-9 items-center rounded-lg border border-line px-3.5 text-sm font-semibold">Voir la base</a>
+            <a href="/prospection/base" className="inline-flex h-9 items-center rounded-lg border border-line px-3.5 text-sm font-semibold">Voir la base</a>
           </div>
         </Card>
       )}

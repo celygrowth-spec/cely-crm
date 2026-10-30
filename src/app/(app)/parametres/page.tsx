@@ -32,7 +32,7 @@ export default async function ParametresPage() {
         <ul className="mt-2 space-y-1.5 text-sm">
           <li><Link className="font-semibold text-violet-strong" href="/pipelines">Gérer les pipelines et leurs étapes</Link></li>
           <li><Link className="font-semibold text-violet-strong" href="/prospection/doublons">Doublons à vérifier</Link></li>
-          <li><Link className="font-semibold text-violet-strong" href="/prospection?archived=1">Fiches archivées</Link></li>
+          <li><Link className="font-semibold text-violet-strong" href="/prospection/base?archived=1">Fiches archivées</Link></li>
           <li><Link className="font-semibold text-violet-strong" href="/prospection/import">Importer / exporter en CSV</Link></li>
         </ul>
       </Card>

@@ -110,7 +110,7 @@ export function ProspectTable({ rows, showArchived, campaigns }: { rows: Company
         description={`${filtered.length} fiche(s)${filtered.length !== rows.length ? ` sur ${rows.length}` : ""}`}
         actions={
           <>
-            <Link href={showArchived ? "/prospection" : "/prospection?archived=1"} className="text-sm font-semibold text-muted hover:text-ink">
+            <Link href={showArchived ? "/prospection/base" : "/prospection/base?archived=1"} className="text-sm font-semibold text-muted hover:text-ink">
               {showArchived ? "← Fiches actives" : "Voir les archivées"}
             </Link>
             {!showArchived && <Button variant="primary" onClick={() => openCreate({ listId: listId || undefined })}><Plus size={15} /> Nouvelle fiche</Button>}

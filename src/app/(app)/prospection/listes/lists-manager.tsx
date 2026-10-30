@@ -55,7 +55,7 @@ export function ListsManager({ lists }: { lists: L[] }) {
           {lists.map((l) => (
             <Card key={l.id} className="p-4">
               <div className="flex items-start justify-between gap-2">
-                <Link href={`/prospection?list=${l.id}`} className="min-w-0">
+                <Link href={`/prospection/base?list=${l.id}`} className="min-w-0">
                   <p className="truncate font-display text-base font-bold hover:text-violet-strong">{l.name}</p>
                   <p className="text-sm text-muted">{l.count} fiche(s)</p>
                 </Link>

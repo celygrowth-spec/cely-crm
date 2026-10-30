@@ -3,7 +3,7 @@
 export type Channel = "linkedin" | "email" | "phone" | "other";
 export type ProspectStatus = "nouveau" | "contacte" | "en_discussion" | "qualifie" | "pas_interesse";
 export type DealStatus = "open" | "won" | "lost";
-export type ParticipantStatus = "a_contacter" | "en_cours" | "a_repondu" | "termine" | "arrete";
+export type ParticipantStatus = "a_preparer" | "a_contacter" | "en_cours" | "a_repondu" | "termine" | "arrete";
 export type InteractionKind =
   | "note" | "message_out" | "message_in" | "call" | "meeting"
   | "stage_change" | "deal_status" | "prospecting" | "task_done" | "merge" | "system";
@@ -27,6 +27,8 @@ export type Company = {
   last_interaction_at: string | null;
   archived_at: string | null;
   merged_into_id: string | null;
+  do_not_contact: boolean;
+  do_not_contact_reason: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -82,7 +84,7 @@ export type Task = {
   created_at: string;
 };
 
-export type CampaignStep = { position: number; name: string; channel: Channel; delay_days: number; message: string | null };
+export type CampaignStep = { position: number; version?: number; step_type?: string; name: string; channel: Channel; delay_days: number; message: string | null };
 
 export type Participant = {
   id: string;
@@ -94,7 +96,9 @@ export type Participant = {
   next_due_date: string | null;
   last_done_at: string | null;
   stop_reason: string | null;
-  campaign: { id: string; name: string; archived_at: string | null; steps: CampaignStep[] };
+  sequence_version: number;
+  outcome: "none" | "replied" | "interested" | "not_interested" | "meeting" | "do_not_contact";
+  campaign: { id: string; name: string; archived_at: string | null; status: string; steps: CampaignStep[] };
 };
 
 export type ClaudeLogEntry = {
@@ -148,6 +152,11 @@ export type TodoItem = {
   channel: Channel | null;
   step_position: number | null;
   step_message: string | null;
+  step_type: string | null;
+  step_subject: string | null;
+  step_instructions: string | null;
+  sequence_version: number | null;
+  step_count: number | null;
 };
 
 export type LeadSource = { id: string; name: string; position: number };

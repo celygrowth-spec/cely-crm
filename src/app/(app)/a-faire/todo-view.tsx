@@ -3,13 +3,13 @@
 import { useRouter } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { useCrm } from "@/components/app-shell";
-import { ParticipantActions } from "@/components/participant-actions";
+import Link from "next/link";
 import { TaskRow } from "@/components/record-tasks";
 import { Badge, EmptyState, PageHeader } from "@/components/ui";
-import type { Person, TodoItem } from "@/lib/crm/types";
+import type { TodoItem } from "@/lib/crm/types";
 import { CHANNEL_LABELS, relativeDay, todayISO } from "@/lib/format";
 
-export function TodoView({ items, people }: { items: TodoItem[]; people: Person[] }) {
+export function TodoView({ items }: { items: TodoItem[] }) {
   const router = useRouter();
   const { openCompany } = useCrm();
   const today = todayISO();
@@ -60,21 +60,9 @@ export function TodoView({ items, people }: { items: TodoItem[]; people: Person[
                         <Badge tone={i.due_date < today ? "danger" : i.due_date === today ? "violet" : "neutral"}>{relativeDay(i.due_date)}</Badge>
                       </div>
                       <div className="mt-2">
-                        <ParticipantActions
-                          p={{
-                            id: i.id,
-                            company_id: i.company_id,
-                            company_name: i.company_name,
-                            person_id: i.person_id,
-                            status: "en_cours",
-                            current_step: i.step_position ?? 1,
-                            next_due_date: i.due_date,
-                            steps: [{ position: i.step_position ?? 1, name: i.title, channel: i.channel ?? "other", delay_days: 0, message: i.step_message }],
-                          }}
-                          people={people.filter((p) => p.company_id === i.company_id)}
-                          onChanged={refresh}
-                          compact
-                        />
+                        <Link href={`/prospection/focus?depart=${i.id}`} className="inline-flex items-center gap-1 rounded-md bg-ink px-2.5 py-1 text-xs font-semibold text-white hover:bg-violet-strong">
+                          Traiter en mode Focus
+                        </Link>
                       </div>
                     </div>
                   ),
