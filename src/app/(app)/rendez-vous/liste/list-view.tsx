@@ -48,7 +48,7 @@ export function ListView({ bookings, types, initial }: { bookings: Booking[]; ty
           <option value="passes">Passés</option>
           <option value="tous">Tous</option>
         </Select>
-        <Select value={f.statut} onChange={(e) => set({ statut: e.target.value })} className="w-40" aria-label="Statut">
+        <Select value={f.statut} onChange={(e) => set({ statut: e.target.value })} className="w-44" aria-label="Statut">
           <option value="">Tous les statuts</option>
           {(["a_venir", "a_renseigner", "done", "no_show", "cancelled"] as const).map((s) => <option key={s} value={s}>{DISPLAY_STATUS_LABELS[s]}</option>)}
         </Select>
@@ -56,7 +56,7 @@ export function ListView({ bookings, types, initial }: { bookings: Booking[]; ty
           <option value="">Tous les types</option>
           {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </Select>
-        <Select value={f.crm} onChange={(e) => set({ crm: e.target.value })} className="w-40" aria-label="Rattachement CRM">
+        <Select value={f.crm} onChange={(e) => set({ crm: e.target.value })} className="w-44" aria-label="Rattachement CRM">
           <option value="">Toutes les fiches</option>
           <option value="to_link">À rattacher</option>
         </Select>
@@ -94,7 +94,7 @@ export function ListView({ bookings, types, initial }: { bookings: Booking[]; ty
                   <td className="px-3 py-2">{b.event_snapshot.name}</td>
                   <td className="px-3 py-2"><StatusBadge s={b.display_status} /></td>
                   <td className="px-3 py-2">
-                    {b.meeting_url ? (
+                    {b.meeting_url && b.status === "confirmed" ? (
                       <a href={b.meeting_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 text-violet-strong underline">
                         Lien <ExternalLink size={12} />
                       </a>

@@ -72,7 +72,7 @@ function ScheduleEditor({ schedule, usedBy, onSaved }: { schedule: Schedule | nu
       <div className="grid gap-3 md:grid-cols-3">
         <Field label="Nom du planning"><Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} /></Field>
         <Field label="Fuseau horaire">
-          <Select value={tz} onChange={(e) => setTz(e.target.value)}>{zones.map((z) => <option key={z} value={z}>{timeZoneLabel(z)}</option>)}</Select>
+          <Select value={tz} onChange={(e) => setTz(e.target.value)}>{zones.map((z) => <option key={z} value={z} suppressHydrationWarning>{timeZoneLabel(z)}</option>)}</Select>
         </Field>
         <label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" checked={isDefault} disabled={schedule?.is_default} onChange={(e) => setIsDefault(e.target.checked)} /> Planning par défaut</label>
       </div>

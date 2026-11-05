@@ -122,13 +122,13 @@ function BookingDetail({ id, onClose }: { id: string; onClose: () => void }) {
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="font-display text-xl font-bold text-ink">{b.first_name} {b.last_name}</h3>
           <StatusBadge s={b.display_status} />
-          {b.crm_status === "to_link" && <Badge tone="warning">À rattacher</Badge>}
+          {b.crm_status === "to_link" && b.status === "confirmed" && <Badge tone="warning">À rattacher</Badge>}
         </div>
         <p className="mt-1 text-sm font-semibold text-ink">{b.event_snapshot.name} · {formatRange(b.starts_at, b.ends_at, DEFAULT_TZ)}</p>
         {otherTz && <p className="text-xs text-muted">Pour le contact : {formatRange(b.starts_at, b.ends_at, b.invitee_timezone)} ({timeZoneLabel(b.invitee_timezone, new Date(b.starts_at))})</p>}
         <p className="mt-1 text-sm text-muted">
           {LOCATION_LABELS[b.event_snapshot.location_kind]}
-          {b.meeting_url && (
+          {b.meeting_url && b.status === "confirmed" && (
             <a href={b.meeting_url} target="_blank" rel="noopener noreferrer" className="ml-2 inline-flex items-center gap-1 font-semibold text-violet-strong underline">
               Rejoindre <ExternalLink size={12} />
             </a>

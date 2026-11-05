@@ -26,7 +26,8 @@ export function TimeZoneSelect({ value, onChange, id }: { value: string; onChang
         className="min-w-0 flex-1 truncate rounded-md border border-transparent bg-transparent py-1 pr-6 text-xs font-semibold text-ink hover:border-line focus:border-violet focus:outline-none"
       >
         {zones.map((z) => (
-          <option key={z} value={z}>
+          // décalage calculé avec les données de fuseaux du navigateur, qui peuvent différer du serveur
+          <option key={z} value={z} suppressHydrationWarning>
             {timeZoneLabel(z)}
           </option>
         ))}
@@ -67,7 +68,7 @@ export function SlotPicker({
   const state = cache[key];
 
   const load = useCallback(
-    async (m: string, zone: string, signal?: AbortSignal) => {
+    async (m: string, zone: string) => {
       const k = `${m}|${zone}`;
       setCache((c) => ({ ...c, [k]: { status: "loading" } }));
       const from = zonedToUtc(`${m}-01`, "00:00", zone).toISOString();
@@ -75,24 +76,24 @@ export function SlotPicker({
       const q = new URLSearchParams({ from, to });
       if (manageRef) q.set("ref", manageRef);
       try {
-        const res = await fetch(`/api/rdv/${encodeURIComponent(slug)}/slots?${q.toString()}`, { signal, cache: "no-store" });
+        const res = await fetch(`/api/rdv/${encodeURIComponent(slug)}/slots?${q.toString()}`, { cache: "no-store" });
         const body = (await res.json().catch(() => null)) as { slots?: string[]; error?: string } | null;
         if (!res.ok || !body?.slots) throw new Error(body?.error ?? "Les créneaux n'ont pas pu être chargés.");
         setCache((c) => ({ ...c, [k]: { status: "ok", slots: body.slots! } }));
       } catch (e) {
-        if (signal?.aborted) return;
         setCache((c) => ({ ...c, [k]: { status: "error", message: e instanceof Error ? e.message : "Erreur de chargement" } }));
       }
     },
     [slug, manageRef],
   );
 
+  // un chargement par mois et par fuseau ; les réponses sont rangées par clé, donc jamais mélangées
+  const requested = useRef(new Set<string>());
   useEffect(() => {
-    if (cache[key]) return;
-    const ctrl = new AbortController();
-    void load(month, tz, ctrl.signal);
-    return () => ctrl.abort();
-  }, [key, month, tz, load, cache]);
+    if (requested.current.has(key)) return;
+    requested.current.add(key);
+    void load(month, tz);
+  }, [key, month, tz, load]);
 
   // mois en cours sans disponibilité : on montre directement le suivant (une seule fois)
   useEffect(() => {

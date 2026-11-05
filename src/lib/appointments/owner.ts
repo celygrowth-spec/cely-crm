@@ -63,7 +63,7 @@ export async function listBookings(sb: SupabaseClient, f: BookingFilters = {}, l
   if (f.to) q = q.lt("starts_at", f.to);
   if (f.type) q = q.eq("event_type_id", f.type);
   if (f.status) q = q.eq("display_status", f.status);
-  if (f.crm === "to_link") q = q.eq("crm_status", "to_link");
+  if (f.crm === "to_link") q = q.eq("crm_status", "to_link").eq("status", "confirmed");
   if (f.q) {
     const term = f.q.replace(/[%,()]/g, " ").trim();
     if (term) q = q.or(`first_name.ilike.%${term}%,last_name.ilike.%${term}%,email.ilike.%${term}%,company_name.ilike.%${term}%,crm_company_name.ilike.%${term}%`);
