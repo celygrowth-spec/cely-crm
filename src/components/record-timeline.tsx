@@ -157,7 +157,7 @@ export function RecordTimeline({ ctx }: { ctx: RecordCtx }) {
 function Entry({ i, person }: { i: Interaction; person: string }) {
   const Icon = ICONS[i.kind];
   const exchange = ["message_out", "message_in", "call", "meeting", "note"].includes(i.kind);
-  const meta = i.meta as { campaign_name?: string; step_name?: string };
+  const meta = i.meta as { campaign_name?: string; step_name?: string; mail_id?: string };
   return (
     <div className="relative">
       <span className={cn("absolute top-0.5 -left-[25px] rounded-full border border-line bg-white p-0.5", i.kind === "message_in" && "border-success/40 text-success", i.kind === "message_out" && "text-violet-strong")}>
@@ -168,6 +168,7 @@ function Entry({ i, person }: { i: Interaction; person: string }) {
         {i.channel && <span>· {CHANNEL_LABELS[i.channel]}</span>}
         {person && <span>· {person}</span>}
         <span>· {formatDateTime(i.occurred_at)}</span>
+        {meta.mail_id && <span>· Accepté par Gmail</span>}
         {meta.campaign_name && <span>· {meta.campaign_name}{meta.step_name ? ` › ${meta.step_name}` : ""}</span>}
         {i.source === "claude" && <Badge tone="violet"><Bot size={10} /> via Claude</Badge>}
         {i.source === "import" && <Badge>import</Badge>}

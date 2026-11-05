@@ -190,6 +190,13 @@ Révoquer l'accès : Supabase › Authentication › OAuth Apps.
 - **Session** : `getSession` vérifie le jeton localement (`getClaims`) sans appel réseau ; RLS reste la seule
   barrière d'accès aux données.
 
+## Mail
+
+Page **Mail** : connexion Gmail, signature, test d'envoi, derniers envois. Dans la fiche : section **Emails** (brouillons,
+envoi, états). Configuration : [docs/mail-configuration.md](docs/mail-configuration.md). Pour les modules :
+[docs/integrations/mail-service.md](docs/integrations/mail-service.md). Sans configuration Google, le reste du CRM
+fonctionne normalement.
+
 ## Tests
 
 `npm test` exécute :
