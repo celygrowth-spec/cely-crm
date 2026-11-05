@@ -127,12 +127,15 @@ export function MailCompose({ companyId, target, onClose }: { companyId: string;
   const invalid = [...splitAddresses(to), ...splitAddresses(cc), ...splitAddresses(bcc)].filter((a) => !isEmail(a));
   const canSend = !!account && !sending && splitAddresses(to).length > 0 && !invalid.length && !!subject.trim() && totalBytes <= MAX_ATTACHMENTS_BYTES;
 
+  const sendLock = useRef(false);
   async function send() {
-    if (!canSend) return;
+    if (!canSend || sendLock.current) return; // deux clics rapprochés arrivent avant le nouveau rendu du bouton
+    sendLock.current = true;
     setSending(true);
     setError(null);
     const saved = await saveNow();
     if (!saved.ok) {
+      sendLock.current = false;
       setSending(false);
       return setError(`Brouillon non enregistré, rien n'a été envoyé : ${saved.error}`);
     }
@@ -145,6 +148,7 @@ export function MailCompose({ companyId, target, onClose }: { companyId: string;
       sync(["company-mail", companyId], ["company-timeline", companyId]);
       return onClose();
     }
+    sendLock.current = false;
     setSending(false);
     if (!r.ok) return setError(r.error);
     sync(["company-mail", companyId], ["company-timeline", companyId], ["company", companyId]);

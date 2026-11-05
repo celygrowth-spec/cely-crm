@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Mail, PlugZap, Send, Unplug } from "lucide-react";
 import { MailStatusBadge } from "@/components/mail-status";
@@ -100,6 +100,7 @@ function ActiveAccount({ account: a }: { account: MailAccount }) {
   const [signature, setSignature] = useState(a.signature);
   const [testTo, setTestTo] = useState(a.email);
   const [testing, setTesting] = useState(false);
+  const inFlight = useRef(false); // deux clics rapprochés arrivent avant le nouveau rendu du bouton
   const refresh = () => qc.invalidateQueries({ queryKey: ["mail-overview"] });
   const post = <T,>(body: unknown) => attempt(() => mailCall<T>("/api/mail/accounts", "POST", body));
 
@@ -120,8 +121,11 @@ function ActiveAccount({ account: a }: { account: MailAccount }) {
     refresh();
   }
   async function test() {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setTesting(true);
-    const r = await post<{ status: string; last_error: string | null }>({ op: "test", to: testTo });
+    const r = await post<{ status: string; last_error: string | null }>({ op: "test", to: testTo.trim(), key: crypto.randomUUID() });
+    inFlight.current = false;
     setTesting(false);
     refresh();
     if (!r.ok) return toast.error(r.error);

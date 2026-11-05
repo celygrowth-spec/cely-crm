@@ -109,12 +109,12 @@ describe("écritures", () => {
     const r = await message(new NextRequest(`${ORIGIN}/api/mail/messages/x`, { method: "POST", headers: { origin: "https://evil.example" }, body: JSON.stringify({ op: "send" }) }), params);
     expect(r.status).toBe(403);
     expect(rpc).not.toHaveBeenCalled();
-    expect((await post(accounts, "/api/mail/accounts", { op: "test", to: "a@b.fr" }, "https://evil.example")).status).toBe(403);
+    expect((await post(accounts, "/api/mail/accounts", { op: "test", to: "a@b.fr", key: crypto.randomUUID() }, "https://evil.example")).status).toBe(403);
   });
 
   test("sans session : 401", async () => {
     vi.mocked(getSession).mockResolvedValueOnce(null);
-    expect((await post(accounts, "/api/mail/accounts", { op: "test", to: "a@b.fr" })).status).toBe(401);
+    expect((await post(accounts, "/api/mail/accounts", { op: "test", to: "a@b.fr", key: crypto.randomUUID() })).status).toBe(401);
   });
 
   test("opération inconnue refusée", async () => {

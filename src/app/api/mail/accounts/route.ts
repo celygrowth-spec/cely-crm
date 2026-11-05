@@ -13,7 +13,7 @@ export async function GET() {
 const body = z.discriminatedUnion("op", [
   z.object({ op: z.literal("disconnect"), id: z.uuid() }),
   z.object({ op: z.literal("signature"), id: z.uuid(), signature: z.string() }),
-  z.object({ op: z.literal("test"), to: z.string() }),
+  z.object({ op: z.literal("test"), to: z.string(), key: z.uuid() }),
 ]);
 
 export async function POST(req: NextRequest) {
@@ -24,11 +24,12 @@ export async function POST(req: NextRequest) {
     const accounts = await listAccounts(sb);
     if (!accounts.some((a) => a.is_default && a.status === "connected")) throw new CrmError("Connectez d'abord un compte Gmail.");
     return sendMail(sb, {
-      to: [b.to.trim()],
+      to: [b.to],
+      dedupeKey: `mail_test:${b.key}`,
       subject: "Test d'envoi depuis Cely CRM",
       text: "Ce message confirme que votre compte Gmail peut envoyer des emails depuis Cely CRM.\n\nAucune action n'est nécessaire.",
       origin: "system",
-      business: { type: "mail_test", id: crypto.randomUUID() },
+      business: { type: "mail_test", id: b.key },
     });
   });
 }
