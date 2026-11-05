@@ -17,6 +17,7 @@ import { useCrm, type CompanySeed } from "./app-shell";
 import { DuplicateNotice } from "./duplicate-notice";
 import { RecordDeal } from "./record-deal";
 import { RecordPeople } from "./record-people";
+import type { ComposeTarget } from "./mail-compose";
 import { RecordProspecting } from "./record-prospecting";
 import { RecordTasks } from "./record-tasks";
 import { RecordTimeline } from "./record-timeline";
@@ -27,6 +28,15 @@ import { Badge, Button, Field, Input, SaveIndicator, Select, Skeleton, Textarea 
 const RecordFiles = dynamic(() => import("./record-files").then((m) => m.RecordFiles), {
   loading: () => <Skeleton className="h-20 w-full" />,
 });
+const RecordAppointments = dynamic(() => import("./record-appointments").then((m) => m.RecordAppointments), {
+  loading: () => <Skeleton className="h-12 w-full" />,
+});
+
+// idem : le composeur et la section Emails ne pèsent rien tant qu'on ne s'en sert pas
+const RecordMail = dynamic(() => import("./record-mail").then((m) => m.RecordMail), {
+  loading: () => <Skeleton className="h-12 w-full" />,
+});
+const MailCompose = dynamic(() => import("./mail-compose").then((m) => m.MailCompose));
 
 type CompanyFields = Partial<CompanyCore["company"]>;
 
@@ -38,10 +48,13 @@ export type RecordCtx = {
   /** Applique tout de suite `optimistic`, lance `send`, rétablit l'état réel en cas d'échec. */
   mutate: (optimistic: CompanyFields, send: () => Promise<{ ok: true } | { ok: false; error: string }>) => Promise<boolean>;
   patch: (fields: CompanyPatch, derived?: CompanyFields) => Promise<boolean>;
+  /** Ouvre le composeur d'email. */
+  compose: (target: ComposeTarget) => void;
 };
 
 export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () => void; page?: boolean }) {
   const qc = useQueryClient();
+  const [compose, setCompose] = useState<ComposeTarget | null>(null);
   const sync = useSync();
   const coreKey = ["company", id];
   const core = useQuery({ queryKey: coreKey, queryFn: ({ signal }) => apiGet<CompanyCore | null>(`/api/fiches/${id}`, signal) });
@@ -157,7 +170,11 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
   }
 
   const detail: CompanyDetail = { ...core.data, interactions: timeline.data?.interactions ?? [], claudeLog: timeline.data?.claudeLog ?? [] };
-  const ctx: RecordCtx = { detail, timelineLoading: timeline.isLoading, reload, mutate, patch };
+  const openCompose = (t: ComposeTarget) => {
+    const primary = detail.people.find((p) => p.is_primary && p.email) ?? detail.people.find((p) => p.email);
+    setCompose(t.message || t.to ? t : { personId: primary?.id ?? null, to: primary?.email ?? null });
+  };
+  const ctx: RecordCtx = { detail, timelineLoading: timeline.isLoading, reload, mutate, patch, compose: openCompose };
 
   return (
     <div className={`${wrap} fade-in`}>
@@ -167,10 +184,13 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
         <Section title="Suivi commercial"><RecordDeal key={c.id} ctx={ctx} /></Section>
         <Section title="Prospection"><RecordProspecting ctx={ctx} /><Lists ctx={ctx} /></Section>
         <Section title="Tâches"><RecordTasks ctx={ctx} /></Section>
+        <Section title="Emails"><RecordMail companyId={c.id} onCompose={openCompose} /></Section>
+        <Section title="Rendez-vous"><RecordAppointments companyId={c.id} /></Section>
         <Section title="Fichiers"><RecordFiles companyId={c.id} /></Section>
         <Section title="Historique"><RecordTimeline ctx={ctx} /></Section>
         <Section title="Informations"><InfoForm key={c.id} ctx={ctx} /></Section>
       </div>
+      {compose && <MailCompose companyId={c.id} target={compose} onClose={() => setCompose(null)} />}
     </div>
   );
 }

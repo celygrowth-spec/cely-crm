@@ -66,7 +66,7 @@ function PersonRow({ ctx, person: p, onEdit }: { ctx: RecordCtx; person: Person;
           {p.title && <span className="font-normal text-muted">· {p.title}</span>}
         </p>
         <p className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted">
-          {p.email && <a href={`mailto:${p.email}`} className="inline-flex items-center gap-1 hover:text-violet-strong"><Mail size={12} />{p.email}</a>}
+          {p.email && <button type="button" onClick={() => ctx.compose({ personId: p.id, to: p.email })} title="Écrire un email" className="inline-flex items-center gap-1 hover:text-violet-strong"><Mail size={12} />{p.email}</button>}
           {p.phone && <a href={`tel:${p.phone}`} className="inline-flex items-center gap-1 hover:text-violet-strong"><Phone size={12} />{p.phone}</a>}
           {p.linkedin_url && (
             <a href={/^https?:/.test(p.linkedin_url) ? p.linkedin_url : `https://${p.linkedin_url}`} target="_blank" rel="noreferrer noopener" className="hover:text-violet-strong">

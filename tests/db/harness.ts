@@ -4,6 +4,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
 import { unaccent } from "@electric-sql/pglite/contrib/unaccent";
+import { btree_gist } from "@electric-sql/pglite/contrib/btree_gist";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -45,7 +46,7 @@ export type Db = PGlite & {
 };
 
 export async function createDb(): Promise<Db> {
-  const pg = new PGlite({ extensions: { pg_trgm, unaccent } });
+  const pg = new PGlite({ extensions: { pg_trgm, unaccent, btree_gist } });
   await pg.exec(SUPABASE_STUB);
   for (const file of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
     await pg.exec(readFileSync(join(MIGRATIONS, file), "utf8"));

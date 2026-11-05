@@ -36,11 +36,11 @@ function fileOp<T>(body: Record<string, unknown>): Promise<OpResult<T>> {
   });
 }
 
-function fail(key: string, message: string) {
+function fail(key: string, message: string): undefined {
   set(key, { state: "error", error: message, progress: 0, xhr: undefined });
 }
 
-async function runUpload(key: string, qc: QueryClient) {
+async function runUpload(key: string, qc: QueryClient): Promise<CompanyFile | undefined> {
   const u = uploads.find((x) => x.key === key);
   if (!u) return;
   set(key, { state: "uploading", progress: 0, error: undefined });
@@ -78,17 +78,26 @@ async function runUpload(key: string, qc: QueryClient) {
   }
   remove(key);
   qc.setQueryData<CompanyFile[]>(["company-files", u.companyId], (l) => [done.data, ...(l ?? [])]);
+  return done.data;
 }
 
 function enqueue(companyId: string, files: File[], qc: QueryClient) {
+  const started: Promise<CompanyFile | undefined>[] = [];
   for (const file of files) {
     if (file.size > MAX_FILE_BYTES) { toast.error(`« ${file.name} » dépasse 25 Mo.`); continue; }
     if (!isAllowedType(file.type)) { toast.error(`« ${file.name} » : format non autorisé.`); continue; }
     const key = crypto.randomUUID();
     uploads = [...uploads, { key, companyId, file, progress: 0, state: "uploading" }];
     emit();
-    runUpload(key, qc);
+    started.push(runUpload(key, qc));
   }
+  return started;
+}
+
+/** Ajoute des fichiers à la fiche et rend ceux qui sont arrivés. Un échec reste visible, avec sa relance, dans la section Fichiers. */
+export async function addFiles(companyId: string, files: File[], qc: QueryClient) {
+  const done = await Promise.all(enqueue(companyId, files, qc));
+  return done.filter((f): f is CompanyFile => !!f);
 }
 
 // ---------------------------------------------------------------------------

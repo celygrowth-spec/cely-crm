@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { CheckSquare, Columns3, LogOut, Plus, Search, Settings, Users, Wallet } from "lucide-react";
+import { CalendarDays, CheckSquare, Columns3, LogOut, Mail, Plus, Search, Settings, Users, Wallet } from "lucide-react";
 import type { LeadSource, List, PipelineWithStages } from "@/lib/crm/types";
 import { signOutAction } from "@/app/actions";
 import { QueryProvider, apiGet, useFlushRouterOnNavigate } from "@/lib/client/query";
@@ -55,11 +55,22 @@ export const FINANCE_NAV = [
   { href: "/finance/parametres", label: "Réglages Finance" },
 ];
 
+export const RDV_NAV = [
+  { href: "/rendez-vous", label: "Vue d'ensemble", exact: true },
+  { href: "/rendez-vous/agenda", label: "Agenda" },
+  { href: "/rendez-vous/liste", label: "Liste" },
+  { href: "/rendez-vous/types", label: "Types de rendez-vous" },
+  { href: "/rendez-vous/disponibilites", label: "Disponibilités" },
+  { href: "/rendez-vous/agenda-google", label: "Connexion agenda" },
+];
+
 const NAV = [
   { href: "/prospection", label: "Prospection", icon: Users },
   { href: "/pipelines", label: "Pipelines", icon: Columns3 },
+  { href: "/rendez-vous", label: "Rendez-vous", icon: CalendarDays },
   { href: "/finance", label: "Finance", icon: Wallet },
   { href: "/a-faire", label: "À faire", icon: CheckSquare },
+  { href: "/mail", label: "Mail", icon: Mail },
   { href: "/parametres", label: "Paramètres", icon: Settings },
 ];
 
@@ -206,6 +217,22 @@ function Shell({
                             {n.href.endsWith("aujourdhui") && dueCount > 0 && (
                               <span className="rounded-full bg-violet px-1.5 font-label text-[10px] font-bold text-white">{dueCount}</span>
                             )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {href === "/rendez-vous" && active && (
+                    <div className="mt-0.5 mb-1 ml-[22px] hidden border-l border-line pl-2 md:block">
+                      {RDV_NAV.map((n) => {
+                        const on = n.exact ? pathname === n.href : pathname === n.href || pathname.startsWith(n.href + "/");
+                        return (
+                          <Link
+                            key={n.href}
+                            href={n.href}
+                            className={cn("flex items-center rounded-md px-2 py-1 text-[13px]", on ? "font-semibold text-ink" : "text-muted hover:text-ink")}
+                          >
+                            {n.label}
                           </Link>
                         );
                       })}
