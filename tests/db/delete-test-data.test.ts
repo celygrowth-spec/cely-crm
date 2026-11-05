@@ -24,12 +24,16 @@ test("le script supprime les données [TEST] et rien d'autre", async () => {
   const camp = await db.rpc<string>("create_campaign_draft", { p_name: "[TEST] Campagne" });
   await db.rpc("enroll_in_campaign", { p_campaign: camp, p_list_ids: [list.id] });
 
+  await db.rpc("mail_save_draft", { p_id: "44444444-4444-4444-8444-444444444444", p: { company_id: test_, to: ["a@b.fr"], subject: "x", body: "y" } });
+  await db.rpc("mail_save_draft", { p_id: "55555555-5555-4555-8555-555555555555", p: { company_id: real, to: ["a@b.fr"], subject: "garde", body: "y" } });
+
   await db.exec(readFileSync(join(__dirname, "..", "..", "supabase", "maintenance", "delete-test-data.sql"), "utf8"));
 
   const names = await db.query<{ name: string }>(`select name from companies order by name`);
   expect(names.rows.map((r) => r.name).sort()).toEqual(["TEST2", "Vraie entreprise"].sort());
   expect(await db.one(`select count(*)::int n from tasks`)).toEqual({ n: 1 });
   expect(await db.one(`select count(*)::int n from company_files`)).toEqual({ n: 0 });
+  expect(await db.one(`select count(*)::int n, min(subject) s from mail_messages`)).toEqual({ n: 1, s: "garde" });
   expect(await db.one(`select count(*)::int n from lead_sources where name like '[TEST]%'`)).toEqual({ n: 0 });
   expect(await db.one(`select count(*)::int n from pipelines where name like '[TEST]%'`)).toEqual({ n: 0 });
   expect(await db.one(`select count(*)::int n from lists`)).toEqual({ n: 0 });
