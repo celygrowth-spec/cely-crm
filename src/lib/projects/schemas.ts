@@ -81,3 +81,19 @@ export const recapSchema = z.object({
   internal_note: optText(8000),
 });
 export type RecapInput = z.input<typeof recapSchema>;
+
+export const taskPatchSchema = z
+  .object({
+    title: z.string().trim().min(1, "Intitulé obligatoire").max(300),
+    description: optText(5000),
+    status: z.enum(["a_faire", "en_cours", "bloque", "termine"]),
+    assignee_kind: z.enum(["owner", "client"]),
+    assignee_person_id: z.uuid().nullable(),
+    visible_to_client: z.boolean(),
+    due_date: optDate,
+    blocked_reason: optText(1000),
+    meeting_id: z.uuid().nullable(),
+    links: z.array(z.object({ label: z.string().trim().min(1).max(120), url: z.string().trim().max(500).regex(/^https?:\/\/\S+$/, "Lien invalide") })).max(10),
+  })
+  .partial();
+export type TaskPatch = z.input<typeof taskPatchSchema>;

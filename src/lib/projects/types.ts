@@ -34,6 +34,7 @@ export type Project = {
   archived_portal: "read_only" | "closed";
   archived_at: string | null;
   member_count: number;
+  blocked_tasks?: number | null;
   /** enrichissements des phases suivantes (null tant qu'ils n'existent pas) */
   current_phase_name?: string | null;
   next_meeting_at?: string | null;
@@ -120,6 +121,7 @@ export type PortalMeetingDetail = PortalMeeting & { recap: Recap | null };
 
 /** Vue client complète d'un projet (portail et aperçu). */
 export type PortalProjectView = PortalProject & {
+  my_tasks?: PortalTask[];
   today: string;
   phases: Phase[];
   milestones: Milestone[];
@@ -139,4 +141,53 @@ export type AdminMeeting = {
     calendar_out_of_sync?: boolean;
   };
   recap: (Recap & { internal_note: string | null; status: "draft" | "published" }) | null;
+};
+
+export type TaskStatus = "a_faire" | "en_cours" | "bloque" | "termine";
+export const TASK_STATUS_LABELS: Record<TaskStatus, string> = { a_faire: "À faire", en_cours: "En cours", bloque: "Bloqué", termine: "Terminé" };
+export const TASK_STATUS_STYLES: Record<TaskStatus, string> = {
+  a_faire: "bg-surface text-ink",
+  en_cours: "bg-violet-soft text-violet-strong",
+  bloque: "bg-amber-50 text-warning",
+  termine: "bg-success/10 text-success",
+};
+
+export type TaskComment = { id: string; body: string; created_at: string; author: string; mine?: boolean; author_kind?: "owner" | "client" };
+
+export type AdminTask = {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  status: TaskStatus;
+  assignee_kind: "owner" | "client";
+  assignee_person_id: string | null;
+  visible_to_client: boolean;
+  due_date: string | null;
+  blocked_reason: string | null;
+  meeting_id: string | null;
+  links: RecapLink[];
+  created_by_kind: "owner" | "client";
+  updated_by_kind: "owner" | "client";
+  updated_by_person: string | null;
+  updated_at: string;
+  created_at: string;
+};
+
+export type PortalTask = {
+  id: string;
+  project_id: string;
+  project_name: string;
+  title: string;
+  status: TaskStatus;
+  due_date: string | null;
+  blocked_reason: string | null;
+  assignee: { kind: "owner" | "team" | "me" | "person"; name: string };
+  meeting: { id: string; title: string; starts_at: string } | null;
+  updated_at: string;
+  can_edit: boolean;
+  comment_count: number;
+  description?: string | null;
+  links?: RecapLink[];
+  comments?: TaskComment[];
 };

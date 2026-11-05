@@ -2,7 +2,7 @@ import "server-only";
 // Lectures d'administration du module Projets (session du propriétaire, sous RLS).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CrmError, friendlyError } from "@/lib/crm/service";
-import type { AdminMeeting, Member, Milestone, Phase, PortalAccess, Project } from "./types";
+import type { AdminMeeting, AdminTask, Member, Milestone, Phase, PortalAccess, Project, TaskComment } from "./types";
 
 function check<T>(res: { data: T; error: { message: string; code?: string } | null }): T {
   if (res.error) throw new CrmError(friendlyError(res.error));
@@ -76,4 +76,24 @@ export async function linkableBookings(sb: SupabaseClient, companyId: string) {
   ]);
   const taken = new Set((check(linked) as { booking_id: string }[]).map((x) => x.booking_id));
   return (check(bk) as { id: string; starts_at: string; first_name: string; last_name: string; event_snapshot: { name: string } }[]).filter((b) => !taken.has(b.id));
+}
+
+export async function projectTasks(sb: SupabaseClient, projectId: string): Promise<AdminTask[]> {
+  return check(await sb.from("project_tasks").select("*").eq("project_id", projectId).order("position").order("created_at").limit(1000)) as AdminTask[];
+}
+
+export async function taskDetail(sb: SupabaseClient, taskId: string): Promise<{ task: AdminTask; comments: TaskComment[] } | null> {
+  const t = check(await sb.from("project_tasks").select("*").eq("id", taskId).maybeSingle()) as AdminTask | null;
+  if (!t) return null;
+  const rows = check(await sb.from("project_task_comments").select("id, body, created_at, author_kind, person_id").eq("task_id", taskId).order("created_at")) as
+    { id: string; body: string; created_at: string; author_kind: "owner" | "client"; person_id: string | null }[];
+  const ids = [...new Set(rows.map((r) => r.person_id).filter((x): x is string => !!x))];
+  const people = ids.length ? (check(await sb.from("people").select("id, first_name, last_name").in("id", ids)) as { id: string; first_name: string | null; last_name: string | null }[]) : [];
+  return {
+    task: t,
+    comments: rows.map((r) => {
+      const p = people.find((x) => x.id === r.person_id);
+      return { id: r.id, body: r.body, created_at: r.created_at, author_kind: r.author_kind, author: r.author_kind === "owner" ? "Vous" : [p?.first_name, p?.last_name].filter(Boolean).join(" ") || "Client" };
+    }),
+  };
 }

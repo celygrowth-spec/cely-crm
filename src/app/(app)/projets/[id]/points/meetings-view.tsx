@@ -4,10 +4,11 @@
 // annulation et lien Meet passent par le même service). Récapitulatif : brouillon → aperçu → publication.
 import { useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, CalendarPlus, Eye, Link2, Plus, RefreshCw, Trash2, Video, X } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, CalendarPlus, Eye, Link2, ListPlus, Plus, RefreshCw, Trash2, Video, X } from "lucide-react";
 import {
   cancelMeetingAction, createMeetingAction, linkMeetingAction, publishRecapAction, rescheduleMeetingAction, restoreGoogleEventAction,
-  saveRecapAction, syncGoogleNowAction, unlinkMeetingAction, updateMeetingAction,
+  saveRecapAction, syncGoogleNowAction, taskFromRecapAction, unlinkMeetingAction, updateMeetingAction,
 } from "@/app/projets-actions";
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, Select, Textarea } from "@/components/ui";
 import { attempt, useSync } from "@/lib/client/query";
@@ -68,7 +69,7 @@ export function MeetingsView({ project, meetings, types, members, linkable, goog
       <GoogleSyncLine google={google} />
 
       {meetings.length === 0 ? <EmptyState title="Aucun point" description="Créez un point : le rendez-vous, l'événement Google Agenda et le lien Meet sont créés ensemble." /> : (
-        <ul className="space-y-3">{meetings.map((m) => <MeetingCard key={m.id} m={m} />)}</ul>
+        <ul className="space-y-3">{meetings.map((m) => <MeetingCard key={m.id} m={m} projectId={project.id} />)}</ul>
       )}
       <CreateMeeting open={creating} onClose={() => setCreating(false)} projectId={project.id} types={types} members={members} />
     </div>
@@ -86,7 +87,7 @@ function GoogleSyncLine({ google }: { google: { destination: boolean; syncedAt: 
   );
 }
 
-function MeetingCard({ m }: { m: AdminMeeting }) {
+function MeetingCard({ m, projectId }: { m: AdminMeeting; projectId: string }) {
   const { busy, act } = useAct();
   const [open, setOpen] = useState<"none" | "edit" | "recap" | "move">("none");
   const b = m.booking;
@@ -137,7 +138,8 @@ function MeetingCard({ m }: { m: AdminMeeting }) {
           </div>
         )}
         {open === "edit" && <EditMeeting m={m} onDone={() => setOpen("none")} />}
-        {open === "recap" && <RecapEditor m={m} />}
+        {open === "recap" && <RecapEditor m={m} projectId={projectId} />}
+        <Link href={`/projets/${projectId}/taches?point=${m.id}`} className="mt-2 inline-block text-xs font-semibold text-violet-strong underline">Tâches de ce point</Link>
       </Card>
     </li>
   );
@@ -157,7 +159,7 @@ function EditMeeting({ m, onDone }: { m: AdminMeeting; onDone: () => void }) {
   );
 }
 
-function RecapEditor({ m }: { m: AdminMeeting }) {
+function RecapEditor({ m, projectId }: { m: AdminMeeting; projectId: string }) {
   const { busy, act } = useAct();
   const r = m.recap;
   const [d, setD] = useState({
@@ -189,6 +191,15 @@ function RecapEditor({ m }: { m: AdminMeeting }) {
             {d.actions.map((a, i) => (
               <div key={i} className="mb-1 flex gap-2">
                 <Input value={a.text} maxLength={300} onChange={(e) => setD({ ...d, actions: d.actions.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)) })} aria-label={`Action ${i + 1}`} />
+                {a.task_id ? (
+                  <Link href={`/projets/${projectId}/taches?tache=${a.task_id}`} className="inline-flex shrink-0 items-center px-2 text-xs font-semibold text-violet-strong underline">Voir la tâche</Link>
+                ) : (
+                  <Button size="sm" variant="ghost" disabled={busy || !a.text.trim() || d.actions.slice(0, i).some((x) => !x.text.trim())} title="Créer une tâche client liée à ce point" onClick={async () => {
+                    if (!(await save())) return;
+                    const r = await act(() => taskFromRecapAction(m.id, i), "Tâche créée et liée au point");
+                    if (r) setD((cur) => ({ ...cur, actions: cur.actions.map((x, j) => (j === i ? { ...x, task_id: r.data.task_id } : x)) }));
+                  }}><ListPlus size={13} /> Tâche</Button>
+                )}
                 <Button size="sm" variant="ghost" aria-label="Retirer" onClick={() => setD({ ...d, actions: d.actions.filter((_, j) => j !== i) })}><Trash2 size={13} /></Button>
               </div>
             ))}

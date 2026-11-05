@@ -12,8 +12,9 @@ import { codeHash, generateCode } from "@/lib/projects/portal-auth";
 import { companyPeople } from "@/lib/projects/owner";
 import {
   meetingCreateSchema, meetingPatchSchema, milestoneSchema, phaseSchema, projectCreateSchema, projectPatchSchema, recapSchema,
-  type MeetingCreateInput, type MilestoneInput, type PhaseInput, type ProjectCreateInput, type ProjectPatch, type RecapInput,
+  taskPatchSchema, type MeetingCreateInput, type MilestoneInput, type PhaseInput, type ProjectCreateInput, type ProjectPatch, type RecapInput, type TaskPatch,
 } from "@/lib/projects/schemas";
+import type { AdminTask, RecapAction } from "@/lib/projects/types";
 import { BookingError, cancelBooking, ownerCreateBooking, reconcileCalendar, rescheduleBooking } from "@/lib/appointments/server";
 import { syncGoogleChanges } from "@/lib/appointments/google-sync";
 
@@ -227,4 +228,73 @@ export async function restoreGoogleEventAction(bookingId: string) {
 
 export async function syncGoogleNowAction() {
   return run(async (sb) => orchestrate(() => syncGoogleChanges(sb)));
+}
+
+// Tâches ------------------------------------------------------------------------------------
+
+/** Règles d'affectation : une tâche du client est forcément visible ; une tâche à moi n'a pas de contact. */
+function normalizeTask(p: Record<string, unknown>) {
+  if (p.assignee_kind === "owner") p.assignee_person_id = null;
+  if (p.assignee_kind === "client") p.visible_to_client = true;
+  return p;
+}
+
+export async function createTaskAction(projectId: string, input: TaskPatch & { title: string }) {
+  return run(async (sb) => {
+    const p = normalizeTask({ ...v(taskPatchSchema, input) });
+    const { data, error } = await sb.from("project_tasks").insert({ ...p, project_id: idv(projectId) }).select("*").single();
+    if (error) throw new CrmError(friendlyError(error));
+    return data as AdminTask;
+  });
+}
+
+export async function updateTaskAction(id: string, patch: TaskPatch) {
+  return run(async (sb) => {
+    const p = v(taskPatchSchema, patch) as Record<string, unknown>;
+    if (p.assignee_kind) normalizeTask(p);
+    if (p.visible_to_client === false) {
+      const { data } = await sb.from("project_tasks").select("assignee_kind").eq("id", idv(id)).single();
+      if ((data as { assignee_kind: string } | null)?.assignee_kind === "client" && p.assignee_kind !== "owner") {
+        throw new CrmError("Une tâche attribuée au client lui reste visible : attribuez-la à vous-même pour la rendre interne.");
+      }
+    }
+    const { data, error } = await sb.from("project_tasks").update({ ...p, updated_by_kind: "owner", updated_by_person: null }).eq("id", idv(id)).select("*").single();
+    if (error) throw new CrmError(friendlyError(error));
+    return data as AdminTask;
+  });
+}
+
+export async function deleteTaskAction(id: string) {
+  return run(async (sb) => {
+    const { error } = await sb.from("project_tasks").delete().eq("id", idv(id));
+    if (error) throw new CrmError(friendlyError(error));
+  });
+}
+
+export async function commentTaskAction(taskId: string, body: string) {
+  return run(async (sb) => {
+    const b = v(z.string().trim().min(1, "Commentaire vide").max(1000, "1 000 caractères maximum"), body);
+    const { error } = await sb.from("project_task_comments").insert({ task_id: idv(taskId), author_kind: "owner", body: b });
+    if (error) throw new CrmError(friendlyError(error));
+  });
+}
+
+/** Action d'un récapitulatif → tâche liée au point d'origine ; l'action garde la référence (aucun doublon). */
+export async function taskFromRecapAction(meetingId: string, index: number) {
+  return run(async (sb) => {
+    const { data: m } = await sb.from("project_meetings").select("project_id").eq("id", idv(meetingId)).single();
+    const { data: r } = await sb.from("meeting_recaps").select("actions").eq("meeting_id", meetingId).single();
+    const actions = ((r as { actions: RecapAction[] } | null)?.actions ?? []).slice();
+    const a = actions[index];
+    if (!m || !a) throw new CrmError("Action introuvable : enregistrez d'abord le récapitulatif.");
+    if (a.task_id) return { task_id: a.task_id, existing: true };
+    const { data: t, error } = await sb.from("project_tasks").insert({
+      project_id: (m as { project_id: string }).project_id, title: a.text.slice(0, 300), meeting_id: meetingId, assignee_kind: "client", visible_to_client: true,
+    }).select("id").single();
+    if (error) throw new CrmError(friendlyError(error));
+    actions[index] = { ...a, task_id: (t as { id: string }).id };
+    const { error: e2 } = await sb.from("meeting_recaps").update({ actions }).eq("meeting_id", meetingId);
+    if (e2) throw new CrmError(friendlyError(e2));
+    return { task_id: (t as { id: string }).id, existing: false };
+  });
 }

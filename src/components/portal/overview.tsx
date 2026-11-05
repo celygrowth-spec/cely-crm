@@ -115,13 +115,36 @@ export function PastMeetings({ view, linkBase }: { view: PortalProjectView; link
   );
 }
 
+export function WaitingForYou({ view, linkBase }: { view: PortalProjectView; linkBase?: string }) {
+  const tasks = view.my_tasks ?? [];
+  return (
+    <section aria-labelledby="attend" className="rounded-2xl border border-line bg-white p-5">
+      <div className="flex items-center justify-between">
+        <h2 id="attend" className="font-label text-[11px] font-semibold tracking-wide text-muted uppercase">Ce qui vous attend</h2>
+        {linkBase && tasks.length > 0 && <Link href={`${linkBase}/taches`} className="text-xs font-semibold text-violet-strong underline">Toutes les tâches</Link>}
+      </div>
+      {tasks.length === 0 ? <p className="mt-1 text-sm text-muted">Rien pour le moment : aucune action ne vous est demandée.</p> : (
+        <ul className="mt-2 space-y-1.5">
+          {tasks.map((t) => (
+            <li key={t.id} className="flex flex-wrap items-center gap-2 text-sm">
+              <span className={`size-2 rounded-full ${t.status === "bloque" ? "bg-warning" : t.status === "en_cours" ? "bg-violet-strong" : "bg-line"}`} aria-hidden />
+              <span className="flex-1 text-ink">{t.title}</span>
+              {t.due_date && <span className={`text-xs ${t.due_date < view.today ? "font-semibold text-warning" : "text-muted"}`}>{t.due_date < view.today ? "à faire depuis le " : "avant le "}{formatDate(t.due_date)}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export function PortalOverview({ project, linkBase, attention }: { project: PortalProjectView; linkBase?: string; attention?: React.ReactNode }) {
   const hasPlan = project.phases.length > 0;
   return (
     <div className="space-y-5">
       <ProjectStateCard project={project} view={project} />
       <NextMeetingCard view={project} linkBase={linkBase} />
-      {attention}
+      {attention ?? <WaitingForYou view={project} linkBase={linkBase} />}
       {hasPlan && (
         <section aria-labelledby="deroule" className="space-y-4">
           <h2 id="deroule" className="font-display text-lg font-bold text-ink">Déroulé du projet</h2>

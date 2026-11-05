@@ -10,6 +10,7 @@ export function ProjectTabs({ id }: { id: string }) {
         { href: base, label: "Général", exact: true },
         { href: `${base}/planning`, label: "Planning" },
         { href: `${base}/points`, label: "Points" },
+        { href: `${base}/taches`, label: "Tâches" },
         { href: `${base}/acces`, label: "Accès client" },
       ]}
     />

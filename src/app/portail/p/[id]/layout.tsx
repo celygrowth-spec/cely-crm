@@ -21,7 +21,7 @@ export default async function PortalProjectLayout({ children, params }: { childr
     <>
       <PortalTopBar me={me} projectId={id} />
       <div className="mx-auto max-w-5xl px-4 pt-5 pb-24 md:pb-12">
-        <PortalNav projectId={id} sections={[]} />
+        <PortalNav projectId={id} sections={["taches"]} />
         {children}
       </div>
     </>

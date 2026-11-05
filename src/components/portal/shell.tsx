@@ -26,7 +26,8 @@ export function PortalTopBar({ me, projectId }: { me: PortalMe; projectId?: stri
             {me.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         )}
-        <span className="ml-auto hidden text-sm text-muted sm:inline">{me.person.first_name} {me.person.last_name} · {me.person.company}</span>
+        <Link href="/portail/taches" className="ml-auto rounded-lg px-2 py-1 text-sm font-semibold text-ink hover:bg-surface">Mes tâches</Link>
+        <span className="hidden text-sm text-muted lg:inline">{me.person.first_name} {me.person.last_name} · {me.person.company}</span>
         <button
           type="button"
           disabled={busy}
