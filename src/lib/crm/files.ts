@@ -29,17 +29,18 @@ function check<T>(res: { data: T; error: { message: string; code?: string } | nu
 export async function listFiles(sb: SupabaseClient, companyId: string): Promise<CompanyFile[]> {
   uuid.parse(companyId);
   const rows = check(
-    await sb.from("company_files").select(`${COLUMNS}, storage_path`).eq("company_id", companyId).order("created_at", { ascending: false }),
-  ) as (CompanyFile & { storage_path: string })[];
+    await sb.from("company_files").select(`${COLUMNS}, storage_path, uploaded_by_kind`).eq("company_id", companyId).order("created_at", { ascending: false }),
+  ) as (CompanyFile & { storage_path: string; uploaded_by_kind?: string })[];
   const limit = Date.now() - 24 * 3600_000;
-  const orphans = rows.filter((f) => f.status === "pending" && Date.parse(f.created_at) < limit);
+  // transferts abandonnés depuis 24 h, et dépôts supprimés par un client dont l'objet n'a pas pu être retiré
+  const orphans = rows.filter((f) => (f.status === "pending" && Date.parse(f.created_at) < limit) || (f.status === "deleting" && f.uploaded_by_kind === "client"));
   if (orphans.length) {
     await sb.storage.from(BUCKET).remove(orphans.map((o) => o.storage_path));
     await sb.from("company_files").delete().in("id", orphans.map((o) => o.id));
   }
   // le chemin de stockage ne quitte jamais le serveur
   return rows
-    .filter((f) => f.status !== "pending")
+    .filter((f) => f.status !== "pending" && !(f.status === "deleting" && f.uploaded_by_kind === "client"))
     .map((f) => ({ id: f.id, company_id: f.company_id, display_name: f.display_name, category: f.category, mime_type: f.mime_type, size_bytes: f.size_bytes, status: f.status, created_at: f.created_at }));
 }
 
