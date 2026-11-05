@@ -22,6 +22,7 @@ export function NewPipeline({ primary }: { primary?: boolean }) {
     if (!res.ok) return toast.error(res.error);
     setOpen(false);
     router.push(`/pipelines/${res.data.id}`);
+    router.refresh();
   }
 
   return (

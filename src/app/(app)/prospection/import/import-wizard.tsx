@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Download, Upload } from "lucide-react";
 import { importCheckAction, importCommitAction } from "@/app/actions";
 import { useCrm } from "@/components/app-shell";
+import { useSync } from "@/lib/client/query";
 import { Badge, Button, Card, Field, PageHeader, Select, Spinner, cn } from "@/components/ui";
 import { buildRows, groupRows, guessMapping, IMPORT_FIELDS, type ImportGroup, type ImportRow, type Mapping } from "@/lib/crm/import";
 import { normEmail } from "@/lib/crm/normalize";
@@ -16,6 +17,7 @@ type Checked = { candidates: Candidate[]; already: string[] };
 type Summary = { created: number; completed: number; skipped: number; people: number; replayed?: boolean; errors: { rows: number[]; message: string }[] };
 
 export function ImportWizard() {
+  const sync = useSync();
   const { lists } = useCrm();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [filename, setFilename] = useState("");
@@ -114,6 +116,7 @@ export function ImportWizard() {
     if (!res.ok) return toast.error(res.error);
     setSummary(res.data);
     setStep(4);
+    sync(["companies"], ["company-tags"]);
   }
 
   const setAll = (action: Decision["action"], filter: (g: ImportGroup) => boolean) =>

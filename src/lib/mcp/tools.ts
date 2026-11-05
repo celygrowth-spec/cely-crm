@@ -143,9 +143,9 @@ export function registerTools(server: McpServer, client: GetClient) {
     async (a, sb) => {
       let source_id: string | null = null;
       if (a.source_name) {
-        const { data } = await sb.from("lead_sources").select("id, name").ilike("name", a.source_name.trim());
+        const { data } = await sb.from("lead_sources").select("id, name").is("archived_at", null).ilike("name", a.source_name.trim());
         if (!data?.length) {
-          const { data: all } = await sb.from("lead_sources").select("name");
+          const { data: all } = await sb.from("lead_sources").select("name").is("archived_at", null);
           return text(`Source « ${a.source_name} » inconnue. Sources disponibles : ${(all ?? []).map((s) => s.name).join(", ")}. Rien n'a été créé.`);
         }
         source_id = data[0].id;

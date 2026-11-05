@@ -5,7 +5,9 @@ import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { createCompanyAction } from "@/app/actions";
 import type { DuplicateCandidate } from "@/lib/crm/types";
+import { attempt, useSync } from "@/lib/client/query";
 import { useCrm } from "./app-shell";
+import { SourcePicker } from "./source-picker";
 import { DuplicateNotice } from "./duplicate-notice";
 import { Button, Field, Input, Modal, Select, Textarea } from "./ui";
 
@@ -21,7 +23,7 @@ export function CreateCompanyModal({
 }: {
   defaults: CreateDefaults | null;
   onClose: () => void;
-  onCreated: (id: string) => void;
+  onCreated: (id: string, name: string) => void;
 }) {
   return (
     <Modal open={defaults !== null} onClose={onClose} title="Nouvelle fiche" wide>
@@ -31,7 +33,7 @@ export function CreateCompanyModal({
 }
 
 // monté à chaque ouverture : formulaire vierge et nouvelle clé d'idempotence
-function CreateForm({ defaults, onClose, onCreated }: { defaults: CreateDefaults; onClose: () => void; onCreated: (id: string) => void }) {
+function CreateForm({ defaults, onClose, onCreated }: { defaults: CreateDefaults; onClose: () => void; onCreated: (id: string, name: string) => void }) {
   const { sources, lists, pipelines, openCompany } = useCrm();
   const [name, setName] = useState("");
   const [website, setWebsite] = useState("");
@@ -45,13 +47,14 @@ function CreateForm({ defaults, onClose, onCreated }: { defaults: CreateDefaults
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [idemKey] = useState(() => crypto.randomUUID());
+  const sync = useSync();
 
   const filledPeople = people.filter((p) => Object.values(p).some((v) => v.trim()));
 
   async function submit(force: boolean) {
     setPending(true);
     setError(null);
-    const res = await createCompanyAction(
+    const res = await attempt(() => createCompanyAction(
       {
         name,
         website,
@@ -61,13 +64,14 @@ function CreateForm({ defaults, onClose, onCreated }: { defaults: CreateDefaults
       },
       filledPeople,
       { force, idempotencyKey: force ? `${idemKey}-force` : idemKey, listId: listId || null, stageId: stageId || null },
-    );
+    ));
     setPending(false);
     if (!res.ok) return setError(res.error);
     if (res.data.status === "duplicates") return setCandidates(res.data.candidates);
+    sync(["companies"], ["pipeline-cards"]);
     if (res.data.warning) toast.warning(res.data.warning);
     else toast.success("Fiche créée");
-    onCreated(res.data.id);
+    onCreated(res.data.id, name);
   }
 
   const update = (i: number, k: keyof PersonDraft, v: string) => setPeople((ps) => ps.map((p, j) => (j === i ? { ...p, [k]: v } : p)));
@@ -87,11 +91,8 @@ function CreateForm({ defaults, onClose, onCreated }: { defaults: CreateDefaults
           <Field label="Site web / domaine">
             <Input value={website} onChange={(e) => { setWebsite(e.target.value); setCandidates(null); }} placeholder="acme.com" />
           </Field>
-          <Field label="Source du lead">
-            <Select value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
-              <option value="">—</option>
-              {sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </Select>
+          <Field label="Source du contact">
+            <SourcePicker sources={sources} value={sourceId || null} onChange={(id) => setSourceId(id ?? "")} />
           </Field>
           <Field label="Tags" hint="Séparés par des virgules">
             <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="saas, b2b" />

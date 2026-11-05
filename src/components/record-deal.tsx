@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { moveCompanyAction, setDealStatusAction, updateCompanyAction } from "@/app/actions";
+import { moveCompanyAction, setDealStatusAction } from "@/app/actions";
 import { DEAL_STATUS_LABELS, formatAmount } from "@/lib/format";
 import { useCrm } from "./app-shell";
 import type { RecordCtx } from "./company-record";
@@ -26,27 +26,42 @@ export function RecordDeal({ ctx }: { ctx: RecordCtx }) {
         `Cette fiche a ${activeFollowups} relance(s) de prospection active(s).\n\nOK : les arrêter (recommandé)\nAnnuler : les conserver`,
       );
     }
-    const res = await moveCompanyAction(c.id, stageId || null, stop);
-    if (!res.ok) return toast.error(res.error);
-    if (res.data.stopped_followups) toast.info(`${res.data.stopped_followups} relance(s) de prospection arrêtée(s). L'historique reste consultable.`);
-    else toast.success(stageId ? "Fiche déplacée" : "Fiche retirée du pipeline");
-    await ctx.reload();
+    const pipeline = pipelines.find((p) => p.stages.some((st) => st.id === stageId)) ?? null;
+    const stage = pipeline?.stages.find((st) => st.id === stageId) ?? null;
+    let stopped = 0;
+    const ok = await ctx.mutate(
+      {
+        stage_id: stage?.id ?? null,
+        pipeline_id: pipeline?.id ?? null,
+        stage: stage ? { id: stage.id, name: stage.name } : null,
+        pipeline: pipeline ? { id: pipeline.id, name: pipeline.name } : null,
+        deal_status: "open",
+      },
+      async () => {
+        const res = await moveCompanyAction(c.id, stageId || null, stop);
+        if (!res.ok) return res;
+        stopped = res.data.stopped_followups ?? 0;
+        return { ok: true };
+      },
+    );
+    if (ok && stopped) {
+      toast.info(`${stopped} relance(s) de prospection arrêtée(s). L'historique reste consultable.`);
+      ctx.reload();
+    }
   }
 
   async function saveDeal() {
     const n = amount.trim() ? Number(amount.replace(/\s/g, "").replace(",", ".")) : null;
     if (n != null && (Number.isNaN(n) || n < 0)) return toast.error("Montant invalide");
-    const res = await updateCompanyAction(c.id, { amount: n, expected_close_date: closeDate || null });
-    if (!res.ok) return toast.error(res.error);
-    toast.success("Suivi commercial enregistré");
-    await ctx.reload();
+    ctx.patch({ amount: n, expected_close_date: closeDate || null });
   }
 
   async function setStatus(s: "open" | "won" | "lost") {
-    const res = await setDealStatusAction(c.id, s, s === "lost" ? lostReason : undefined);
-    if (!res.ok) return toast.error(res.error);
     setAskLost(false);
-    await ctx.reload();
+    ctx.mutate({ deal_status: s, lost_reason: s === "lost" ? lostReason || null : c.lost_reason }, async () => {
+      const res = await setDealStatusAction(c.id, s, s === "lost" ? lostReason : undefined);
+      return res.ok ? { ok: true } : res;
+    });
   }
 
   const dirty = amount !== (c.amount?.toString() ?? "") || closeDate !== (c.expected_close_date ?? "");

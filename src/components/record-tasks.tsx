@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { createTaskAction, postponeTaskAction, setTaskDoneAction } from "@/app/actions";
+import { attempt } from "@/lib/client/query";
 import type { Task } from "@/lib/crm/types";
 import { addDaysISO, personName, relativeDay, todayISO } from "@/lib/format";
 import type { RecordCtx } from "./company-record";
@@ -20,7 +21,7 @@ export function RecordTasks({ ctx }: { ctx: RecordCtx }) {
   async function add(e: React.FormEvent) {
     e.preventDefault();
     setPending(true);
-    const res = await createTaskAction({ company_id: company.id, title, due_date: due, person_id: personId || null });
+    const res = await attempt(() => createTaskAction({ company_id: company.id, title, due_date: due, person_id: personId || null }));
     setPending(false);
     if (!res.ok) return toast.error(res.error);
     setTitle("");
@@ -53,32 +54,34 @@ export function TaskRow({ task, personLabel, companyLabel, onChanged, onOpenComp
   onChanged: () => void | Promise<void>;
   onOpenCompany?: () => void;
 }) {
-  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false); // retour visuel immédiat, confirmé ensuite par le serveur
   const today = todayISO();
   const late = task.due_date < today;
 
-  async function done() {
-    setBusy(true);
-    const res = await setTaskDoneAction(task.id, true);
-    setBusy(false);
-    if (!res.ok) return toast.error(res.error);
+  async function complete() {
+    setDone(true);
+    const res = await attempt(() => setTaskDoneAction(task.id, true));
+    if (!res.ok) {
+      setDone(false);
+      return toast.error(res.error, { action: { label: "Réessayer", onClick: complete } });
+    }
     toast.success("Tâche terminée", {
-      action: { label: "Annuler", onClick: async () => { const r = await setTaskDoneAction(task.id, false); if (!r.ok) toast.error(r.error); await onChanged(); } },
+      action: { label: "Annuler", onClick: async () => { setDone(false); const r = await attempt(() => setTaskDoneAction(task.id, false)); if (!r.ok) toast.error(r.error); await onChanged(); } },
     });
     await onChanged();
   }
   async function postpone(days: number | string) {
     const d = typeof days === "number" ? addDaysISO(today > task.due_date ? today : task.due_date, days) : days;
-    const res = await postponeTaskAction(task.id, d);
+    const res = await attempt(() => postponeTaskAction(task.id, d));
     if (!res.ok) return toast.error(res.error);
     await onChanged();
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2">
-      <input type="checkbox" className="size-4 accent-violet-600" onChange={done} disabled={busy} aria-label="Terminer la tâche" />
+    <div className={cn("row-in flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2 transition-opacity duration-150", done && "opacity-50")}>
+      <input type="checkbox" className="size-4 accent-violet-600" checked={done} onChange={complete} disabled={done} aria-label="Terminer la tâche" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold">{task.title}</p>
+        <p className={cn("truncate text-sm font-semibold", done && "line-through")}>{task.title}</p>
         <p className="text-xs text-muted">
           {companyLabel && <button onClick={onOpenCompany} className="font-semibold text-ink hover:text-violet-strong">{companyLabel}</button>}
           {companyLabel && personLabel && " · "}

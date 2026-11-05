@@ -210,3 +210,40 @@ export function Modal({
 export function Spinner() {
   return <span className="inline-block size-4 animate-spin rounded-full border-2 border-violet border-t-transparent" />;
 }
+
+/** Bloc de chargement qui reprend la forme finale : réserve l'espace, évite les sauts. */
+export function Skeleton({ className }: { className?: string }) {
+  return <div className={cn("skeleton rounded-md", className)} aria-hidden />;
+}
+
+export function PageSkeleton({ rows = 8, header = true }: { rows?: number; header?: boolean }) {
+  return (
+    <div aria-busy="true" aria-label="Chargement">
+      {header && (
+        <div className="mb-5">
+          <Skeleton className="h-7 w-56" />
+          <Skeleton className="mt-2 h-4 w-80 max-w-full" />
+        </div>
+      )}
+      <Skeleton className="mb-3 h-9 w-full" />
+      <div className="divide-y divide-line rounded-xl border border-line">
+        {Array.from({ length: rows }, (_, i) => (
+          <div key={i} className="flex items-center gap-4 px-3 py-3">
+            <Skeleton className="h-4 w-44" />
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="ml-auto h-4 w-20" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** « Enregistrement… » puis « Enregistré » : indicateur discret, sans déplacer la mise en page. */
+export function SaveIndicator({ state }: { state: "idle" | "saving" | "saved" | "error" }) {
+  return (
+    <span aria-live="polite" className={cn("inline-block min-w-24 text-right text-xs transition-opacity duration-150", state === "idle" ? "opacity-0" : "opacity-100", state === "error" ? "text-danger" : "text-muted")}>
+      {state === "saving" ? "Enregistrement…" : state === "saved" ? "Enregistré" : state === "error" ? "Non enregistré" : ""}
+    </span>
+  );
+}

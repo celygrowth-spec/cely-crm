@@ -1,12 +1,12 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { requireOwner } from "@/lib/auth";
+import { requireAppOwner } from "@/lib/auth";
 
 export async function decideAction(form: FormData) {
   const id = String(form.get("authorization_id") ?? "");
   const approve = form.get("decision") === "approve";
-  const { supabase } = await requireOwner();
+  const { supabase } = await requireAppOwner();
   const { data, error } = approve
     ? await supabase.auth.oauth.approveAuthorization(id)
     : await supabase.auth.oauth.denyAuthorization(id);

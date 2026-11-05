@@ -18,7 +18,9 @@ import {
   type TaskInput,
 } from "./schemas";
 import type {
+  CompanyCore,
   CompanyDetail,
+  CompanyTimeline,
   DuplicateCandidate,
   PipelineWithStages,
   SearchResult,
@@ -97,19 +99,16 @@ export async function findDuplicates(
   ) as DuplicateCandidate[];
 }
 
-export async function getCompanyDetail(sb: SupabaseClient, id: string): Promise<CompanyDetail | null> {
+/** Partie légère de la fiche : sans l'historique, chargé à part pour ne pas retarder l'ouverture. */
+export async function getCompanyCore(sb: SupabaseClient, id: string): Promise<CompanyCore | null> {
   parse(idSchema, id);
-  const company = check(
-    await sb
+  const [companyRes, people, tasks, participants, lists] = await Promise.all([
+    sb
       .from("companies")
-      .select("*, source:lead_sources(id,name), pipeline:pipelines(id,name), stage:stages(id,name)")
+      .select("*, source:lead_sources(id,name,color), pipeline:pipelines(id,name), stage:stages(id,name)")
       .eq("id", id)
       .maybeSingle(),
-  );
-  if (!company) return null;
-  const [people, interactions, tasks, participants, lists, claudeLog] = await Promise.all([
     sb.from("people").select("*").eq("company_id", id).order("is_primary", { ascending: false }).order("created_at"),
-    sb.from("interactions").select("*").eq("company_id", id).order("occurred_at", { ascending: false }).limit(500),
     sb.from("tasks").select("*").eq("company_id", id).order("done_at", { nullsFirst: true }).order("due_date"),
     sb
       .from("campaign_participants")
@@ -117,22 +116,35 @@ export async function getCompanyDetail(sb: SupabaseClient, id: string): Promise<
       .eq("company_id", id)
       .order("created_at", { ascending: false }),
     sb.from("list_members").select("list:lists(id,name)").eq("company_id", id),
-    sb
-      .from("activity_log")
-      .select("id, table_name, operation, summary, created_at, data")
-      .eq("company_id", id)
-      .order("created_at", { ascending: false })
-      .limit(100),
   ]);
+  const company = check(companyRes);
+  if (!company) return null;
   return {
     company,
     people: check(people),
-    interactions: check(interactions),
     tasks: check(tasks),
     participants: check(participants),
     lists: (check(lists) as unknown as { list: { id: string; name: string } }[]).map((r) => r.list),
-    claudeLog: check(claudeLog),
-  } as CompanyDetail;
+  } as CompanyCore;
+}
+
+export async function getCompanyTimeline(sb: SupabaseClient, id: string): Promise<CompanyTimeline> {
+  parse(idSchema, id);
+  const [interactions, claudeLog] = await Promise.all([
+    sb.from("interactions").select("*").eq("company_id", id).order("occurred_at", { ascending: false }).limit(200),
+    sb
+      .from("activity_log")
+      .select("id, table_name, operation, summary, created_at")
+      .eq("company_id", id)
+      .order("created_at", { ascending: false })
+      .limit(50),
+  ]);
+  return { interactions: check(interactions), claudeLog: check(claudeLog) } as CompanyTimeline;
+}
+
+export async function getCompanyDetail(sb: SupabaseClient, id: string): Promise<CompanyDetail | null> {
+  const [core, timeline] = await Promise.all([getCompanyCore(sb, id), getCompanyTimeline(sb, id)]);
+  return core ? { ...core, ...timeline } : null;
 }
 
 export async function listPipelines(sb: SupabaseClient): Promise<PipelineWithStages[]> {

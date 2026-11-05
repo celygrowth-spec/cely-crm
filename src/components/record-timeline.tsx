@@ -1,5 +1,6 @@
 "use client";
 
+import { attempt } from "@/lib/client/query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ArrowRightLeft, Bot, Calendar, CheckCircle2, GitMerge, Inbox, Info, Phone, Send, StickyNote, Target } from "lucide-react";
@@ -7,7 +8,7 @@ import { addInteractionAction } from "@/app/actions";
 import type { Channel, Interaction, InteractionKind } from "@/lib/crm/types";
 import { CHANNEL_LABELS, formatDateTime, KIND_LABELS, localInputToISO, nowLocalInput, personName } from "@/lib/format";
 import type { RecordCtx } from "./company-record";
-import { Badge, Button, Input, Select, Textarea, cn } from "./ui";
+import { Badge, Button, Input, Select, Skeleton, Textarea, cn } from "./ui";
 
 const ICONS: Record<InteractionKind, typeof Send> = {
   note: StickyNote,
@@ -48,7 +49,7 @@ export function RecordTimeline({ ctx }: { ctx: RecordCtx }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setPending(true);
-    const res = await addInteractionAction(
+    const res = await attempt(() => addInteractionAction(
       {
         company_id: company.id,
         kind,
@@ -58,7 +59,7 @@ export function RecordTimeline({ ctx }: { ctx: RecordCtx }) {
         channel: kind === "note" ? null : channel || (kind === "call" ? "phone" : null),
       },
       crypto.randomUUID(),
-    );
+    ));
     setPending(false);
     if (!res.ok) return toast.error(res.error);
     if (res.data.paused_followups) toast.info(`Réponse enregistrée : ${res.data.paused_followups} relance(s) mise(s) en pause.`);
@@ -146,7 +147,8 @@ export function RecordTimeline({ ctx }: { ctx: RecordCtx }) {
       </div>
       <ol className="mt-2 space-y-3 border-l border-line pl-4">
         {items.map((it) => <li key={it.key}>{it.node}</li>)}
-        {!items.length && <li className="text-sm text-muted">Rien pour l&apos;instant.</li>}
+        {ctx.timelineLoading && [0, 1, 2].map((i) => <li key={i}><Skeleton className="h-10 w-full" /></li>)}
+        {!items.length && !ctx.timelineLoading && <li className="text-sm text-muted">Rien pour l&apos;instant.</li>}
       </ol>
     </div>
   );

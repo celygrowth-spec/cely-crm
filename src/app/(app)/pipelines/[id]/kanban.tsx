@@ -1,56 +1,63 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { apiGet, attempt, useSync } from "@/lib/client/query";
 import { toast } from "sonner";
 import { DndContext, PointerSensor, KeyboardSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { AlertCircle, Plus, Search, Settings2 } from "lucide-react";
 import { moveCompanyAction, searchAction } from "@/app/actions";
 import { useCrm } from "@/components/app-shell";
-import { Badge, Button, Input, Modal, Select, cn } from "@/components/ui";
+import { Badge, Button, EmptyState, Input, Modal, Select, Skeleton, cn } from "@/components/ui";
 import type { CompanyOverview, PipelineWithStages, SearchResult } from "@/lib/crm/types";
 import { formatAmount, relativeDay, todayISO } from "@/lib/format";
 import { NewPipeline } from "../new-pipeline";
 import { StageManager } from "./stage-manager";
 
-export function Kanban({
-  pipeline,
-  pipelines,
-  cards: initial,
-  dealStatus,
-}: {
-  pipeline: PipelineWithStages;
-  pipelines: PipelineWithStages[];
-  cards: CompanyOverview[];
-  dealStatus: "open" | "won" | "lost";
-}) {
+type Card = Pick<CompanyOverview, "id" | "name" | "stage_id" | "amount" | "primary_person_name" | "next_action_title" | "next_action_due">;
+
+export function Kanban({ pipelineId }: { pipelineId: string }) {
   const router = useRouter();
-  const { openCompany, openCreate } = useCrm();
-  const [cards, setCards] = useState(initial);
-  const [prevInitial, setPrevInitial] = useState(initial);
-  if (initial !== prevInitial) {
-    // nouvelles données serveur après router.refresh()
-    setPrevInitial(initial);
-    setCards(initial);
-  }
+  const qc = useQueryClient();
+  const params = useSearchParams();
+  const { pipelines, openCompany, openCreate, prefetchCompany } = useCrm();
+  const statut = params.get("statut");
+  const dealStatus: "open" | "won" | "lost" = statut === "won" || statut === "lost" ? statut : "open";
+  const pipeline = pipelines.find((p) => p.id === pipelineId);
+  const key = ["pipeline-cards", pipelineId, dealStatus];
+  const { data: cards = [], isLoading, isError, error, refetch } = useQuery({
+    queryKey: key,
+    queryFn: ({ signal }) => apiGet<Card[]>(`/api/pipelines/${pipelineId}/cards?statut=${dealStatus}`, signal),
+    enabled: !!pipeline,
+  });
   const [manage, setManage] = useState(false);
   const [addExisting, setAddExisting] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor));
 
+  if (!pipeline) return <EmptyState title="Pipeline introuvable" action={<Link href="/pipelines" className="font-semibold text-violet-strong">Voir les pipelines →</Link>} />;
+
   async function move(companyId: string, stageId: string) {
     const card = cards.find((c) => c.id === companyId);
     if (!card || card.stage_id === stageId) return;
-    const otherPipeline = !pipeline.stages.some((s) => s.id === stageId);
-    const prev = cards;
-    setCards((cs) => (otherPipeline ? cs.filter((c) => c.id !== companyId) : cs.map((c) => (c.id === companyId ? { ...c, stage_id: stageId } : c))));
-    const res = await moveCompanyAction(companyId, stageId);
+    const otherPipeline = !pipeline!.stages.some((s) => s.id === stageId);
+    // la carte bouge tout de suite ; seule cette liste est touchée, rien n'est rechargé
+    await qc.cancelQueries({ queryKey: key });
+    const prev = qc.getQueryData<Card[]>(key);
+    qc.setQueryData<Card[]>(key, (cs = []) => (otherPipeline ? cs.filter((c) => c.id !== companyId) : cs.map((c) => (c.id === companyId ? { ...c, stage_id: stageId } : c))));
+    const res = await attempt(() => moveCompanyAction(companyId, stageId));
     if (!res.ok) {
-      setCards(prev);
-      return toast.error(`Déplacement annulé : ${res.error}`);
+      qc.setQueryData(key, prev);
+      return toast.error(`Déplacement annulé : ${res.error}`, { action: { label: "Réessayer", onClick: () => move(companyId, stageId) } });
     }
-    if (otherPipeline) toast.success("Fiche transférée vers un autre pipeline");
-    router.refresh();
+    if (otherPipeline) {
+      toast.success("Fiche transférée vers un autre pipeline");
+      qc.invalidateQueries({ queryKey: ["pipeline-cards"] });
+    }
+    qc.invalidateQueries({ queryKey: ["company", companyId] });
+    qc.invalidateQueries({ queryKey: ["company-timeline", companyId] });
+    qc.invalidateQueries({ queryKey: ["companies"] });
   }
 
   function onDragEnd(e: DragEndEvent) {
@@ -79,7 +86,7 @@ export function Kanban({
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <Select
             value={dealStatus}
-            onChange={(e) => router.push(`/pipelines/${pipeline.id}${e.target.value === "open" ? "" : `?statut=${e.target.value}`}`)}
+            onChange={(e) => window.history.pushState(null, "", `/pipelines/${pipeline.id}${e.target.value === "open" ? "" : `?statut=${e.target.value}`}`)}
             className="w-auto"
             aria-label="Statut commercial"
           >
@@ -94,6 +101,7 @@ export function Kanban({
         </div>
       </div>
 
+      {isError && <p className="mb-2 text-sm text-danger">{error.message} <button className="underline" onClick={() => refetch()}>Réessayer</button></p>}
       <DndContext sensors={sensors} onDragEnd={onDragEnd}>
         <div className="flex gap-3 overflow-x-auto pb-4">
           {pipeline.stages.map((s) => {
@@ -101,8 +109,9 @@ export function Kanban({
             const total = col.reduce((a, c) => a + (c.amount ?? 0), 0);
             return (
               <Column key={s.id} id={s.id} title={s.name} count={col.length} total={total}>
+                {isLoading && [0, 1].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
                 {col.map((c) => (
-                  <KCard key={c.id} card={c} pipelines={pipelines} onOpen={() => openCompany(c.id)} onMove={(stageId) => move(c.id, stageId)} disabled={dealStatus !== "open"} />
+                  <KCard key={c.id} card={c} pipelines={pipelines} onOpen={() => openCompany(c.id, { name: c.name })} onHover={() => prefetchCompany(c.id)} onMove={(stageId) => move(c.id, stageId)} disabled={dealStatus !== "open"} />
                 ))}
               </Column>
             );
@@ -132,14 +141,15 @@ function Column({ id, title, count, total, children }: { id: string; title: stri
   );
 }
 
-function KCard({ card: c, pipelines, onOpen, onMove, disabled }: { card: CompanyOverview; pipelines: PipelineWithStages[]; onOpen: () => void; onMove: (stageId: string) => void; disabled: boolean }) {
+function KCard({ card: c, pipelines, onOpen, onHover, onMove, disabled }: { card: Card; pipelines: PipelineWithStages[]; onOpen: () => void; onHover: () => void; onMove: (stageId: string) => void; disabled: boolean }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: c.id, disabled });
   const late = c.next_action_due && c.next_action_due < todayISO();
   return (
     <div
       ref={setNodeRef}
       style={transform ? { transform: `translate(${transform.x}px, ${transform.y}px)` } : undefined}
-      className={cn("rounded-lg border border-line bg-white p-2.5 shadow-xs", isDragging && "z-10 shadow-lg ring-2 ring-violet")}
+      onMouseEnter={onHover}
+      className={cn("row-in rounded-lg border border-line bg-white p-2.5 shadow-xs", isDragging && "z-10 shadow-lg ring-2 ring-violet")}
       {...attributes}
       {...listeners}
     >
@@ -180,7 +190,7 @@ function KCard({ card: c, pipelines, onOpen, onMove, disabled }: { card: Company
 }
 
 function AddExisting({ open, onClose, pipeline }: { open: boolean; onClose: () => void; pipeline: PipelineWithStages }) {
-  const router = useRouter();
+  const sync = useSync();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [stageId, setStageId] = useState(pipeline.stages[0]?.id ?? "");
@@ -195,11 +205,11 @@ function AddExisting({ open, onClose, pipeline }: { open: boolean; onClose: () =
   }, [q]);
 
   async function add(id: string) {
-    const res = await moveCompanyAction(id, stageId);
+    const res = await attempt(() => moveCompanyAction(id, stageId));
     if (!res.ok) return toast.error(res.error);
     toast.success(res.data.stopped_followups ? `Fiche ajoutée · ${res.data.stopped_followups} relance(s) arrêtée(s)` : "Fiche ajoutée au pipeline");
     onClose();
-    router.refresh();
+    sync(["pipeline-cards"], ["companies"], ["company", id]);
   }
 
   return (

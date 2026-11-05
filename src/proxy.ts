@@ -24,6 +24,9 @@ export async function proxy(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(p + "/"));
+  if (!data?.claims && !isPublic && path.startsWith("/api/")) {
+    return NextResponse.json({ error: "Session expirée" }, { status: 401 });
+  }
   if (!data?.claims && !isPublic) {
     const login = request.nextUrl.clone();
     login.pathname = "/login";

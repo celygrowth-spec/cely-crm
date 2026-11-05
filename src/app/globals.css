@@ -58,3 +58,39 @@ body {
 dialog::backdrop {
   background: rgb(26 17 40 / 0.35);
 }
+
+/* ---------------------------------------------------------------------------
+   Animations : courtes, transform et opacity uniquement, aucun délai artificiel.
+   --------------------------------------------------------------------------- */
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop-in { from { opacity: 0; transform: translateY(-4px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes sheet-in { from { transform: translateX(32px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes sheet-out { to { transform: translateX(32px); opacity: 0; } }
+@keyframes shade-out { to { opacity: 0; } }
+@keyframes row-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+.fade-in { animation: fade-in 140ms ease-out both; }
+.pop-in { animation: pop-in 130ms ease-out both; transform-origin: top; }
+.row-in { animation: row-in 160ms ease-out both; }
+.sheet-in { animation: sheet-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.sheet-out { animation: sheet-out 140ms ease-in both; }
+.shade-in { animation: fade-in 160ms ease-out both; }
+.shade-out { animation: shade-out 140ms ease-in both; }
+.skeleton { background: var(--surface); animation: shimmer 1.4s ease-in-out infinite; }
+
+dialog[open] { animation: pop-in 150ms ease-out both; }
+dialog[open]::backdrop { animation: fade-in 150ms ease-out both; }
+
+button, a, input, select, textarea { transition-property: color, background-color, border-color, box-shadow, opacity; transition-duration: 120ms; }
+
+.progress-bar { transform-origin: left; transition: transform 160ms linear; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after, dialog[open], dialog[open]::backdrop {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}

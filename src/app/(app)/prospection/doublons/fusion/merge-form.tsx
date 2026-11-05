@@ -57,6 +57,7 @@ export function MergeForm({ a, b }: { a: CompanyDetail; b: CompanyDetail }) {
     if (!res.ok) return toast.error(res.error);
     toast.success(`Fusion effectuée : ${res.data.people_moved} personne(s) rattachée(s)${res.data.campaign_conflicts ? `, ${res.data.campaign_conflicts} conflit(s) de campagne consigné(s)` : ""}`);
     router.push(`/fiches/${res.data.kept_id}`);
+    router.refresh();
   }
 
   const side = (d: CompanyDetail, isA: boolean) => (

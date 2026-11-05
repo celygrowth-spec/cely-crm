@@ -107,22 +107,21 @@ export type ClaudeLogEntry = {
   operation: string;
   summary: string | null;
   created_at: string;
-  data: Record<string, unknown>;
 };
 
-export type CompanyDetail = {
+export type CompanyCore = {
   company: Company & {
-    source: { id: string; name: string } | null;
+    source: { id: string; name: string; color?: SourceColor } | null;
     pipeline: { id: string; name: string } | null;
     stage: { id: string; name: string } | null;
   };
   people: Person[];
-  interactions: Interaction[];
   tasks: Task[];
   participants: Participant[];
   lists: { id: string; name: string }[];
-  claudeLog: ClaudeLogEntry[];
 };
+export type CompanyTimeline = { interactions: Interaction[]; claudeLog: ClaudeLogEntry[] };
+export type CompanyDetail = CompanyCore & CompanyTimeline;
 
 export type DuplicateCandidate = {
   company_id: string;
@@ -159,5 +158,6 @@ export type TodoItem = {
   step_count: number | null;
 };
 
-export type LeadSource = { id: string; name: string; position: number };
+export type SourceColor = "slate" | "violet" | "blue" | "green" | "amber" | "red" | "pink" | "teal";
+export type LeadSource = { id: string; name: string; position: number; color: SourceColor; archived_at: string | null };
 export type List = { id: string; name: string; description: string | null; created_at: string };

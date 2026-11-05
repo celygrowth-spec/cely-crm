@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
-import { searchAction } from "@/app/actions";
+import { apiGet } from "@/lib/client/query";
 import type { SearchResult } from "@/lib/crm/types";
 import { Badge, cn, Modal, Spinner } from "./ui";
 
@@ -17,31 +18,26 @@ export function SearchPalette({ open, onClose, onPick }: { open: boolean; onClos
 // monté à chaque ouverture : l'état repart de zéro
 function SearchBody({ onPick }: { onPick: (id: string) => void }) {
   const [q, setQ] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [debounced, setDebounced] = useState("");
   const [archived, setArchived] = useState(false);
   const [active, setActive] = useState(0);
-  const reqId = useRef(0);
 
   useEffect(() => {
-    if (!q.trim()) return;
-    const id = ++reqId.current;
-    const t = setTimeout(async () => {
-      setLoading(true);
-      const res = await searchAction(q, archived);
-      if (id !== reqId.current) return;
-      setLoading(false);
-      if (res.ok) {
-        setResults(res.data);
-        setError(null);
-        setActive(0);
-      } else setError(res.error);
-    }, 180);
+    const t = setTimeout(() => setDebounced(q.trim()), 160);
     return () => clearTimeout(t);
-  }, [q, archived]);
+  }, [q]);
 
-  const shown = q.trim() ? results : [];
+  // chaque frappe a sa clé : la réponse d'une recherche dépassée est annulée, jamais affichée
+  const search = useQuery({
+    queryKey: ["search", debounced, archived],
+    queryFn: ({ signal }) => apiGet<SearchResult[]>(`/api/search?q=${encodeURIComponent(debounced)}&archived=${archived ? 1 : 0}`, signal),
+    enabled: !!debounced,
+    placeholderData: keepPreviousData,
+  });
+  const shown = q.trim() && debounced ? (search.data ?? []) : [];
+  const loading = search.isFetching && !shown.length;
+  const error = search.isError ? search.error.message : null;
+
   return (
     <>
       <div className="relative">
@@ -49,7 +45,7 @@ function SearchBody({ onPick }: { onPick: (id: string) => void }) {
         <input
           autoFocus
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={(e) => { setQ(e.target.value); setActive(0); }}
           onKeyDown={(e) => {
             if (e.key === "ArrowDown") setActive((a) => Math.min(a + 1, shown.length - 1));
             if (e.key === "ArrowUp") setActive((a) => Math.max(a - 1, 0));
@@ -65,7 +61,7 @@ function SearchBody({ onPick }: { onPick: (id: string) => void }) {
       <div className="mt-3 min-h-16">
         {loading && <Spinner />}
         {error && <p className="text-sm text-danger">{error}</p>}
-        {!loading && q.trim() && !shown.length && !error && <p className="text-sm text-muted">Aucun résultat.</p>}
+        {!loading && !search.isFetching && debounced && !shown.length && !error && <p className="text-sm text-muted">Aucun résultat.</p>}
         <ul className="divide-y divide-line">
           {shown.map((r, i) => (
             <li key={r.id}>

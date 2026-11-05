@@ -11,8 +11,12 @@ test("install.sql s'applique en une fois", async () => {
   await pg.exec(`create role anon nologin; create role authenticated nologin; create schema auth;
     create table auth.users (id uuid primary key, email text);
     create function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$;
-    create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;`);
+    create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+    create schema storage;
+    create table storage.buckets (id text primary key, name text, public boolean default false, file_size_limit bigint, allowed_mime_types text[]);
+    create table storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text references storage.buckets (id), name text);
+    alter table storage.objects enable row level security;`);
   await pg.exec(readFileSync(join(import.meta.dirname, "..", "..", "supabase", "install.sql"), "utf8"));
   const r = await pg.query<{ n: number }>(`select count(*)::int as n from public.lead_sources`);
-  expect(r.rows[0].n).toBe(6);
+  expect(r.rows[0].n).toBe(8);
 });
