@@ -26,6 +26,8 @@ src/app/actions.ts        Server actions de l'interface
 src/app/(app)/            Pages : prospection, pipelines, à faire, paramètres, fiche
 src/app/api/mcp/          Serveur MCP (Streamable HTTP, OAuth)
 src/app/api/export/       Export CSV
+src/app/api/fiches, companies, search, counters, pipelines, files   Lectures rapides pour le cache client et opérations de fichiers
+src/lib/client/query.tsx  Cache client (TanStack Query), invalidation ciblée, gestion des échecs d'action
 src/app/oauth/consent/    Écran de consentement OAuth (connexion de Claude)
 src/components/           Fiche unique (panneau + page), composants UI
 tests/                    Tests : règles SQL (PGlite), normalisation, import, connecteur
@@ -169,6 +171,24 @@ Révoquer l'accès : Supabase › Authentication › OAuth Apps.
   Les déclarations URSSAF saisies sont figées ; un changement de taux ne les modifie pas, les écarts sont signalés.
   Taux officiels encodés avec source et date de vérification (Réglages Finance) ; pour un autre statut, suivi manuel.
 - **Archivage** plutôt que suppression ; les fiches archivées sont masquées et restaurables.
+
+## Fichiers, sources et performance
+
+- **Fichiers** : contenu dans le bucket privé `company-files` (25 Mo maximum ; PDF, images, Word, Excel,
+  PowerPoint, texte, CSV), métadonnées dans `company_files`. Le navigateur envoie directement vers Storage avec une
+  URL signée ; rien ne transite par Next et rien n'est stocké en base64. Une pièce n'apparaît qu'après vérification
+  de l'objet reçu. Un transfert échoué est retiré et peut être relancé. Les envois abandonnés sont nettoyés après
+  24 h à l'ouverture de la fiche. Ouverture et téléchargement par lien temporaire de 5 minutes.
+- **Sources du contact** : gérées dans Paramètres (créer, renommer, colorer, réordonner, archiver, supprimer).
+  Une source archivée reste sur les fiches, n'est plus proposée, et n'est plus acceptée pour Claude. Une suppression
+  propose de réaffecter ou de vider ; aucune fiche n'est supprimée.
+- **Région** : `vercel.json` place les fonctions à Stockholm (`arn1`), au plus près de la base (`eu-north-1`).
+  Si le projet Supabase change de région, adaptez ce fichier.
+- **Données** : les lectures passent par des routes GET et un cache client unique, car Next exécute les server actions
+  une par une. Les server actions ne revalident plus la page : le client invalide ce qui a changé (`useSync`). Toute
+  mise à jour optimiste passe par `attempt`, qui transforme une coupure en échec pour permettre le retour en arrière.
+- **Session** : `getSession` vérifie le jeton localement (`getClaims`) sans appel réseau ; RLS reste la seule
+  barrière d'accès aux données.
 
 ## Tests
 

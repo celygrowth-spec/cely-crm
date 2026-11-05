@@ -1,6 +1,7 @@
 "use client";
 
 // Prospection sur la fiche : participations aux campagnes (même données que la campagne et « Aujourd'hui »).
+import { attempt } from "@/lib/client/query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -22,7 +23,7 @@ export function RecordProspecting({ ctx }: { ctx: RecordCtx }) {
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-sm">
           <Ban size={14} className="text-danger" />
           <span><strong>Ne plus contacter</strong>{company.do_not_contact_reason ? ` : ${company.do_not_contact_reason}` : ""} — aucune nouvelle activation possible.</span>
-          <Button size="sm" variant="ghost" className="ml-auto" onClick={async () => { const r = await setDoNotContactAction(company.id, false); if (!r.ok) return toast.error(r.error); await ctx.reload(); router.refresh(); }}>Retirer</Button>
+          <Button size="sm" variant="ghost" className="ml-auto" onClick={async () => { const r = await attempt(() => setDoNotContactAction(company.id, false)); if (!r.ok) return toast.error(r.error); await ctx.reload(); router.refresh(); }}>Retirer</Button>
         </div>
       ) : null}
       {!participants.length && <p className="text-sm text-muted">Cette fiche ne fait partie d&apos;aucune campagne.</p>}
@@ -51,7 +52,7 @@ export function RecordProspecting({ ctx }: { ctx: RecordCtx }) {
           onClick={async () => {
             const reason = prompt("Marquer « Ne plus contacter » ? Toute prospection sera arrêtée. Motif (facultatif) :");
             if (reason === null) return;
-            const r = await setDoNotContactAction(company.id, true, reason);
+            const r = await attempt(() => setDoNotContactAction(company.id, true, reason));
             if (!r.ok) return toast.error(r.error);
             toast.success("Marquée « Ne plus contacter »");
             await ctx.reload();

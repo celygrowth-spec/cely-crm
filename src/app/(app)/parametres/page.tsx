@@ -13,7 +13,7 @@ export default async function ParametresPage() {
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const mcpUrl = `${proto}://${host}/api/mcp`;
   const [{ data: sources }, { data: log }] = await Promise.all([
-    supabase.from("lead_sources").select("id, name, position").order("position").order("name"),
+    supabase.from("lead_sources").select("id, name, position, color, archived_at, companies(count)").order("position").order("name"),
     supabase.from("activity_log").select("id, table_name, operation, created_at, company_id").order("created_at", { ascending: false }).limit(10),
   ]);
 
@@ -22,9 +22,11 @@ export default async function ParametresPage() {
       <PageHeader title="Paramètres" />
 
       <Card className="p-4">
-        <h2 className="font-display text-base font-bold">Sources du lead</h2>
-        <p className="mb-3 text-sm text-muted">Liste proposée sur chaque fiche. Supprimer une source vide ce champ sur les fiches concernées, sans les supprimer.</p>
-        <SourcesManager sources={sources ?? []} />
+        <h2 className="font-display text-base font-bold">Sources du contact</h2>
+        <p className="mb-3 text-sm text-muted">Origine d&apos;acquisition de la fiche, distincte du canal d&apos;un message, d&apos;une liste ou d&apos;une campagne. Renommer met à jour partout ; archiver masque des nouveaux choix sans toucher aux fiches.</p>
+        <SourcesManager
+          sources={(sources ?? []).map(({ companies, ...s }) => ({ ...s, used: (companies as unknown as { count: number }[])[0]?.count ?? 0 })) as never}
+        />
       </Card>
 
       <Card className="p-4">

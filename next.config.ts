@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    // réutilise les écrans déjà visités ; toute mutation purge ce cache via router.refresh()
+    staleTimes: { dynamic: 30, static: 180 },
+    optimizePackageImports: ["lucide-react", "recharts"],
+  },
   turbopack: {
     rules: {
       "*.css": {

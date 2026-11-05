@@ -1,20 +1,20 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { revalidatePath } from "next/cache";
 import { requireOwner } from "@/lib/auth";
 import { CrmError } from "@/lib/crm/service";
 
 export type ActionResult<T = void> = { ok: true; data: T } | { ok: false; error: string };
 
 /**
- * Exécute une action serveur : contrôle d'accès, gestion d'erreur explicite et
- * rafraîchissement des pages. Une erreur n'est jamais présentée comme un succès.
+ * Exécute une action serveur : session vérifiée (les droits sont appliqués par RLS et
+ * assert_owner), gestion d'erreur explicite. Une erreur n'est jamais présentée comme un succès.
+ * Aucune revalidation ici : le client met à jour son cache de façon ciblée (useSync).
+ * Revalider tout l'arbre à chaque action rendait chaque clic aussi lent qu'un chargement de page.
  */
-export async function run<T>(fn: (sb: SupabaseClient) => Promise<T>, opts: { revalidate?: boolean } = {}): Promise<ActionResult<T>> {
+export async function run<T>(fn: (sb: SupabaseClient) => Promise<T>): Promise<ActionResult<T>> {
   const { supabase } = await requireOwner();
   try {
     const data = await fn(supabase);
-    if (opts.revalidate !== false) revalidatePath("/", "layout");
     return { ok: true, data };
   } catch (e) {
     if (e instanceof CrmError) return { ok: false, error: e.message };

@@ -2,21 +2,27 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { CheckSquare, Columns3, LogOut, Plus, Search, Settings, Users, Wallet } from "lucide-react";
 import type { LeadSource, List, PipelineWithStages } from "@/lib/crm/types";
 import { signOutAction } from "@/app/actions";
+import { QueryProvider, apiGet, useFlushRouterOnNavigate } from "@/lib/client/query";
 import { cn } from "./ui";
 import { SearchPalette } from "./search-palette";
 import { CompanySheet } from "./company-sheet";
 import { CreateCompanyModal, type CreateDefaults } from "./create-company";
 
+/** Données déjà connues d'une fiche (ligne de tableau) : affichées dès l'ouverture. */
+export type CompanySeed = { name: string; website?: string | null; domain_norm?: string | null };
+
 type CrmContext = {
   sources: LeadSource[];
   lists: List[];
   pipelines: PipelineWithStages[];
-  openCompany: (id: string) => void;
+  openCompany: (id: string, seed?: CompanySeed) => void;
+  prefetchCompany: (id: string) => void;
   openCreate: (defaults?: CreateDefaults) => void;
 };
 
@@ -61,15 +67,14 @@ export function AppShell(props: {
   sources: LeadSource[];
   lists: List[];
   pipelines: PipelineWithStages[];
-  todoCount: number;
-  dueCount: number;
-  repliesCount: number;
   children: ReactNode;
 }) {
   return (
-    <Suspense>
-      <Shell {...props} />
-    </Suspense>
+    <QueryProvider>
+      <Suspense>
+        <Shell {...props} />
+      </Suspense>
+    </QueryProvider>
   );
 }
 
@@ -77,40 +82,51 @@ function Shell({
   sources,
   lists,
   pipelines,
-  todoCount,
-  dueCount,
-  repliesCount,
   children,
 }: {
   sources: LeadSource[];
   lists: List[];
   pipelines: PipelineWithStages[];
-  todoCount: number;
-  dueCount: number;
-  repliesCount: number;
   children: ReactNode;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const params = useSearchParams();
+  const qc = useQueryClient();
+  useFlushRouterOnNavigate();
+  const { data: counters } = useQuery({
+    queryKey: ["counters"],
+    queryFn: ({ signal }) => apiGet<{ todo: number; due: number; replies: number }>("/api/counters", signal),
+    staleTime: 60_000,
+  });
+  const todoCount = counters?.todo ?? 0;
+  const dueCount = counters?.due ?? 0;
+  const repliesCount = counters?.replies ?? 0;
   const [searchOpen, setSearchOpen] = useState(false);
   const [createDefaults, setCreateDefaults] = useState<CreateDefaults | null>(null);
 
+  // Fiche ouverte par history.pushState : l'URL change sans aucun aller-retour serveur,
+  // le tableau derrière reste affiché tel quel, avec ses filtres et son défilement.
   const openCompany = useCallback(
-    (id: string) => {
-      const sp = new URLSearchParams(params.toString());
+    (id: string, seed?: CompanySeed) => {
+      if (seed) qc.setQueryData(["company-seed", id], seed);
+      const sp = new URLSearchParams(window.location.search);
       sp.set("fiche", id);
-      router.push(`${pathname}?${sp.toString()}`, { scroll: false });
+      window.history.pushState(null, "", `${window.location.pathname}?${sp.toString()}`);
     },
-    [params, pathname, router],
+    [qc],
   );
-
+  const prefetchCompany = useCallback(
+    (id: string) => {
+      qc.prefetchQuery({ queryKey: ["company", id], queryFn: ({ signal }) => apiGet(`/api/fiches/${id}`, signal), staleTime: 30_000 });
+    },
+    [qc],
+  );
   const closeCompany = useCallback(() => {
-    const sp = new URLSearchParams(params.toString());
+    const sp = new URLSearchParams(window.location.search);
     sp.delete("fiche");
     const q = sp.toString();
-    router.push(q ? `${pathname}?${q}` : pathname, { scroll: false });
-  }, [params, pathname, router]);
+    window.history.pushState(null, "", q ? `${window.location.pathname}?${q}` : window.location.pathname);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -124,8 +140,8 @@ function Shell({
   }, []);
 
   const value = useMemo<CrmContext>(
-    () => ({ sources, lists, pipelines, openCompany, openCreate: (d) => setCreateDefaults(d ?? {}) }),
-    [sources, lists, pipelines, openCompany],
+    () => ({ sources, lists, pipelines, openCompany, prefetchCompany, openCreate: (d) => setCreateDefaults(d ?? {}) }),
+    [sources, lists, pipelines, openCompany, prefetchCompany],
   );
   const ficheId = params.get("fiche");
 
@@ -215,7 +231,7 @@ function Shell({
               );
             })}
           </nav>
-          <form action={signOutAction} className="mt-auto hidden md:block">
+          <form action={signOutAction} onSubmit={() => qc.clear()} className="mt-auto hidden md:block">
             <button className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted hover:bg-surface hover:text-ink">
               <LogOut size={16} /> Déconnexion
             </button>
@@ -224,13 +240,13 @@ function Shell({
         <main className="min-w-0 flex-1 px-4 pt-5 pb-24 md:px-8 md:pt-7 md:pb-10">{children}</main>
       </div>
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} onPick={(id) => { setSearchOpen(false); openCompany(id); }} />
-      {ficheId && <CompanySheet id={ficheId} onClose={closeCompany} />}
+      <CompanySheet id={ficheId} onClose={closeCompany} />
       <CreateCompanyModal
         defaults={createDefaults}
         onClose={() => setCreateDefaults(null)}
-        onCreated={(id) => {
+        onCreated={(id, name) => {
           setCreateDefaults(null);
-          openCompany(id);
+          openCompany(id, { name });
         }}
       />
     </Ctx.Provider>

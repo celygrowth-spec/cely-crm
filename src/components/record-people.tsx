@@ -1,5 +1,6 @@
 "use client";
 
+import { attempt } from "@/lib/client/query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Mail, Pencil, Phone, Plus, Star, Trash2 } from "lucide-react";
@@ -46,13 +47,13 @@ export function RecordPeople({ ctx }: { ctx: RecordCtx }) {
 
 function PersonRow({ ctx, person: p, onEdit }: { ctx: RecordCtx; person: Person; onEdit: () => void }) {
   async function makePrimary() {
-    const res = await upsertPersonAction(p.company_id, { ...toDraft(p), is_primary: true }, p.id, true);
+    const res = await attempt(() => upsertPersonAction(p.company_id, { ...toDraft(p), is_primary: true }, p.id, true));
     if (!res.ok) return toast.error(res.error);
     await ctx.reload();
   }
   async function remove() {
     if (!confirm(`Retirer ${personName(p)} de la fiche ? Les échanges déjà enregistrés sont conservés.`)) return;
-    const res = await deletePersonAction(p.id);
+    const res = await attempt(() => deletePersonAction(p.id));
     if (!res.ok) return toast.error(res.error);
     await ctx.reload();
   }
@@ -91,7 +92,7 @@ function PersonForm({ ctx, person, onDone }: { ctx: RecordCtx; person?: Person; 
 
   async function save(force: boolean) {
     setPending(true);
-    const res = await upsertPersonAction(ctx.detail.company.id, d, person?.id, force);
+    const res = await attempt(() => upsertPersonAction(ctx.detail.company.id, d, person?.id, force));
     setPending(false);
     if (!res.ok) return toast.error(res.error);
     if (res.data.status === "duplicates") return setConflicts(res.data.candidates as unknown as PersonConflict[]);

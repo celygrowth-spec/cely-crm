@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { run } from "@/lib/action";
 import { requireOwner } from "@/lib/auth";
 import * as crm from "@/lib/crm/service";
+import * as files from "@/lib/crm/files";
 import { CrmError } from "@/lib/crm/service";
 import type { CompanyInput, CompanyPatch, InteractionInput, PersonInput, TaskInput } from "@/lib/crm/schemas";
 import { channelSchema, idSchema } from "@/lib/crm/schemas";
@@ -32,11 +33,11 @@ const rpc = async (sb: SupabaseClient, fn: string, args: Record<string, unknown>
 // ---------------------------------------------------------------------------
 
 export async function getCompanyAction(id: string) {
-  return run((sb) => crm.getCompanyDetail(sb, id), { revalidate: false });
+  return run((sb) => crm.getCompanyDetail(sb, id));
 }
 
 export async function searchAction(query: string, includeArchived = false) {
-  return run((sb) => crm.searchCompanies(sb, query, includeArchived), { revalidate: false });
+  return run((sb) => crm.searchCompanies(sb, query, includeArchived));
 }
 
 export async function createCompanyAction(
@@ -192,24 +193,55 @@ export async function deleteStageAction(id: string, replacementId: string | null
 // Sources du lead
 // ---------------------------------------------------------------------------
 
-export async function createSourceAction(sourceName: string) {
+const COLORS = z.enum(["slate", "violet", "blue", "green", "amber", "red", "pink", "teal"]);
+
+export async function createSourceAction(sourceName: string, color?: string) {
   return run(async (sb) => {
     const { count } = await sb.from("lead_sources").select("id", { count: "exact", head: true });
-    ok(await sb.from("lead_sources").insert({ name: v(name(80), sourceName), position: (count ?? 0) + 1 }));
+    return ok(
+      await sb
+        .from("lead_sources")
+        .insert({ name: v(name(80), sourceName), position: (count ?? 0) + 1, color: v(COLORS, color ?? "slate") })
+        .select("id, name, position, color, archived_at")
+        .single(),
+    ) as import("@/lib/crm/types").LeadSource;
   });
 }
 
-export async function renameSourceAction(id: string, sourceName: string) {
+export async function updateSourceAction(id: string, patch: { name?: string; color?: string; archived?: boolean }) {
   return run(async (sb) => {
-    ok(await sb.from("lead_sources").update({ name: v(name(80), sourceName) }).eq("id", v(idSchema, id)));
+    const p: Record<string, unknown> = {};
+    if (patch.name !== undefined) p.name = v(name(80), patch.name);
+    if (patch.color !== undefined) p.color = v(COLORS, patch.color);
+    if (patch.archived !== undefined) p.archived_at = patch.archived ? new Date().toISOString() : null;
+    ok(await sb.from("lead_sources").update(p).eq("id", v(idSchema, id)));
   });
 }
 
-export async function deleteSourceAction(id: string) {
-  // les fiches qui utilisaient cette source la perdent (champ vidé), elles ne sont pas supprimées
+export async function reorderSourcesAction(ids: string[]) {
   return run(async (sb) => {
-    ok(await sb.from("lead_sources").delete().eq("id", v(idSchema, id)));
+    await rpc(sb, "reorder_sources", { p_ids: ids.map((x) => v(idSchema, x)) });
   });
+}
+
+/** Suppression définitive : les fiches sont réaffectées ou leur source est vidée. */
+export async function deleteSourceAction(id: string, replacementId: string | null) {
+  return run(async (sb) => (await rpc(sb, "delete_source", { p_id: v(idSchema, id), p_replacement: replacementId })) as { moved: number });
+}
+
+export async function setCompaniesSourceAction(ids: string[], sourceId: string | null) {
+  return run(async (sb) => (await rpc(sb, "set_companies_source", { p_ids: ids.map((x) => v(idSchema, x)), p_source: sourceId })) as number);
+}
+
+// ---------------------------------------------------------------------------
+// Fichiers des fiches
+// ---------------------------------------------------------------------------
+
+export async function updateFileAction(id: string, patch: { display_name?: string; category?: string | null }) {
+  return run((sb) => files.updateFile(sb, id, patch));
+}
+export async function deleteFileAction(id: string) {
+  return run((sb) => files.deleteFile(sb, id));
 }
 
 // ---------------------------------------------------------------------------
@@ -328,8 +360,7 @@ export async function importCheckAction(groups: ImportCheckGroup[]) {
         candidates: { company_id: string; name: string; website: string | null; strength: "exact" | "similar"; reasons: string[] }[];
         already_imported_company_ids: string[];
       }[];
-    },
-    { revalidate: false },
+    }
   );
 }
 

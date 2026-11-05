@@ -35,7 +35,7 @@ export async function activateAction(campaignId: string, ids: string[], confirmC
   return run((sb) => p.activate(sb, campaignId, ids, confirmConflicts));
 }
 export async function saveDraftAction(participantId: string, position: number, subject: string | null, body: string | null) {
-  return run((sb) => p.saveDraft(sb, participantId, position, subject, body), { revalidate: false });
+  return run((sb) => p.saveDraft(sb, participantId, position, subject, body));
 }
 export async function completeStepAction(a: Parameters<typeof p.completeStep>[1]) {
   return run((sb) => p.completeStep(sb, a));
@@ -75,7 +75,7 @@ export async function updateParticipantsAction(
   });
 }
 export async function getFocusQueueAction(campaignId: string | null) {
-  return run((sb) => p.getFocusQueue(sb, { campaignId, today: todayISO() }), { revalidate: false });
+  return run((sb) => p.getFocusQueue(sb, { campaignId, today: todayISO() }));
 }
 export async function saveViewAction(v: { id?: string | null; scope: string; name: string; config: Record<string, unknown> }) {
   return run((sb) => p.saveView(sb, v));
@@ -84,5 +84,5 @@ export async function deleteViewAction(id: string) {
   return run((sb) => p.deleteView(sb, id));
 }
 export async function setPreferenceAction(key: string, value: unknown) {
-  return run((sb) => p.setPreference(sb, key, value), { revalidate: false });
+  return run((sb) => p.setPreference(sb, key, value));
 }

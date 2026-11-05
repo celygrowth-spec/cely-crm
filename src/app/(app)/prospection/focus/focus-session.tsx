@@ -14,6 +14,7 @@ import {
   completeStepAction, recordReplyAction, saveDraftAction, setOutcomeAction, skipStepAction, undoActionAction, updateParticipantsAction,
 } from "@/app/prospection-actions";
 import { useCrm } from "@/components/app-shell";
+import { useSync } from "@/lib/client/query";
 import { LinkedinGlyph, StepIcon } from "@/components/prospection/bits";
 import { Badge, Button, Input, Modal, Select, Spinner, Textarea, cn } from "@/components/ui";
 import type { Person } from "@/lib/crm/types";
@@ -29,6 +30,7 @@ const href = (u: string) => (/^https?:\/\//i.test(u) ? u : `https://${u}`);
 
 export function FocusSession({ items, campaignName }: { items: FocusItem[]; campaignName: string | null }) {
   const router = useRouter();
+  const sync = useSync();
   const [queue] = useState(items); // file figée pour la session
   const [index, setIndex] = useState(0);
   const [results, setResults] = useState<Record<string, Outcome>>({});
@@ -87,6 +89,7 @@ export function FocusSession({ items, campaignName }: { items: FocusItem[]; camp
 
   function finish(id: string, outcome: Outcome) {
     setResults((r) => ({ ...r, [id]: outcome }));
+    sync(["company", item?.participant.company_id ?? ""], ["company-timeline", item?.participant.company_id ?? ""], ["companies"]);
   }
 
   async function validate() {

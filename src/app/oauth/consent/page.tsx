@@ -1,13 +1,13 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { requireOwner } from "@/lib/auth";
+import { requireAppOwner } from "@/lib/auth";
 import { decideAction } from "./actions";
 
 // Écran de consentement du serveur OAuth 2.1 de Supabase (connexion de Claude au CRM).
 export default async function ConsentPage({ searchParams }: { searchParams: Promise<{ authorization_id?: string }> }) {
   const { authorization_id } = await searchParams;
   if (!authorization_id) return <Shell><p className="text-sm text-danger">Requête d&apos;autorisation invalide.</p></Shell>;
-  const { supabase, user } = await requireOwner();
+  const { supabase, user } = await requireAppOwner();
   const { data, error } = await supabase.auth.oauth.getAuthorizationDetails(authorization_id);
   if (error || !data) return <Shell><p className="text-sm text-danger">Autorisation introuvable ou expirée : {error?.message}</p></Shell>;
   if (!("authorization_id" in data)) redirect(data.redirect_url);
