@@ -502,5 +502,17 @@ begin
 end;
 $$;
 
-revoke execute on all functions in schema public from public, anon;
-grant execute on all functions in schema public to authenticated;
+-- Uniquement les fonctions de ce fichier : une autre migration peut ouvrir ses propres fonctions au public
+-- (réservation de rendez-vous, par exemple), et elle doit garder ses droits.
+do $$
+declare f regprocedure;
+begin
+  for f in
+    select p.oid::regprocedure from pg_proc p
+     where p.pronamespace = 'public'::regnamespace
+       and (p.proname like 'mail\_%' or p.proname in ('tg_mail_messages_guard', 'tg_companies_merge_mail'))
+  loop
+    execute format('revoke execute on function %s from public, anon', f);
+    execute format('grant execute on function %s to authenticated', f);
+  end loop;
+end $$;

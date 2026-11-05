@@ -1,4 +1,6 @@
 // États des emails, double envoi, droits : sur les vraies migrations.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { beforeEach, describe, expect, test } from "vitest";
 import { createDb, type Db } from "./harness";
 
@@ -203,6 +205,17 @@ describe("droits", () => {
     await expect(db.rpc("mail_disconnect", { p_id: acc })).rejects.toThrow();
     await db.as("owner");
     expect(await status()).toBe("draft");
+  });
+
+  test("la migration ne touche pas aux droits des fonctions d'un autre module", async () => {
+    await db.exec(`reset role;`);
+    await db.exec(`create function public.fonction_publique_test() returns int language sql as 'select 1';
+      grant execute on function public.fonction_publique_test() to anon;`);
+    const sql = readFileSync(join(__dirname, "..", "..", "supabase", "migrations", "20261106000100_mail.sql"), "utf8");
+    await db.exec(sql.slice(sql.lastIndexOf("do $$")));
+    await db.as("anon");
+    expect(await db.rpc("fonction_publique_test", {})).toBe(1);
+    await expect(db.rpc("mail_row", { p_id: ID })).rejects.toThrow();
   });
 
   test("anonyme : aucun accès", async () => {
