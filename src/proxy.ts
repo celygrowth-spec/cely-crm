@@ -3,7 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Rafraîchit la session Supabase et redirige vers /login les visiteurs non connectés.
 // Le contrôle d'accès réel est fait côté serveur (requireOwner) et en base (RLS).
-const PUBLIC_PATHS = ["/login", "/api/mcp", "/.well-known", "/auth"];
+// /rdv et /api/rdv : réservation publique sans compte (protégée par la clé serveur et les jetons privés)
+const PUBLIC_PATHS = ["/login", "/api/mcp", "/.well-known", "/auth", "/rdv", "/api/rdv"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });

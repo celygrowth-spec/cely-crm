@@ -9,6 +9,9 @@ de prospection aux pipelines sans jamais être copiée.
 - **À faire** : tâches et relances (en retard, aujourd'hui, à venir).
 - **Finance** : missions par fiche CRM, revenus (factures émises ailleurs) et paiements partiels, charges et
   abonnements, suivi URSSAF (estimé / déclaré / payé), trésorerie, prévisions, EBITDA indicatif, simulation.
+- **Rendez-vous** : pages publiques de réservation (`/rdv/<type>`), types de rendez-vous, disponibilités
+  (plages, exceptions, congés), connexion Google Calendar, agenda, liste, rattachement CRM sans doublon,
+  annulation et report par lien privé. Configuration : `docs/integrations/google-calendar.md`.
 - **Paramètres** : sources du lead, connexion à Claude, compte.
 - **Connecteur Claude (MCP)** : rechercher, consulter, créer, noter, déplacer, lister les relances, depuis Claude.
 
@@ -196,6 +199,26 @@ Page **Mail** : connexion Gmail, signature, test d'envoi, derniers envois. Dans 
 envoi, états). Configuration : [docs/mail-configuration.md](docs/mail-configuration.md). Pour les modules :
 [docs/integrations/mail-service.md](docs/integrations/mail-service.md). Sans configuration Google, le reste du CRM
 fonctionne normalement.
+
+## Rendez-vous
+
+- **Réservation publique** sans compte : `/rdv/<slug>` (date → créneau → informations → confirmation, fuseau
+  détecté et modifiable, ICS, lien privé d'annulation/report `/rdv/gerer/<id>.<jeton>`).
+- **Fiabilité** : vérification finale sous verrou en base, contrainte d'exclusion (aucun chevauchement,
+  battements compris), clé d'idempotence (double clic), retenue du créneau pendant la création de
+  l'événement Google, compensation et reprise (la base fait foi). Un agenda Google injoignable n'est jamais
+  considéré comme libre.
+- **CRM** : email connu → fiche existante ; domaine professionnel ou nom proche → « À rattacher » avec
+  suggestions ; rien n'est déduit d'un domaine Gmail/Outlook, rien n'est fusionné ni écrasé, aucun
+  déplacement de pipeline.
+- **Accès public** : les fonctions publiques exigent une clé serveur dérivée de `APPOINTMENTS_SECRET`
+  (empreinte en base) ; les fonctions internes sont dans le schéma non exposé `appt_private`.
+  Attention : une migration future qui ferait `revoke execute on all functions in schema public from anon`
+  fermerait la réservation publique ; le test `tests/db/rendez-vous.test.ts` le détecte.
+- **Rappels** : règles par type (délais exacts : jours, heures, minutes avant), échéancier par rendez-vous
+  (personnalisation locale, ajout, annulation, désactivation, réapplication explicite avec aperçu),
+  recalcul au report, annulation des restants, suspension globale. **Aucun envoi** dans ce module :
+  « Envoi non connecté » tant que le module Mail n'est pas raccordé. Contrat : `docs/integrations/appointments-mail.md`.
 
 ## Tests
 

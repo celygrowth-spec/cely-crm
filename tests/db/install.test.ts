@@ -2,12 +2,13 @@
 import { PGlite } from "@electric-sql/pglite";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
 import { unaccent } from "@electric-sql/pglite/contrib/unaccent";
+import { btree_gist } from "@electric-sql/pglite/contrib/btree_gist";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 
 test("install.sql s'applique en une fois", async () => {
-  const pg = new PGlite({ extensions: { pg_trgm, unaccent } });
+  const pg = new PGlite({ extensions: { pg_trgm, unaccent, btree_gist } });
   await pg.exec(`create role anon nologin; create role authenticated nologin; create schema auth;
     create table auth.users (id uuid primary key, email text);
     create function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$;
