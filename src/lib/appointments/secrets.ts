@@ -19,6 +19,11 @@ function secret(): string {
 }
 
 const derive = (label: string) => createHmac("sha256", secret()).update(`cely-appointments:${label}`).digest();
+
+/** HMAC d'une valeur avec une clé dérivée du secret serveur (usage : empreintes du portail client). */
+export function serverHmacHex(label: string, value: string): string {
+  return createHmac("sha256", derive(label)).update(value).digest("hex");
+}
 const b64u = (b: Buffer) => b.toString("base64url");
 
 export const sha256Hex = (s: string) => createHash("sha256").update(s, "utf8").digest("hex");

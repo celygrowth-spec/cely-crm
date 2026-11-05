@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { CalendarDays, CheckSquare, Columns3, LogOut, Mail, Plus, Search, Settings, Users, Wallet } from "lucide-react";
+import { CalendarDays, CheckSquare, FolderKanban, Columns3, LogOut, Mail, Plus, Search, Settings, Users, Wallet } from "lucide-react";
 import type { LeadSource, List, PipelineWithStages } from "@/lib/crm/types";
 import { signOutAction } from "@/app/actions";
 import { QueryProvider, apiGet, useFlushRouterOnNavigate } from "@/lib/client/query";
@@ -67,6 +67,7 @@ export const RDV_NAV = [
 const NAV = [
   { href: "/prospection", label: "Prospection", icon: Users },
   { href: "/pipelines", label: "Pipelines", icon: Columns3 },
+  { href: "/projets", label: "Projets", icon: FolderKanban },
   { href: "/rendez-vous", label: "Rendez-vous", icon: CalendarDays },
   { href: "/finance", label: "Finance", icon: Wallet },
   { href: "/a-faire", label: "À faire", icon: CheckSquare },
@@ -179,7 +180,7 @@ function Shell({
             <Plus size={16} />
             <span className="hidden md:inline">Nouvelle fiche</span>
           </button>
-          <nav className="fixed inset-x-0 bottom-0 z-20 flex justify-around border-t border-line bg-white py-1 md:static md:flex-col md:justify-start md:gap-0.5 md:border-0 md:py-0">
+          <nav className="fixed inset-x-0 bottom-0 z-20 flex justify-around overflow-x-auto border-t border-line bg-white py-1 md:static md:overflow-visible md:flex-col md:justify-start md:gap-0.5 md:border-0 md:py-0">
             {NAV.map(({ href, label, icon: Icon }) => {
               const active = pathname === href || pathname.startsWith(href + "/");
               return (
