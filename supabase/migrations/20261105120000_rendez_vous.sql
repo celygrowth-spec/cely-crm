@@ -1242,20 +1242,6 @@ $$;
 -- Back-office (propriétaire)
 -- ---------------------------------------------------------------------------
 
-create or replace function public.appt_owner_slots(p_type uuid, p_from timestamptz, p_to timestamptz, p_busy jsonb default '[]', p_exclude_booking uuid default null)
-returns jsonb
-language plpgsql
-stable
-security definer
-set search_path = ''
-as $$
-begin
-  perform appt_private.assert_owner_user();
-  if p_to - p_from > interval '62 days' then raise exception 'Période trop longue' using errcode = '22023'; end if;
-  return coalesce((select jsonb_agg(s.slot order by s.slot) from appt_private.compute_slots(p_type, p_from, p_to, p_busy, p_exclude_booking) s), '[]');
-end;
-$$;
-
 create or replace function public.appt_set_outcome(p_id uuid, p_outcome text)
 returns void
 language plpgsql
@@ -1390,7 +1376,7 @@ begin
     'appt_register_server_key(text)', 'appt_server_key_registered(text)', 'appt_save_schedule(uuid, jsonb)',
     'appt_save_block(uuid, text, date, date, time, time, text)', 'appt_save_google_connection(text, text, text, jsonb)',
     'appt_set_google_calendars(text[], text, jsonb)', 'appt_disconnect_google()',
-    'appt_owner_slots(uuid, timestamptz, timestamptz, jsonb, uuid)', 'appt_set_outcome(uuid, text)',
+    'appt_set_outcome(uuid, text)',
     'appt_set_note(uuid, text)', 'appt_link_booking(uuid, uuid, uuid, boolean)']
   loop
     execute format('revoke all on function public.%s from public, anon', f);

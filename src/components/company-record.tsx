@@ -27,6 +27,9 @@ import { Badge, Button, Field, Input, SaveIndicator, Select, Skeleton, Textarea 
 const RecordFiles = dynamic(() => import("./record-files").then((m) => m.RecordFiles), {
   loading: () => <Skeleton className="h-20 w-full" />,
 });
+const RecordAppointments = dynamic(() => import("./record-appointments").then((m) => m.RecordAppointments), {
+  loading: () => <Skeleton className="h-12 w-full" />,
+});
 
 type CompanyFields = Partial<CompanyCore["company"]>;
 
@@ -167,6 +170,7 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
         <Section title="Suivi commercial"><RecordDeal key={c.id} ctx={ctx} /></Section>
         <Section title="Prospection"><RecordProspecting ctx={ctx} /><Lists ctx={ctx} /></Section>
         <Section title="Tâches"><RecordTasks ctx={ctx} /></Section>
+        <Section title="Rendez-vous"><RecordAppointments companyId={c.id} /></Section>
         <Section title="Fichiers"><RecordFiles companyId={c.id} /></Section>
         <Section title="Historique"><RecordTimeline ctx={ctx} /></Section>
         <Section title="Informations"><InfoForm key={c.id} ctx={ctx} /></Section>

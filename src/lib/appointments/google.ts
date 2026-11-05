@@ -187,7 +187,6 @@ type GEvent = { id: string; status?: string; hangoutLink?: string };
 /** Crée l'événement, ou le met à jour s'il existe déjà (reprise après échec partiel). */
 export async function upsertEvent(token: string, e: CalendarEventInput): Promise<{ id: string; meetUrl: string | null }> {
   const cal = encodeURIComponent(e.calendarId);
-  const id = eventIdFor(e.bookingId);
   const res = await call(`${API}/calendars/${cal}/events?sendUpdates=none&conferenceDataVersion=1`, {
     method: "POST",
     token,

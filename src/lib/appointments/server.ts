@@ -413,7 +413,10 @@ export async function reconcileCalendar(sb: SupabaseClient, origin?: string | nu
   }
   let done = 0;
   let failed = 0;
-  for (const b of rows) (await syncRow(sb, creds, b, origin)) ? done++ : failed++;
+  for (const b of rows) {
+    if (await syncRow(sb, creds, b, origin)) done++;
+    else failed++;
+  }
   return { done, failed };
 }
 
