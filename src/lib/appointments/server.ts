@@ -294,6 +294,56 @@ function reconcileSoon(sb: SupabaseClient, origin?: string | null) {
 }
 
 // ---------------------------------------------------------------------------
+// Rendez-vous créé par le propriétaire (point de suivi d'un projet) : même orchestration que la
+// réservation publique (événement Google à identifiant déterministe, lien Meet, compensation).
+// ---------------------------------------------------------------------------
+
+export type OwnerBookResult = { status: "confirmed"; id: string } | { status: "unavailable" } | { status: "error"; message: string };
+
+export async function ownerCreateBooking(
+  sb: SupabaseClient,
+  p: { typeId: string; startsAt: string; durationMin: number | null; personId: string; idempotencyKey: string },
+  origin?: string | null,
+): Promise<OwnerBookResult> {
+  let creds: GoogleCreds | null = null;
+  try {
+    creds = await googleCreds(sb);
+  } catch (e) {
+    if (e instanceof BookingError) return { status: "error", message: e.message };
+    throw e;
+  }
+  const calendarId = creds?.destination ?? null;
+  const id = randomUUID();
+  const res = await rpc<{ status: "pending" | "confirmed" | "unavailable" | "existing"; id?: string; booking_status?: string }>(sb, "appt_owner_book", {
+    p_booking_id: id, p_type: p.typeId, p_starts_at: new Date(p.startsAt).toISOString(), p_duration_min: p.durationMin, p_person: p.personId,
+    p_calendar_target: !!calendarId, p_token_hash: tokenHashFor(id), p_idempotency_key: p.idempotencyKey,
+  });
+  if (res.status === "unavailable") return { status: "unavailable" };
+  const bookingId = res.id ?? id;
+  if (res.status === "existing" && res.booking_status !== "confirmed") {
+    return { status: "error", message: res.booking_status === "pending" ? "Création en cours : patientez quelques secondes." : "La tentative précédente a échoué. Réessayez." };
+  }
+  if (res.status === "existing" || res.status === "confirmed") return { status: "confirmed", id: bookingId };
+  try {
+    const full = await bookingForSync(sb, bookingId);
+    if (!full) throw new Error("Rendez-vous introuvable après retenue");
+    const ev = await google.upsertEvent(creds!.token, calendarEvent(full, calendarId!, origin));
+    const c = await rpc<{ status: string }>(sb, "appt_confirm_booking", {
+      p_server_key: serverRpcKey(), p_id: bookingId, p_calendar_id: calendarId, p_event_id: ev.id, p_meeting_url: ev.meetUrl,
+    });
+    if (c.status !== "confirmed") {
+      await compensateDelete(sb, creds!.token, calendarId!, bookingId);
+      return { status: "error", message: "Le délai de confirmation est dépassé. Réessayez." };
+    }
+    return { status: "confirmed", id: bookingId };
+  } catch (e) {
+    await rpc(sb, "appt_abandon_booking", { p_server_key: serverRpcKey(), p_id: bookingId, p_reason: e instanceof Error ? e.message : String(e) }).catch(() => undefined);
+    await compensateDelete(sb, creds!.token, calendarId!, bookingId);
+    return { status: "error", message: "L'événement n'a pas pu être créé dans Google Agenda. Aucun point n'a été créé ; réessayez." };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Annulation et report (lien privé ou back-office)
 // ---------------------------------------------------------------------------
 

@@ -6634,3 +6634,1602 @@ begin
     execute format('grant execute on function %s to authenticated', f);
   end loop;
 end $$;
+
+
+-- ===== 20261107000100_projets.sql =====
+-- Projets et portail client — phase 1 : projets, membres, accès par code, sessions, cloisonnement.
+-- Migration additive.
+--
+-- Modèle de sécurité du portail
+-- * Les clients n'ont pas de compte Supabase. Le serveur Next appelle les fonctions portal_* avec la clé
+--   publique, la clé serveur (même mécanisme que la réservation publique : empreinte enregistrée en base,
+--   secret APPOINTMENTS_SECRET côté serveur uniquement) et l'empreinte du jeton de session du client
+--   (cookie httpOnly). Chaque fonction revérifie : session valide, accès non révoqué ni expiré, personne
+--   membre du projet, projet publié et ouvert. Aucune table n'est lisible par le rôle anon.
+-- * Le code d'accès n'est jamais stocké : seule son empreinte HMAC (poivrée côté serveur) l'est.
+-- * Les fonctions internes sont dans le schéma non exposé portal_private.
+
+create schema if not exists portal_private;
+revoke all on schema portal_private from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Projets
+-- ---------------------------------------------------------------------------
+
+create table public.projects (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies (id) on delete restrict,
+  name text not null check (char_length(btrim(name)) between 1 and 160),
+  description text check (description is null or char_length(description) <= 2000),
+  status text not null default 'a_preparer' check (status in ('a_preparer','en_cours','en_attente','termine','archive')),
+  start_date date,
+  end_date date,
+  -- visible du client : message d'état rédigé par l'administrateur
+  client_update text check (client_update is null or char_length(client_update) <= 2000),
+  -- interne uniquement, jamais renvoyé au portail
+  internal_note text check (internal_note is null or char_length(internal_note) <= 10000),
+  blocked_reason text check (blocked_reason is null or char_length(blocked_reason) <= 500),
+  -- le portail n'affiche le projet qu'une fois publié explicitement
+  portal_published boolean not null default false,
+  -- projet archivé : lecture seule pour le client, ou accès fermé
+  archived_portal text not null default 'read_only' check (archived_portal in ('read_only','closed')),
+  archived_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (end_date is null or start_date is null or end_date >= start_date)
+);
+create index projects_company_idx on public.projects (company_id);
+create index projects_status_idx on public.projects (status);
+
+-- Contacts clients d'un projet (personnes de la fiche CRM)
+create table public.project_members (
+  project_id uuid not null references public.projects (id) on delete cascade,
+  person_id uuid not null references public.people (id) on delete cascade,
+  added_at timestamptz not null default now(),
+  primary key (project_id, person_id)
+);
+create index project_members_person_idx on public.project_members (person_id);
+
+-- Un accès individuel par personne, valable pour tous les projets dont elle est membre
+create table public.portal_accesses (
+  id uuid primary key default gen_random_uuid(),
+  person_id uuid not null unique references public.people (id) on delete cascade,
+  code_hash text not null unique check (code_hash ~ '^[0-9a-f]{64}$'),
+  code_hint text not null check (char_length(code_hint) between 2 and 8),
+  code_generated_at timestamptz not null default now(),
+  expires_at timestamptz,
+  revoked_at timestamptz,
+  last_used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table public.portal_sessions (
+  id uuid primary key default gen_random_uuid(),
+  access_id uuid not null references public.portal_accesses (id) on delete cascade,
+  token_hash text not null unique check (token_hash ~ '^[0-9a-f]{64}$'),
+  user_agent text check (user_agent is null or char_length(user_agent) <= 300),
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  last_seen_at timestamptz not null default now(),
+  revoked_at timestamptz
+);
+create index portal_sessions_access_idx on public.portal_sessions (access_id);
+
+create table public.portal_login_attempts (
+  id bigint generated always as identity primary key,
+  ip_hash text not null,
+  success boolean not null,
+  created_at timestamptz not null default now()
+);
+create index portal_login_attempts_idx on public.portal_login_attempts (ip_hash, created_at desc);
+
+-- Journal du projet : qui a fait quoi (administrateur ou client identifié)
+create table public.project_activity (
+  id bigint generated always as identity primary key,
+  project_id uuid not null references public.projects (id) on delete cascade,
+  actor text not null check (actor in ('owner','client','system')),
+  person_id uuid references public.people (id) on delete set null,
+  kind text not null,
+  data jsonb not null default '{}',
+  created_at timestamptz not null default now()
+);
+create index project_activity_idx on public.project_activity (project_id, id desc);
+
+create trigger set_updated_at before update on public.projects for each row execute function public.tg_set_updated_at();
+
+do $$
+declare t text;
+begin
+  foreach t in array array['projects','project_members','portal_accesses','portal_sessions','portal_login_attempts','project_activity']
+  loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('create policy owner_select on public.%I for select to authenticated using ((select public.is_app_owner()))', t);
+    execute format('revoke all on public.%I from anon', t);
+  end loop;
+  foreach t in array array['projects','project_members']
+  loop
+    execute format('create policy owner_insert on public.%I for insert to authenticated with check ((select public.is_app_owner()) and public.current_actor() = ''user'')', t);
+    execute format('create policy owner_update on public.%I for update to authenticated using ((select public.is_app_owner()) and public.current_actor() = ''user'') with check ((select public.is_app_owner()))', t);
+    execute format('create policy owner_delete on public.%I for delete to authenticated using ((select public.is_app_owner()) and public.current_actor() = ''user'')', t);
+  end loop;
+end $$;
+-- empreintes jamais lisibles par l'API, même par le propriétaire
+revoke select on public.portal_accesses from authenticated;
+grant select (id, person_id, code_hint, code_generated_at, expires_at, revoked_at, last_used_at, created_at) on public.portal_accesses to authenticated;
+revoke select on public.portal_sessions from authenticated;
+grant select (id, access_id, user_agent, created_at, expires_at, last_seen_at, revoked_at) on public.portal_sessions to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Contrôles
+-- ---------------------------------------------------------------------------
+
+create or replace function portal_private.assert_owner_user()
+returns void language plpgsql stable set search_path = '' as $$
+begin
+  perform public.assert_owner();
+  if public.current_actor() <> 'user' then
+    raise exception 'Projets : action réservée à l''application' using errcode = '42501';
+  end if;
+end; $$;
+
+create or replace function portal_private.assert_server(p_key text)
+returns void language plpgsql stable set search_path = '' as $$
+begin
+  perform appt_private.assert_server(p_key);
+end; $$;
+
+create or replace function portal_private.log(p_project uuid, p_actor text, p_person uuid, p_kind text, p_data jsonb default '{}')
+returns void language sql set search_path = '' as $$
+  insert into public.project_activity (project_id, actor, person_id, kind, data) values (p_project, p_actor, p_person, p_kind, coalesce(p_data, '{}'));
+$$;
+
+-- Session du portail → personne. Lève une erreur « session » si elle n'est plus valable
+-- (expirée, révoquée, accès révoqué ou expiré). Prolonge l'activité.
+create or replace function portal_private.session_person(p_server_key text, p_session_hash text)
+returns uuid
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_person uuid;
+  v_session uuid;
+begin
+  perform portal_private.assert_server(p_server_key);
+  select a.person_id, s.id into v_person, v_session
+    from public.portal_sessions s
+    join public.portal_accesses a on a.id = s.access_id
+   where s.token_hash = p_session_hash and s.revoked_at is null and s.expires_at > now()
+     and a.revoked_at is null and (a.expires_at is null or a.expires_at > now());
+  if v_person is null then
+    raise exception 'Session expirée' using errcode = '28000';
+  end if;
+  update public.portal_sessions set last_seen_at = now() where id = v_session and last_seen_at < now() - interval '5 minutes';
+  return v_person;
+end;
+$$;
+
+-- Projets visibles par une personne : membre, projet publié, non fermé.
+create or replace function portal_private.visible_projects(p_person uuid)
+returns table (project_id uuid, read_only boolean)
+language sql
+stable
+set search_path = ''
+as $$
+  select p.id, p.status = 'archive'
+    from public.project_members m
+    join public.projects p on p.id = m.project_id
+   where m.person_id = p_person and p.portal_published
+     and (p.status <> 'archive' or p.archived_portal = 'read_only');
+$$;
+
+create or replace function portal_private.assert_project(p_person uuid, p_project uuid, p_write boolean default false)
+returns void
+language plpgsql
+stable
+set search_path = ''
+as $$
+declare v_ro boolean;
+begin
+  select read_only into v_ro from portal_private.visible_projects(p_person) where project_id = p_project;
+  if not found then raise exception 'Projet introuvable' using errcode = 'P0002'; end if;
+  if p_write and v_ro then raise exception 'Ce projet est archivé : il est consultable mais plus modifiable' using errcode = '42501'; end if;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Administration (propriétaire)
+-- ---------------------------------------------------------------------------
+
+-- p_data : {company_id, name, description, start_date, end_date, status}
+create or replace function public.project_create(p_data jsonb, p_person_ids uuid[] default '{}')
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_id uuid;
+  v_company uuid := nullif(p_data ->> 'company_id', '')::uuid;
+begin
+  perform portal_private.assert_owner_user();
+  if not exists (select 1 from public.companies where id = v_company and merged_into_id is null) then
+    raise exception 'Fiche CRM introuvable' using errcode = 'P0002';
+  end if;
+  if exists (select 1 from unnest(coalesce(p_person_ids, '{}')) x where not exists (
+               select 1 from public.people p where p.id = x and p.company_id = v_company)) then
+    raise exception 'Un contact choisi n''appartient pas à cette entreprise' using errcode = '22023';
+  end if;
+  insert into public.projects (company_id, name, description, start_date, end_date, status)
+  values (v_company, btrim(p_data ->> 'name'), nullif(btrim(coalesce(p_data ->> 'description', '')), ''),
+          nullif(p_data ->> 'start_date', '')::date, nullif(p_data ->> 'end_date', '')::date,
+          coalesce(nullif(p_data ->> 'status', ''), 'a_preparer'))
+  returning id into v_id;
+  insert into public.project_members (project_id, person_id) select v_id, x from unnest(coalesce(p_person_ids, '{}')) x on conflict do nothing;
+  perform portal_private.log(v_id, 'owner', null, 'created');
+  insert into public.interactions (company_id, kind, content, content_origin, source, meta)
+  values (v_company, 'system', 'Projet créé : ' || btrim(p_data ->> 'name'), 'system', 'user', jsonb_build_object('project_id', v_id));
+  return v_id;
+end;
+$$;
+
+create or replace function public.project_add_member(p_project uuid, p_person uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform portal_private.assert_owner_user();
+  if not exists (select 1 from public.projects pr join public.people p on p.company_id = pr.company_id where pr.id = p_project and p.id = p_person) then
+    raise exception 'Ce contact n''appartient pas à l''entreprise du projet' using errcode = '22023';
+  end if;
+  insert into public.project_members (project_id, person_id) values (p_project, p_person) on conflict do nothing;
+  if found then perform portal_private.log(p_project, 'owner', p_person, 'member_added'); end if;
+end;
+$$;
+
+create or replace function public.project_remove_member(p_project uuid, p_person uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform portal_private.assert_owner_user();
+  delete from public.project_members where project_id = p_project and person_id = p_person;
+  if found then perform portal_private.log(p_project, 'owner', p_person, 'member_removed'); end if;
+end;
+$$;
+
+-- Nouveau code (création ou régénération) : l'ancien code et toutes les sessions sont invalidés.
+-- Le code est généré et haché par le serveur ; il n'est jamais transmis à la base.
+create or replace function public.portal_access_issue(p_person uuid, p_code_hash text, p_code_hint text, p_expires_at timestamptz default null)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare v_id uuid;
+begin
+  perform portal_private.assert_owner_user();
+  if not exists (select 1 from public.people where id = p_person) then raise exception 'Contact introuvable' using errcode = 'P0002'; end if;
+  if p_expires_at is not null and p_expires_at <= now() then raise exception 'La date d''expiration est déjà passée' using errcode = '22023'; end if;
+  insert into public.portal_accesses (person_id, code_hash, code_hint, expires_at)
+  values (p_person, p_code_hash, p_code_hint, p_expires_at)
+  on conflict (person_id) do update set code_hash = excluded.code_hash, code_hint = excluded.code_hint, code_generated_at = now(),
+    expires_at = excluded.expires_at, revoked_at = null
+  returning id into v_id;
+  update public.portal_sessions set revoked_at = now() where access_id = v_id and revoked_at is null;
+  return v_id;
+end;
+$$;
+
+create or replace function public.portal_access_set_expiry(p_person uuid, p_expires_at timestamptz)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform portal_private.assert_owner_user();
+  update public.portal_accesses set expires_at = p_expires_at where person_id = p_person;
+  if not found then raise exception 'Aucun accès pour ce contact' using errcode = 'P0002'; end if;
+end;
+$$;
+
+create or replace function public.portal_access_revoke(p_person uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare v_id uuid;
+begin
+  perform portal_private.assert_owner_user();
+  update public.portal_accesses set revoked_at = coalesce(revoked_at, now()) where person_id = p_person returning id into v_id;
+  if v_id is null then raise exception 'Aucun accès pour ce contact' using errcode = 'P0002'; end if;
+  update public.portal_sessions set revoked_at = now() where access_id = v_id and revoked_at is null;
+end;
+$$;
+
+-- Vue d'administration : un projet avec ses compteurs (les phases suivantes enrichissent cette vue)
+create or replace view public.project_overview with (security_invoker = true) as
+  select p.*, c.name as company_name,
+         (select count(*) from public.project_members m where m.project_id = p.id)::int as member_count
+    from public.projects p
+    join public.companies c on c.id = p.company_id;
+revoke all on public.project_overview from anon;
+grant select on public.project_overview to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Portail (serveur + session du client)
+-- ---------------------------------------------------------------------------
+
+-- Connexion par code. Limitation : 8 échecs par adresse IP en 15 minutes, 200 échecs au total par minute.
+create or replace function public.portal_login(p_server_key text, p_code_hash text, p_ip_hash text, p_session_hash text, p_user_agent text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  a public.portal_accesses;
+  v_name text;
+begin
+  perform portal_private.assert_server(p_server_key);
+  if (select count(*) from public.portal_login_attempts where ip_hash = p_ip_hash and not success and created_at > now() - interval '15 minutes') >= 8
+     or (select count(*) from public.portal_login_attempts where not success and created_at > now() - interval '1 minute') >= 200 then
+    return jsonb_build_object('status', 'rate_limited');
+  end if;
+  select * into a from public.portal_accesses where code_hash = p_code_hash;
+  if not found or a.revoked_at is not null or (a.expires_at is not null and a.expires_at <= now())
+     or not exists (select 1 from portal_private.visible_projects(a.person_id)) then
+    insert into public.portal_login_attempts (ip_hash, success) values (p_ip_hash, false);
+    return jsonb_build_object('status', 'invalid');
+  end if;
+  insert into public.portal_login_attempts (ip_hash, success) values (p_ip_hash, true);
+  insert into public.portal_sessions (access_id, token_hash, user_agent, expires_at)
+  values (a.id, p_session_hash, left(p_user_agent, 300),
+          least(now() + interval '30 days', coalesce(a.expires_at, now() + interval '30 days')));
+  update public.portal_accesses set last_used_at = now() where id = a.id;
+  -- ménage : tentatives anciennes et sessions périmées
+  delete from public.portal_login_attempts where created_at < now() - interval '1 day';
+  delete from public.portal_sessions where expires_at < now() - interval '30 days';
+  select btrim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')) into v_name from public.people where id = a.person_id;
+  return jsonb_build_object('status', 'ok', 'name', v_name);
+end;
+$$;
+
+create or replace function public.portal_logout(p_server_key text, p_session_hash text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform portal_private.assert_server(p_server_key);
+  update public.portal_sessions set revoked_at = now() where token_hash = p_session_hash and revoked_at is null;
+end;
+$$;
+
+-- Identité et projets de la session
+create or replace function public.portal_me(p_server_key text, p_session_hash text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+begin
+  return jsonb_build_object(
+    'person', (select jsonb_build_object('id', p.id, 'first_name', p.first_name, 'last_name', p.last_name, 'company', c.name)
+                 from public.people p join public.companies c on c.id = p.company_id where p.id = v_person),
+    'projects', coalesce((
+      select jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name, 'status', p.status, 'read_only', v.read_only) order by p.status = 'archive', p.created_at desc)
+        from portal_private.visible_projects(v_person) v join public.projects p on p.id = v.project_id), '[]'));
+end;
+$$;
+
+-- Contenu publié d'un projet (base commune au portail et à la prévisualisation administrateur).
+-- Seuls des champs explicitement destinés au client sont renvoyés.
+create or replace function portal_private.project_view(p_project uuid, p_person uuid)
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'id', p.id, 'name', p.name, 'description', p.description, 'status', p.status,
+    'start_date', p.start_date, 'end_date', p.end_date, 'client_update', p.client_update,
+    'read_only', p.status = 'archive', 'company', c.name, 'updated_at', p.updated_at)
+    from public.projects p join public.companies c on c.id = p.company_id
+   where p.id = p_project;
+$$;
+
+create or replace function public.portal_project(p_server_key text, p_session_hash text, p_project uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+begin
+  perform portal_private.assert_project(v_person, p_project);
+  return portal_private.project_view(p_project, v_person);
+end;
+$$;
+
+-- Prévisualisation administrateur : mêmes règles que le portail, pour un contact donné.
+create or replace function public.portal_preview_project(p_project uuid, p_person uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform portal_private.assert_owner_user();
+  if not exists (select 1 from public.project_members where project_id = p_project and person_id = p_person) then
+    raise exception 'Ce contact n''est pas membre du projet' using errcode = '22023';
+  end if;
+  return portal_private.project_view(p_project, p_person);
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Droits
+-- ---------------------------------------------------------------------------
+
+revoke all on all functions in schema portal_private from public, anon, authenticated;
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'project_create(jsonb, uuid[])', 'project_add_member(uuid, uuid)', 'project_remove_member(uuid, uuid)',
+    'portal_access_issue(uuid, text, text, timestamptz)', 'portal_access_set_expiry(uuid, timestamptz)',
+    'portal_access_revoke(uuid)', 'portal_preview_project(uuid, uuid)']
+  loop
+    execute format('revoke all on function public.%s from public, anon', f);
+    execute format('grant execute on function public.%s to authenticated', f);
+  end loop;
+  foreach f in array array[
+    'portal_login(text, text, text, text, text)', 'portal_logout(text, text)', 'portal_me(text, text)', 'portal_project(text, text, uuid)']
+  loop
+    execute format('revoke all on function public.%s from public', f);
+    execute format('grant execute on function public.%s to anon, authenticated', f);
+  end loop;
+end $$;
+
+
+-- ===== 20261107000200_projets_planning_points.sql =====
+-- Projets et portail client — phase 2 : phases, jalons, points de suivi (rendez-vous), récapitulatifs,
+-- et suivi des modifications faites directement dans Google Agenda. Migration additive.
+
+-- ---------------------------------------------------------------------------
+-- Phases et jalons (une seule source pour la timeline et la liste chronologique)
+-- status = avancement réel, indépendant des dates : une date passée ne termine rien.
+-- ---------------------------------------------------------------------------
+
+create table public.project_phases (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects (id) on delete cascade,
+  position int not null default 0,
+  name text not null check (char_length(btrim(name)) between 1 and 80),
+  description text check (description is null or char_length(description) <= 1000),
+  deliverables text check (deliverables is null or char_length(deliverables) <= 1000),
+  start_date date,
+  end_date date,
+  color text not null default 'violet' check (color in ('violet','blue','teal','green','amber','pink','slate')),
+  status text not null default 'a_venir' check (status in ('a_venir','en_cours','termine','en_pause')),
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (end_date is null or start_date is null or end_date >= start_date)
+);
+create index project_phases_idx on public.project_phases (project_id, position);
+
+create table public.project_milestones (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects (id) on delete cascade,
+  phase_id uuid references public.project_phases (id) on delete set null,
+  title text not null check (char_length(btrim(title)) between 1 and 160),
+  due_date date not null,
+  done_at timestamptz,
+  visible_to_client boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index project_milestones_idx on public.project_milestones (project_id, due_date);
+
+-- ---------------------------------------------------------------------------
+-- Points de suivi : un point EST un rendez-vous du module Rendez-vous (aucune copie de la date, du
+-- statut ni du lien) ; ce lien explicite décide de sa publication sur le portail.
+-- ---------------------------------------------------------------------------
+
+create table public.project_meetings (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects (id) on delete cascade,
+  booking_id uuid not null unique references public.appt_bookings (id) on delete restrict,
+  title text check (title is null or char_length(btrim(title)) between 1 and 160),
+  agenda text check (agenda is null or char_length(agenda) <= 4000),
+  participants text check (participants is null or char_length(participants) <= 500),
+  visible_to_client boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index project_meetings_project_idx on public.project_meetings (project_id);
+
+-- Récapitulatif : brouillon privé → publication explicite. internal_note n'est jamais publiée.
+create table public.meeting_recaps (
+  meeting_id uuid primary key references public.project_meetings (id) on delete cascade,
+  summary text check (summary is null or char_length(summary) <= 8000),
+  decisions text check (decisions is null or char_length(decisions) <= 4000),
+  actions jsonb not null default '[]' check (jsonb_typeof(actions) = 'array' and jsonb_array_length(actions) <= 30),
+  next_step text check (next_step is null or char_length(next_step) <= 2000),
+  links jsonb not null default '[]' check (jsonb_typeof(links) = 'array' and jsonb_array_length(links) <= 20),
+  internal_note text check (internal_note is null or char_length(internal_note) <= 8000),
+  status text not null default 'draft' check (status in ('draft','published')),
+  published_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Écarts constatés dans Google Agenda pour les événements créés par l'outil (déplacés, supprimés).
+-- Signalés à l'administrateur ; rien n'est modifié automatiquement côté Cely.
+alter table public.appt_bookings
+  add column google_drift jsonb,
+  add column google_drift_at timestamptz;
+
+alter table public.appt_google_connection
+  add column events_sync_token text,
+  add column events_synced_at timestamptz,
+  add column events_sync_error text;
+grant select (events_synced_at, events_sync_error) on public.appt_google_connection to authenticated;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['project_phases','project_milestones','project_meetings','meeting_recaps']
+  loop
+    execute format('create trigger set_updated_at before update on public.%I for each row execute function public.tg_set_updated_at()', t);
+    execute format('alter table public.%I enable row level security', t);
+    execute format('create policy owner_select on public.%I for select to authenticated using ((select public.is_app_owner()))', t);
+    execute format('create policy owner_insert on public.%I for insert to authenticated with check ((select public.is_app_owner()) and public.current_actor() = ''user'')', t);
+    execute format('create policy owner_update on public.%I for update to authenticated using ((select public.is_app_owner()) and public.current_actor() = ''user'') with check ((select public.is_app_owner()))', t);
+    execute format('create policy owner_delete on public.%I for delete to authenticated using ((select public.is_app_owner()) and public.current_actor() = ''user'')', t);
+    execute format('revoke all on public.%I from anon', t);
+  end loop;
+end $$;
+
+-- un rendez-vous ne se rattache qu'à un projet de la même fiche CRM (jamais par ressemblance)
+create or replace function portal_private.tg_meeting_company()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if not exists (select 1 from public.appt_bookings b join public.projects p on p.company_id = b.company_id
+                  where b.id = new.booking_id and p.id = new.project_id) then
+    raise exception 'Ce rendez-vous n''est pas rattaché à la fiche CRM du projet' using errcode = '22023';
+  end if;
+  return new;
+end; $$;
+create trigger project_meetings_company before insert or update of booking_id, project_id on public.project_meetings
+  for each row execute function portal_private.tg_meeting_company();
+
+create or replace function portal_private.tg_phase_completed()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  new.completed_at := case when new.status <> 'termine' then null
+                           when tg_op = 'UPDATE' and old.status = 'termine' then old.completed_at else now() end;
+  return new;
+end; $$;
+create trigger project_phases_completed before insert or update of status on public.project_phases
+  for each row execute function portal_private.tg_phase_completed();
+
+-- ---------------------------------------------------------------------------
+-- Rendez-vous créé par le propriétaire (point de suivi) : même table, même contrainte anti-chevauchement,
+-- même orchestration Google (événement, lien Meet) que la réservation publique. Pas de contrôle de
+-- disponibilité : le propriétaire choisit l'horaire.
+-- ---------------------------------------------------------------------------
+
+create or replace function public.appt_owner_book(
+  p_booking_id uuid, p_type uuid, p_starts_at timestamptz, p_duration_min int, p_person uuid,
+  p_calendar_target boolean, p_token_hash text, p_idempotency_key text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  t public.appt_event_types;
+  pe public.people;
+  v_tz text;
+  v_existing public.appt_bookings;
+  v_dur int := coalesce(p_duration_min, 0);
+  v_end timestamptz;
+  v_pending boolean := coalesce(p_calendar_target, false);
+begin
+  perform appt_private.assert_owner_user();
+  perform appt_private.lock();
+  select * into v_existing from public.appt_bookings where idempotency_key = p_idempotency_key;
+  if found then return jsonb_build_object('status', 'existing', 'id', v_existing.id, 'booking_status', v_existing.status); end if;
+  perform appt_private.sweep();
+  select * into t from public.appt_event_types where id = p_type;
+  if not found then raise exception 'Type de rendez-vous introuvable' using errcode = 'P0002'; end if;
+  select * into pe from public.people where id = p_person;
+  if not found then raise exception 'Contact introuvable' using errcode = 'P0002'; end if;
+  if pe.email is null then raise exception 'Ce contact n''a pas d''email : complétez sa fiche' using errcode = '22023'; end if;
+  if v_dur = 0 then v_dur := t.duration_min; end if;
+  if v_dur not between 5 and 480 then raise exception 'Durée invalide' using errcode = '22023'; end if;
+  if p_starts_at <= now() then raise exception 'Choisissez un horaire à venir' using errcode = '22023'; end if;
+  select timezone into v_tz from public.appt_schedules where id = t.schedule_id;
+  v_end := p_starts_at + make_interval(mins => v_dur);
+
+  insert into public.appt_bookings (
+    id, event_type_id, status, starts_at, ends_at, buffer_before_min, buffer_after_min, schedule_timezone, invitee_timezone,
+    first_name, last_name, email, email_norm, phone, company_name, answers, event_snapshot, meeting_url,
+    company_id, person_id, crm_status, idempotency_key, manage_token_hash, calendar_target, hold_expires_at)
+  values (
+    p_booking_id, t.id, case when v_pending then 'pending' else 'confirmed' end, p_starts_at, v_end, 0, 0, v_tz, v_tz,
+    coalesce(pe.first_name, pe.email), coalesce(pe.last_name, '-'), pe.email, public.norm_email(pe.email), pe.phone,
+    (select name from public.companies where id = pe.company_id), '[]',
+    jsonb_build_object('name', t.name, 'slug', t.slug, 'description', t.description, 'duration_min', v_dur,
+                       'location_kind', t.location_kind, 'location_detail', t.location_detail, 'google_meet', t.google_meet),
+    t.meeting_url, pe.company_id, pe.id, 'linked', p_idempotency_key, p_token_hash, v_pending,
+    case when v_pending then now() + interval '10 minutes' end);
+  insert into public.appt_reservations (booking_id, kind, occupied, expires_at)
+  values (p_booking_id, 'main', tstzrange(p_starts_at, v_end), case when v_pending then now() + interval '10 minutes' end);
+  perform appt_private.log(p_booking_id, 'created', 'owner', jsonb_build_object('starts_at', p_starts_at));
+  if not v_pending then perform appt_private.confirm(p_booking_id, 'owner'); end if;
+  return jsonb_build_object('status', case when v_pending then 'pending' else 'confirmed' end, 'id', p_booking_id);
+exception
+  when exclusion_violation then
+    return jsonb_build_object('status', 'unavailable');
+end;
+$$;
+
+-- Report par le propriétaire : il choisit l'horaire (pas de contrôle des disponibilités publiques) ;
+-- la contrainte anti-chevauchement et la retenue avant libération de l'ancien créneau restent identiques.
+create or replace function public.appt_reschedule_begin(
+  p_id uuid, p_starts_at timestamptz, p_busy jsonb default '[]', p_server_key text default null, p_token_hash text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_actor text := appt_private.authorize(p_id, p_server_key, p_token_hash);
+  b public.appt_bookings;
+  v_hold uuid;
+  v_dur interval;
+begin
+  perform appt_private.lock();
+  perform appt_private.sweep();
+  select * into b from public.appt_bookings where id = p_id for update;
+  if b.status <> 'confirmed' then raise exception 'Ce rendez-vous ne peut plus être reporté' using errcode = '22023'; end if;
+  if v_actor = 'invitee' and b.starts_at <= now() then raise exception 'Ce rendez-vous est déjà passé' using errcode = '22023'; end if;
+  if p_starts_at = b.starts_at then raise exception 'Choisissez un autre créneau' using errcode = '22023'; end if;
+  if v_actor = 'owner' then
+    if p_starts_at <= now() then raise exception 'Choisissez un horaire à venir' using errcode = '22023'; end if;
+  elsif not exists (select 1 from appt_private.compute_slots(b.event_type_id, p_starts_at, p_starts_at + interval '1 minute', p_busy, p_id) s
+                     where s.slot = p_starts_at) then
+    return jsonb_build_object('status', 'unavailable');
+  end if;
+  v_dur := b.ends_at - b.starts_at;
+  insert into public.appt_reservations (booking_id, kind, occupied, expires_at)
+  values (p_id, 'hold', tstzrange(p_starts_at - make_interval(mins => b.buffer_before_min), p_starts_at + v_dur + make_interval(mins => b.buffer_after_min)),
+          now() + interval '10 minutes')
+  returning id into v_hold;
+  return jsonb_build_object('status', 'held', 'hold_id', v_hold, 'version', b.version,
+                            'old_starts_at', b.starts_at, 'old_ends_at', b.ends_at,
+                            'starts_at', p_starts_at, 'ends_at', p_starts_at + v_dur);
+exception
+  when exclusion_violation then
+    return jsonb_build_object('status', 'unavailable');
+end;
+$$;
+
+-- Écart détecté dans Google (synchronisation incrémentale des événements créés par l'outil)
+create or replace function public.appt_google_drift(p_booking uuid, p_drift jsonb, p_server_key text default null)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if p_server_key is null then perform appt_private.assert_owner_user(); else perform appt_private.assert_server(p_server_key); end if;
+  update public.appt_bookings set google_drift = p_drift, google_drift_at = case when p_drift is null then null else now() end
+   where id = p_booking and google_drift is distinct from p_drift;
+end; $$;
+
+create or replace function public.appt_google_events_sync_state(p_token text, p_error text, p_server_key text default null)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if p_server_key is null then perform appt_private.assert_owner_user(); else perform appt_private.assert_server(p_server_key); end if;
+  update public.appt_google_connection
+     set events_sync_token = case when p_error is null then p_token else events_sync_token end,
+         events_synced_at = case when p_error is null then now() else events_synced_at end,
+         events_sync_error = left(p_error, 500)
+   where id;
+end; $$;
+
+create or replace function public.appt_google_events_sync_token(p_server_key text)
+returns text language plpgsql stable security definer set search_path = '' as $$
+begin
+  perform appt_private.assert_server(p_server_key);
+  return (select events_sync_token from public.appt_google_connection where id);
+end; $$;
+
+-- ---------------------------------------------------------------------------
+-- Administration des points
+-- ---------------------------------------------------------------------------
+
+create or replace function public.project_link_meeting(p_project uuid, p_booking uuid, p_visible boolean default true, p_title text default null, p_agenda text default null)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare v_id uuid;
+begin
+  perform portal_private.assert_owner_user();
+  insert into public.project_meetings (project_id, booking_id, visible_to_client, title, agenda)
+  values (p_project, p_booking, coalesce(p_visible, true), nullif(btrim(coalesce(p_title, '')), ''), nullif(btrim(coalesce(p_agenda, '')), ''))
+  returning id into v_id;
+  perform portal_private.log(p_project, 'owner', null, 'meeting_linked', jsonb_build_object('booking_id', p_booking));
+  return v_id;
+exception when unique_violation then
+  raise exception 'Ce rendez-vous est déjà rattaché à un projet' using errcode = '22023';
+end; $$;
+
+create or replace function public.project_publish_recap(p_meeting uuid, p_publish boolean)
+returns void language plpgsql security definer set search_path = '' as $$
+declare v_project uuid;
+begin
+  perform portal_private.assert_owner_user();
+  select project_id into v_project from public.project_meetings where id = p_meeting;
+  if v_project is null then raise exception 'Point introuvable' using errcode = 'P0002'; end if;
+  if p_publish and not exists (select 1 from public.meeting_recaps where meeting_id = p_meeting
+                                and coalesce(btrim(summary), '') || coalesce(btrim(decisions), '') || coalesce(btrim(next_step), '') <> '') then
+    raise exception 'Le récapitulatif est vide : rédigez au moins un résumé, des décisions ou la prochaine étape' using errcode = '22023';
+  end if;
+  update public.meeting_recaps set status = case when p_publish then 'published' else 'draft' end,
+         published_at = case when p_publish then coalesce(published_at, now()) else null end
+   where meeting_id = p_meeting;
+  perform portal_private.log(v_project, 'owner', null, case when p_publish then 'recap_published' else 'recap_unpublished' end, jsonb_build_object('meeting_id', p_meeting));
+end; $$;
+
+-- ---------------------------------------------------------------------------
+-- Vue client d'un projet (portail ET aperçu administrateur) : uniquement le contenu publié.
+-- ---------------------------------------------------------------------------
+
+create or replace function portal_private.meeting_json(m public.project_meetings, b public.appt_bookings, p_full boolean)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object(
+    'id', m.id, 'title', coalesce(m.title, b.event_snapshot ->> 'name'),
+    'starts_at', b.starts_at, 'ends_at', b.ends_at, 'timezone', b.schedule_timezone,
+    'status', case when b.status = 'cancelled' then 'cancelled'
+                   when b.outcome = 'done' or b.ends_at <= now() then 'past' else 'upcoming' end,
+    'meeting_url', case when b.status = 'confirmed' and b.ends_at > now() then b.meeting_url end,
+    'location_kind', b.event_snapshot ->> 'location_kind',
+    'participants', m.participants,
+    'agenda', case when p_full then m.agenda end,
+    'has_recap', exists (select 1 from public.meeting_recaps r where r.meeting_id = m.id and r.status = 'published'));
+$$;
+
+create or replace function portal_private.project_view(p_project uuid, p_person uuid)
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'id', p.id, 'name', p.name, 'description', p.description, 'status', p.status,
+    'start_date', p.start_date, 'end_date', p.end_date, 'client_update', p.client_update,
+    'read_only', p.status = 'archive', 'company', c.name, 'updated_at', p.updated_at,
+    'today', (now() at time zone 'Europe/Paris')::date,
+    'phases', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', ph.id, 'name', ph.name, 'description', ph.description, 'deliverables', ph.deliverables,
+        'start_date', ph.start_date, 'end_date', ph.end_date, 'color', ph.color, 'status', ph.status,
+        'completed_at', ph.completed_at) order by ph.position, ph.start_date nulls last)
+      from public.project_phases ph where ph.project_id = p.id), '[]'),
+    'milestones', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', ms.id, 'title', ms.title, 'due_date', ms.due_date, 'done', ms.done_at is not null, 'phase_id', ms.phase_id) order by ms.due_date)
+      from public.project_milestones ms where ms.project_id = p.id and ms.visible_to_client), '[]'),
+    'meetings', coalesce((select jsonb_agg(portal_private.meeting_json(m, b, false) order by b.starts_at)
+      from public.project_meetings m join public.appt_bookings b on b.id = m.booking_id
+     where m.project_id = p.id and m.visible_to_client and b.status in ('confirmed','cancelled')), '[]'))
+    from public.projects p join public.companies c on c.id = p.company_id
+   where p.id = p_project;
+$$;
+
+-- Détail d'un point et de son récapitulatif publié (jamais la note interne ni un brouillon)
+create or replace function portal_private.meeting_view(p_project uuid, p_meeting uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select portal_private.meeting_json(m, b, true) || jsonb_build_object(
+    'recap', (select jsonb_build_object('summary', r.summary, 'decisions', r.decisions, 'actions', r.actions,
+                                        'next_step', r.next_step, 'links', r.links, 'published_at', r.published_at)
+                from public.meeting_recaps r where r.meeting_id = m.id and r.status = 'published'))
+    from public.project_meetings m join public.appt_bookings b on b.id = m.booking_id
+   where m.id = p_meeting and m.project_id = p_project and m.visible_to_client and b.status in ('confirmed','cancelled');
+$$;
+
+create or replace function public.portal_meeting(p_server_key text, p_session_hash text, p_project uuid, p_meeting uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  v jsonb;
+begin
+  perform portal_private.assert_project(v_person, p_project);
+  v := portal_private.meeting_view(p_project, p_meeting);
+  if v is null then raise exception 'Point introuvable' using errcode = 'P0002'; end if;
+  return v;
+end; $$;
+
+create or replace function public.portal_preview_meeting(p_project uuid, p_meeting uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+begin
+  perform portal_private.assert_owner_user();
+  return portal_private.meeting_view(p_project, p_meeting);
+end; $$;
+
+-- Rendez-vous : l'écart constaté dans Google est exposé au back-office (colonne ajoutée en fin de vue)
+create or replace view public.appt_booking_overview with (security_invoker = true) as
+  select b.id, b.event_type_id, b.status, b.outcome, b.starts_at, b.ends_at, b.schedule_timezone, b.invitee_timezone,
+         b.first_name, b.last_name, b.email, b.phone, b.company_name, b.website, b.answers, b.event_snapshot,
+         b.meeting_url, b.company_id, b.person_id, b.crm_status, b.crm_candidates, b.internal_note, b.cancel_reason,
+         b.cancelled_by, b.cancelled_at, b.version, b.calendar_target, b.google_event_id,
+         (b.calendar_target and b.calendar_synced_version < b.version and b.status <> 'pending') as calendar_out_of_sync,
+         b.calendar_sync_error, b.created_at, b.updated_at,
+         c.name as crm_company_name,
+         case
+           when b.status = 'confirmed' and b.outcome is null and b.ends_at <= now() then 'a_renseigner'
+           when b.status = 'confirmed' and b.outcome is not null then b.outcome
+           when b.status = 'confirmed' then 'a_venir'
+           else b.status
+         end as display_status,
+         b.google_drift
+    from public.appt_bookings b
+    left join public.companies c on c.id = b.company_id
+   where b.status in ('confirmed','cancelled') or (b.status = 'pending' and b.hold_expires_at > now());
+revoke all on public.appt_booking_overview from anon;
+grant select on public.appt_booking_overview to authenticated;
+
+-- Vue d'administration enrichie : phase en cours et prochain point
+create or replace view public.project_overview with (security_invoker = true) as
+  select p.*, c.name as company_name,
+         (select count(*) from public.project_members m where m.project_id = p.id)::int as member_count,
+         (select ph.name from public.project_phases ph where ph.project_id = p.id and ph.status = 'en_cours' order by ph.position limit 1) as current_phase_name,
+         (select min(b.starts_at) from public.project_meetings pm join public.appt_bookings b on b.id = pm.booking_id
+           where pm.project_id = p.id and b.status = 'confirmed' and b.starts_at > now()) as next_meeting_at
+    from public.projects p
+    join public.companies c on c.id = p.company_id;
+revoke all on public.project_overview from anon;
+grant select on public.project_overview to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Droits
+-- ---------------------------------------------------------------------------
+
+revoke all on all functions in schema portal_private from public, anon, authenticated;
+revoke all on all functions in schema appt_private from public, anon, authenticated;
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'appt_owner_book(uuid, uuid, timestamptz, int, uuid, boolean, text, text)',
+    'project_link_meeting(uuid, uuid, boolean, text, text)', 'project_publish_recap(uuid, boolean)',
+    'portal_preview_meeting(uuid, uuid)']
+  loop
+    execute format('revoke all on function public.%s from public, anon', f);
+    execute format('grant execute on function public.%s to authenticated', f);
+  end loop;
+  foreach f in array array[
+    'portal_meeting(text, text, uuid, uuid)', 'appt_google_drift(uuid, jsonb, text)',
+    'appt_reschedule_begin(uuid, timestamptz, jsonb, text, text)',
+    'appt_google_events_sync_state(text, text, text)', 'appt_google_events_sync_token(text)']
+  loop
+    execute format('revoke all on function public.%s from public', f);
+    execute format('grant execute on function public.%s to anon, authenticated', f);
+  end loop;
+end $$;
+
+
+-- ===== 20261107000300_projets_taches.sql =====
+-- Projets et portail client — phase 3 : tâches de projet et commentaires. Migration additive.
+-- Une action = une seule ligne, quelle que soit la vue (tableau du projet, « Mes tâches », point associé).
+-- Règles client (vérifiées en base) : il ne voit que les tâches explicitement visibles ; il ne modifie que le
+-- statut et l'explication d'un blocage des tâches qui lui sont attribuées (à lui, ou à l'équipe client) ;
+-- il commente les tâches visibles. Il ne crée ni ne supprime de tâche et ne touche jamais au planning.
+
+create table public.project_tasks (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects (id) on delete cascade,
+  title text not null check (char_length(btrim(title)) between 1 and 300),
+  description text check (description is null or char_length(description) <= 5000),
+  status text not null default 'a_faire' check (status in ('a_faire','en_cours','bloque','termine')),
+  -- responsable : moi (owner) ou le client (une personne précise, ou l'équipe client si person_id est vide)
+  assignee_kind text not null default 'owner' check (assignee_kind in ('owner','client')),
+  assignee_person_id uuid references public.people (id) on delete set null,
+  visible_to_client boolean not null default false,
+  due_date date,
+  blocked_reason text check (blocked_reason is null or char_length(blocked_reason) <= 1000),
+  meeting_id uuid references public.project_meetings (id) on delete set null,
+  links jsonb not null default '[]' check (jsonb_typeof(links) = 'array' and jsonb_array_length(links) <= 10),
+  position int not null default 0,
+  created_by_kind text not null default 'owner' check (created_by_kind in ('owner','client')),
+  created_by_person uuid references public.people (id) on delete set null,
+  updated_by_kind text not null default 'owner' check (updated_by_kind in ('owner','client')),
+  updated_by_person uuid references public.people (id) on delete set null,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  -- une tâche attribuée au client lui est forcément visible
+  check (assignee_kind = 'owner' or visible_to_client),
+  check (assignee_kind = 'client' or assignee_person_id is null)
+);
+create index project_tasks_project_idx on public.project_tasks (project_id, status);
+create index project_tasks_meeting_idx on public.project_tasks (meeting_id) where meeting_id is not null;
+
+create table public.project_task_comments (
+  id uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.project_tasks (id) on delete cascade,
+  author_kind text not null check (author_kind in ('owner','client')),
+  person_id uuid references public.people (id) on delete set null,
+  body text not null check (char_length(btrim(body)) between 1 and 1000),
+  created_at timestamptz not null default now()
+);
+create index project_task_comments_idx on public.project_task_comments (task_id, created_at);
+
+create or replace function portal_private.tg_task()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  new.updated_at := now();
+  new.completed_at := case when new.status <> 'termine' then null
+                           when tg_op = 'UPDATE' and old.status = 'termine' then old.completed_at else now() end;
+  if new.status <> 'bloque' then new.blocked_reason := null; end if;
+  if new.assignee_person_id is not null and not exists (
+       select 1 from public.project_members m where m.project_id = new.project_id and m.person_id = new.assignee_person_id) then
+    raise exception 'Le responsable doit être un contact du projet' using errcode = '22023';
+  end if;
+  if new.meeting_id is not null and not exists (select 1 from public.project_meetings pm where pm.id = new.meeting_id and pm.project_id = new.project_id) then
+    raise exception 'Ce point n''appartient pas au projet' using errcode = '22023';
+  end if;
+  return new;
+end; $$;
+create trigger project_tasks_rules before insert or update on public.project_tasks for each row execute function portal_private.tg_task();
+
+do $$
+declare t text;
+begin
+  foreach t in array array['project_tasks','project_task_comments']
+  loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('create policy owner_select on public.%I for select to authenticated using ((select public.is_app_owner()))', t);
+    execute format('create policy owner_insert on public.%I for insert to authenticated with check ((select public.is_app_owner()) and public.current_actor() = ''user'')', t);
+    execute format('create policy owner_update on public.%I for update to authenticated using ((select public.is_app_owner()) and public.current_actor() = ''user'') with check ((select public.is_app_owner()))', t);
+    execute format('create policy owner_delete on public.%I for delete to authenticated using ((select public.is_app_owner()) and public.current_actor() = ''user'')', t);
+    execute format('revoke all on public.%I from anon', t);
+  end loop;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Portail
+-- ---------------------------------------------------------------------------
+
+-- La personne peut-elle modifier cette tâche ? (attribuée à elle, ou à l'équipe client ; projet ouvert)
+create or replace function portal_private.task_editable(t public.project_tasks, p_person uuid)
+returns boolean language sql stable set search_path = '' as $$
+  select t.assignee_kind = 'client' and (t.assignee_person_id is null or t.assignee_person_id = p_person)
+     and exists (select 1 from portal_private.visible_projects(p_person) v where v.project_id = t.project_id and not v.read_only);
+$$;
+
+create or replace function portal_private.task_json(t public.project_tasks, p_person uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object(
+    'id', t.id, 'project_id', t.project_id, 'project_name', (select name from public.projects where id = t.project_id),
+    'title', t.title, 'status', t.status, 'due_date', t.due_date, 'blocked_reason', t.blocked_reason,
+    'assignee', case when t.assignee_kind = 'owner' then jsonb_build_object('kind', 'owner', 'name', 'Cely Growth')
+                     when t.assignee_person_id is null then jsonb_build_object('kind', 'team', 'name', 'Équipe client')
+                     else jsonb_build_object('kind', case when t.assignee_person_id = p_person then 'me' else 'person' end,
+                                             'name', (select btrim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')) from public.people where id = t.assignee_person_id)) end,
+    'meeting', (select jsonb_build_object('id', pm.id, 'title', coalesce(pm.title, b.event_snapshot ->> 'name'), 'starts_at', b.starts_at)
+                  from public.project_meetings pm join public.appt_bookings b on b.id = pm.booking_id
+                 where pm.id = t.meeting_id and pm.visible_to_client and b.status in ('confirmed','cancelled')),
+    'updated_at', t.updated_at, 'can_edit', portal_private.task_editable(t, p_person),
+    'comment_count', (select count(*) from public.project_task_comments c where c.task_id = t.id));
+$$;
+
+-- Tâches visibles : un projet précis, ou tous les projets autorisés (« Mes tâches »)
+create or replace function public.portal_tasks(p_server_key text, p_session_hash text, p_project uuid default null, p_limit int default 300)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+begin
+  if p_project is not null then perform portal_private.assert_project(v_person, p_project); end if;
+  return coalesce((
+    select jsonb_agg(portal_private.task_json(t, v_person) order by t.status = 'termine', t.due_date nulls last, t.position, t.created_at)
+      from (select t.* from public.project_tasks t
+             where t.visible_to_client
+               and t.project_id in (select project_id from portal_private.visible_projects(v_person))
+               and (p_project is null or t.project_id = p_project)
+             order by t.status = 'termine', t.due_date nulls last, t.position, t.created_at
+             limit greatest(1, least(p_limit, 500))) t), '[]');
+end; $$;
+
+create or replace function public.portal_task(p_server_key text, p_session_hash text, p_task uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  t public.project_tasks;
+begin
+  select * into t from public.project_tasks where id = p_task and visible_to_client;
+  if not found or not exists (select 1 from portal_private.visible_projects(v_person) where project_id = t.project_id) then
+    raise exception 'Tâche introuvable' using errcode = 'P0002';
+  end if;
+  return portal_private.task_json(t, v_person) || jsonb_build_object(
+    'description', t.description, 'links', t.links,
+    'comments', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', c.id, 'body', c.body, 'created_at', c.created_at, 'mine', c.person_id = v_person,
+        'author', case when c.author_kind = 'owner' then 'Cely Growth'
+                       else (select btrim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')) from public.people where id = c.person_id) end) order by c.created_at)
+      from public.project_task_comments c where c.task_id = t.id), '[]'));
+end; $$;
+
+-- Modification par le client : statut et explication d'un blocage uniquement.
+create or replace function public.portal_task_update(p_server_key text, p_session_hash text, p_task uuid, p_status text, p_blocked_reason text default null)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  t public.project_tasks;
+begin
+  select * into t from public.project_tasks where id = p_task and visible_to_client for update;
+  if not found or not exists (select 1 from portal_private.visible_projects(v_person) where project_id = t.project_id) then
+    raise exception 'Tâche introuvable' using errcode = 'P0002';
+  end if;
+  if not portal_private.task_editable(t, v_person) then
+    raise exception 'Cette tâche n''est pas attribuée à vous : vous pouvez la consulter et la commenter.' using errcode = '42501';
+  end if;
+  if p_status not in ('a_faire','en_cours','bloque','termine') then raise exception 'Statut invalide' using errcode = '22023'; end if;
+  if p_status = 'bloque' and coalesce(btrim(p_blocked_reason), '') = '' then
+    raise exception 'Expliquez en quelques mots ce qui bloque' using errcode = '22023';
+  end if;
+  update public.project_tasks set status = p_status, blocked_reason = nullif(btrim(coalesce(p_blocked_reason, '')), ''),
+         updated_by_kind = 'client', updated_by_person = v_person
+   where id = p_task returning * into t;
+  perform portal_private.log(t.project_id, 'client', v_person, 'task_status', jsonb_build_object('task_id', t.id, 'status', p_status));
+  return portal_private.task_json(t, v_person);
+end; $$;
+
+create or replace function public.portal_task_comment(p_server_key text, p_session_hash text, p_task uuid, p_body text)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  t public.project_tasks;
+  v_id uuid;
+begin
+  select * into t from public.project_tasks where id = p_task and visible_to_client;
+  if not found then raise exception 'Tâche introuvable' using errcode = 'P0002'; end if;
+  perform portal_private.assert_project(v_person, t.project_id, true);
+  if coalesce(btrim(p_body), '') = '' or char_length(p_body) > 1000 then raise exception 'Commentaire vide ou trop long (1 000 caractères)' using errcode = '22023'; end if;
+  insert into public.project_task_comments (task_id, author_kind, person_id, body) values (p_task, 'client', v_person, btrim(p_body)) returning id into v_id;
+  perform portal_private.log(t.project_id, 'client', v_person, 'task_comment', jsonb_build_object('task_id', t.id));
+  return jsonb_build_object('id', v_id);
+end; $$;
+
+-- Ce qui attend le client sur un projet (vue d'ensemble) : ses tâches ouvertes
+create or replace function portal_private.my_open_tasks(p_project uuid, p_person uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select coalesce(jsonb_agg(portal_private.task_json(t, p_person) order by t.due_date nulls last, t.position), '[]')
+    from (select * from public.project_tasks t
+           where t.project_id = p_project and t.visible_to_client and t.assignee_kind = 'client'
+             and (t.assignee_person_id is null or t.assignee_person_id = p_person) and t.status <> 'termine'
+           order by t.due_date nulls last, t.position limit 5) t;
+$$;
+
+create or replace function public.portal_project(p_server_key text, p_session_hash text, p_project uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+begin
+  perform portal_private.assert_project(v_person, p_project);
+  return portal_private.project_view(p_project, v_person) || jsonb_build_object('my_tasks', portal_private.my_open_tasks(p_project, v_person));
+end; $$;
+
+create or replace function public.portal_preview_project(p_project uuid, p_person uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+begin
+  perform portal_private.assert_owner_user();
+  if not exists (select 1 from public.project_members where project_id = p_project and person_id = p_person) then
+    raise exception 'Ce contact n''est pas membre du projet' using errcode = '22023';
+  end if;
+  return portal_private.project_view(p_project, p_person) || jsonb_build_object('my_tasks', portal_private.my_open_tasks(p_project, p_person));
+end; $$;
+
+-- Vue d'administration : compteur des tâches client ouvertes
+create or replace view public.project_overview with (security_invoker = true) as
+  select p.*, c.name as company_name,
+         (select count(*) from public.project_members m where m.project_id = p.id)::int as member_count,
+         (select ph.name from public.project_phases ph where ph.project_id = p.id and ph.status = 'en_cours' order by ph.position limit 1) as current_phase_name,
+         (select min(b.starts_at) from public.project_meetings pm join public.appt_bookings b on b.id = pm.booking_id
+           where pm.project_id = p.id and b.status = 'confirmed' and b.starts_at > now()) as next_meeting_at,
+         (select count(*) from public.project_tasks t where t.project_id = p.id and t.assignee_kind = 'client' and t.status <> 'termine')::int as open_client_tasks,
+         (select count(*) from public.project_tasks t where t.project_id = p.id and t.status = 'bloque')::int as blocked_tasks
+    from public.projects p
+    join public.companies c on c.id = p.company_id;
+revoke all on public.project_overview from anon;
+grant select on public.project_overview to authenticated;
+
+revoke all on all functions in schema portal_private from public, anon, authenticated;
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'portal_tasks(text, text, uuid, int)', 'portal_task(text, text, uuid)', 'portal_task_update(text, text, uuid, text, text)',
+    'portal_task_comment(text, text, uuid, text)', 'portal_project(text, text, uuid)']
+  loop
+    execute format('revoke all on function public.%s from public', f);
+    execute format('grant execute on function public.%s to anon, authenticated', f);
+  end loop;
+  execute 'revoke all on function public.portal_preview_project(uuid, uuid) from public, anon';
+  execute 'grant execute on function public.portal_preview_project(uuid, uuid) to authenticated';
+end $$;
+
+
+-- ===== 20261107000400_projets_fichiers.sql =====
+-- Projets et portail client — phase 4 : fichiers partagés. Migration additive.
+-- Réutilise le module Fichiers existant (table company_files, bucket privé company-files) :
+-- * un document du projet est un document de la fiche CRM ; « partager avec le projet » crée une RÉFÉRENCE
+--   (project_files), jamais une copie ; retirer du projet ≠ supprimer le fichier ;
+-- * un dépôt client crée un document de la fiche, marqué comme déposé par ce contact, puis sa référence ;
+-- * le client n'a pas de compte : le serveur agit avec le rôle anon, et les politiques Storage ne
+--   l'autorisent que sur des objets précis, pour une durée courte, après contrôle de la session en base.
+
+alter table public.company_files
+  add column uploaded_by_kind text not null default 'owner' check (uploaded_by_kind in ('owner','client')),
+  add column uploaded_by_person uuid references public.people (id) on delete set null;
+
+create table public.project_folders (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects (id) on delete cascade,
+  parent_id uuid references public.project_folders (id) on delete cascade,
+  name text not null check (char_length(btrim(name)) between 1 and 80),
+  created_at timestamptz not null default now()
+);
+create index project_folders_idx on public.project_folders (project_id, parent_id);
+
+create table public.project_files (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects (id) on delete cascade,
+  file_id uuid not null references public.company_files (id) on delete cascade,
+  folder_id uuid references public.project_folders (id) on delete set null,
+  task_id uuid references public.project_tasks (id) on delete set null,
+  shared_by_kind text not null default 'owner' check (shared_by_kind in ('owner','client')),
+  shared_by_person uuid references public.people (id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (project_id, file_id)
+);
+create index project_files_project_idx on public.project_files (project_id, folder_id);
+
+-- Autorisations Storage temporaires (téléchargement / prévisualisation) : 60 secondes
+create table public.portal_storage_grants (
+  id bigint generated always as identity primary key,
+  object_name text not null,
+  action text not null check (action in ('read','delete')),
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+create index portal_storage_grants_idx on public.portal_storage_grants (object_name, action, expires_at);
+
+-- Cohérence : dossier et fichier du même projet ; deux niveaux de dossiers au plus ; fichier de la fiche du projet
+create or replace function portal_private.tg_folder()
+returns trigger language plpgsql set search_path = '' as $$
+declare v_parent public.project_folders;
+begin
+  if new.parent_id is not null then
+    select * into v_parent from public.project_folders where id = new.parent_id;
+    if v_parent.project_id <> new.project_id then raise exception 'Dossier parent d''un autre projet' using errcode = '22023'; end if;
+    if v_parent.parent_id is not null then raise exception 'Deux niveaux de dossiers au maximum' using errcode = '22023'; end if;
+    if new.id = new.parent_id then raise exception 'Dossier invalide' using errcode = '22023'; end if;
+  end if;
+  return new;
+end; $$;
+create trigger project_folders_rules before insert or update on public.project_folders for each row execute function portal_private.tg_folder();
+
+create or replace function portal_private.tg_project_file()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if not exists (select 1 from public.company_files f join public.projects p on p.company_id = f.company_id where f.id = new.file_id and p.id = new.project_id) then
+    raise exception 'Ce document n''appartient pas à la fiche CRM du projet' using errcode = '22023';
+  end if;
+  if new.folder_id is not null and not exists (select 1 from public.project_folders where id = new.folder_id and project_id = new.project_id) then
+    raise exception 'Dossier d''un autre projet' using errcode = '22023';
+  end if;
+  if new.task_id is not null and not exists (select 1 from public.project_tasks where id = new.task_id and project_id = new.project_id) then
+    raise exception 'Tâche d''un autre projet' using errcode = '22023';
+  end if;
+  return new;
+end; $$;
+create trigger project_files_rules before insert or update on public.project_files for each row execute function portal_private.tg_project_file();
+
+do $$
+declare t text;
+begin
+  foreach t in array array['project_folders','project_files','portal_storage_grants']
+  loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('create policy owner_select on public.%I for select to authenticated using ((select public.is_app_owner()))', t);
+    execute format('revoke all on public.%I from anon', t);
+  end loop;
+  foreach t in array array['project_folders','project_files']
+  loop
+    execute format('create policy owner_insert on public.%I for insert to authenticated with check ((select public.is_app_owner()) and public.current_actor() = ''user'')', t);
+    execute format('create policy owner_update on public.%I for update to authenticated using ((select public.is_app_owner()) and public.current_actor() = ''user'') with check ((select public.is_app_owner()))', t);
+    execute format('create policy owner_delete on public.%I for delete to authenticated using ((select public.is_app_owner()) and public.current_actor() = ''user'')', t);
+  end loop;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Politiques Storage pour le rôle anon (serveur agissant pour un client authentifié par session)
+-- Les fonctions sont « security definer » et ne répondent que pour un objet précis.
+-- ---------------------------------------------------------------------------
+
+-- Envoi : objet d'un dépôt client en attente, créé il y a moins de 15 minutes
+create or replace function public.portal_storage_can_upload(p_name text)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.company_files f
+                  where f.storage_path = p_name and f.status = 'pending' and f.uploaded_by_kind = 'client'
+                    and f.created_at > now() - interval '15 minutes');
+$$;
+
+create or replace function public.portal_storage_can(p_name text, p_action text)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.portal_storage_grants g where g.object_name = p_name and g.action = p_action and g.expires_at > now());
+$$;
+
+create policy portal_files_insert on storage.objects for insert to anon
+  with check (bucket_id = 'company-files' and public.portal_storage_can_upload(name));
+create policy portal_files_select on storage.objects for select to anon
+  using (bucket_id = 'company-files' and public.portal_storage_can(name, 'read'));
+create policy portal_files_delete on storage.objects for delete to anon
+  using (bucket_id = 'company-files' and public.portal_storage_can(name, 'delete'));
+
+-- ---------------------------------------------------------------------------
+-- Portail
+-- ---------------------------------------------------------------------------
+
+create or replace function portal_private.file_json(pf public.project_files, f public.company_files, p_person uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object(
+    'id', pf.id, 'name', f.display_name, 'mime_type', f.mime_type, 'size', f.size_bytes, 'folder_id', pf.folder_id, 'task_id', pf.task_id,
+    'created_at', pf.created_at,
+    'author', case when f.uploaded_by_kind = 'client' and f.uploaded_by_person is not null
+                   then (select btrim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')) from public.people where id = f.uploaded_by_person)
+                   else 'Cely Growth' end,
+    'mine', f.uploaded_by_kind = 'client' and f.uploaded_by_person = p_person);
+$$;
+
+-- Liste d'un projet (paginée). Seuls les documents partagés avec le projet et prêts.
+create or replace function public.portal_files(p_server_key text, p_session_hash text, p_project uuid, p_limit int default 200, p_offset int default 0)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+begin
+  perform portal_private.assert_project(v_person, p_project);
+  return jsonb_build_object(
+    'folders', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'name', name, 'parent_id', parent_id) order by name)
+                           from public.project_folders where project_id = p_project), '[]'),
+    'total', (select count(*) from public.project_files pf join public.company_files f on f.id = pf.file_id where pf.project_id = p_project and f.status = 'ready'),
+    'files', coalesce((select jsonb_agg(portal_private.file_json(pf, f, v_person) order by pf.created_at desc)
+                         from (select pf.id from public.project_files pf join public.company_files f on f.id = pf.file_id
+                                where pf.project_id = p_project and f.status = 'ready'
+                                order by pf.created_at desc limit greatest(1, least(p_limit, 500)) offset greatest(p_offset, 0)) x
+                         join public.project_files pf on pf.id = x.id
+                         join public.company_files f on f.id = pf.file_id), '[]'),
+    'read_only', (select read_only from portal_private.visible_projects(v_person) where project_id = p_project));
+end; $$;
+
+-- Dépôt client, étape 1 : document « en attente » dans la fiche du projet, chemin de stockage aléatoire.
+create or replace function public.portal_file_start(
+  p_server_key text, p_session_hash text, p_project uuid, p_folder uuid, p_task uuid, p_name text, p_type text, p_size bigint, p_ext text)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  v_company uuid;
+  v_id uuid := gen_random_uuid();
+  v_path text;
+begin
+  perform portal_private.assert_project(v_person, p_project, true);
+  if p_size is null or p_size <= 0 or p_size > 26214400 then raise exception 'Fichier vide ou trop volumineux (25 Mo maximum)' using errcode = '22023'; end if;
+  if p_type is null or p_type not in (
+       'application/pdf','image/png','image/jpeg','image/webp','image/gif','application/msword',
+       'application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.ms-excel',
+       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-powerpoint',
+       'application/vnd.openxmlformats-officedocument.presentationml.presentation','text/plain','text/csv','application/zip') then
+    raise exception 'Format non autorisé' using errcode = '22023';
+  end if;
+  if coalesce(btrim(p_name), '') = '' then raise exception 'Nom de fichier manquant' using errcode = '22023'; end if;
+  if p_folder is not null and not exists (select 1 from public.project_folders where id = p_folder and project_id = p_project) then
+    raise exception 'Dossier introuvable' using errcode = 'P0002';
+  end if;
+  if p_task is not null and not exists (select 1 from public.project_tasks where id = p_task and project_id = p_project and visible_to_client) then
+    raise exception 'Tâche introuvable' using errcode = 'P0002';
+  end if;
+  -- limite de débit : 50 dépôts par heure et par personne
+  if (select count(*) from public.company_files where uploaded_by_person = v_person and created_at > now() - interval '1 hour') >= 50 then
+    raise exception 'Trop de dépôts en peu de temps : réessayez dans une heure' using errcode = '22023';
+  end if;
+  select company_id into v_company from public.projects where id = p_project;
+  v_path := v_company::text || '/' || v_id::text || '.' || coalesce(nullif(lower(regexp_replace(coalesce(p_ext, ''), '[^a-zA-Z0-9]', '', 'g')), ''), 'bin');
+  insert into public.company_files (id, company_id, storage_path, display_name, mime_type, size_bytes, status, uploaded_by_kind, uploaded_by_person)
+  values (v_id, v_company, v_path, left(btrim(p_name), 200), p_type, p_size, 'pending', 'client', v_person);
+  -- la référence projet est préparée maintenant (dossier, tâche) mais le fichier n'apparaît qu'une fois « prêt »
+  insert into public.project_files (project_id, file_id, folder_id, task_id, shared_by_kind, shared_by_person)
+  values (p_project, v_id, p_folder, p_task, 'client', v_person);
+  return jsonb_build_object('file_id', v_id, 'path', v_path);
+end; $$;
+
+-- Dépôt client, étape 2 : l'objet doit réellement exister dans Storage
+create or replace function public.portal_file_confirm(p_server_key text, p_session_hash text, p_file uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  f public.company_files;
+  pf public.project_files;
+begin
+  select * into f from public.company_files where id = p_file and uploaded_by_person = v_person and status = 'pending' for update;
+  if not found then raise exception 'Dépôt introuvable' using errcode = 'P0002'; end if;
+  if not exists (select 1 from storage.objects o where o.bucket_id = 'company-files' and o.name = f.storage_path) then
+    raise exception 'Le fichier n''a pas été reçu par le stockage' using errcode = '22023';
+  end if;
+  update public.company_files set status = 'ready' where id = p_file returning * into f;
+  select * into pf from public.project_files where file_id = p_file;
+  perform portal_private.log(pf.project_id, 'client', v_person, 'file_uploaded', jsonb_build_object('file_id', p_file, 'name', f.display_name));
+  return portal_private.file_json(pf, f, v_person);
+end; $$;
+
+-- Transfert échoué : aucune pièce fantôme (l'objet éventuel est retiré par le nettoyage habituel)
+create or replace function public.portal_file_abort(p_server_key text, p_session_hash text, p_file uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+declare v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+begin
+  delete from public.company_files where id = p_file and uploaded_by_person = v_person and status = 'pending';
+end; $$;
+
+-- Lien temporaire : vérifie le partage, puis autorise la lecture de CET objet pendant 60 secondes
+create or replace function public.portal_file_grant(p_server_key text, p_session_hash text, p_project_file uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  r record;
+begin
+  select pf.project_id, f.storage_path, f.display_name, f.mime_type into r
+    from public.project_files pf join public.company_files f on f.id = pf.file_id
+   where pf.id = p_project_file and f.status = 'ready';
+  if not found then raise exception 'Fichier introuvable' using errcode = 'P0002'; end if;
+  perform portal_private.assert_project(v_person, r.project_id);
+  delete from public.portal_storage_grants where expires_at < now() - interval '1 hour';
+  insert into public.portal_storage_grants (object_name, action, expires_at) values (r.storage_path, 'read', now() + interval '60 seconds');
+  return jsonb_build_object('path', r.storage_path, 'name', r.display_name, 'mime_type', r.mime_type);
+end; $$;
+
+-- Dépôts du client : renommer, déplacer, supprimer les siens uniquement
+create or replace function public.portal_file_update(p_server_key text, p_session_hash text, p_project_file uuid, p_name text, p_folder uuid, p_move boolean)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  pf public.project_files;
+  f public.company_files;
+begin
+  select * into pf from public.project_files where id = p_project_file;
+  if not found then raise exception 'Fichier introuvable' using errcode = 'P0002'; end if;
+  perform portal_private.assert_project(v_person, pf.project_id, true);
+  select * into f from public.company_files where id = pf.file_id;
+  if f.uploaded_by_kind <> 'client' or f.uploaded_by_person is distinct from v_person then
+    raise exception 'Vous ne pouvez modifier que vos propres dépôts' using errcode = '42501';
+  end if;
+  if p_name is not null then
+    if coalesce(btrim(p_name), '') = '' or char_length(p_name) > 200 then raise exception 'Nom invalide' using errcode = '22023'; end if;
+    update public.company_files set display_name = btrim(p_name) where id = f.id returning * into f;
+  end if;
+  if p_move then
+    update public.project_files set folder_id = p_folder where id = pf.id returning * into pf;
+  end if;
+  return portal_private.file_json(pf, f, v_person);
+end; $$;
+
+-- Suppression d'un dépôt par son auteur : invisible aussitôt, objet retiré par le serveur (autorisation de 60 s)
+create or replace function public.portal_file_delete(p_server_key text, p_session_hash text, p_project_file uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  pf public.project_files;
+  f public.company_files;
+begin
+  select * into pf from public.project_files where id = p_project_file;
+  if not found then raise exception 'Fichier introuvable' using errcode = 'P0002'; end if;
+  perform portal_private.assert_project(v_person, pf.project_id, true);
+  select * into f from public.company_files where id = pf.file_id for update;
+  if f.uploaded_by_kind <> 'client' or f.uploaded_by_person is distinct from v_person then
+    raise exception 'Vous ne pouvez supprimer que vos propres dépôts' using errcode = '42501';
+  end if;
+  update public.company_files set status = 'deleting' where id = f.id;
+  -- une suppression filtrée exige aussi la visibilité de la ligne (lecture), pour ce seul objet
+  insert into public.portal_storage_grants (object_name, action, expires_at)
+  values (f.storage_path, 'delete', now() + interval '60 seconds'), (f.storage_path, 'read', now() + interval '60 seconds');
+  perform portal_private.log(pf.project_id, 'client', v_person, 'file_deleted', jsonb_build_object('name', f.display_name));
+  return jsonb_build_object('path', f.storage_path, 'file_id', f.id);
+end; $$;
+
+-- Après retrait de l'objet : la ligne disparaît (sinon le nettoyage administrateur la reprendra)
+create or replace function public.portal_file_purge(p_server_key text, p_session_hash text, p_file uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+declare v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+begin
+  delete from public.company_files f where f.id = p_file and f.status = 'deleting' and f.uploaded_by_person = v_person
+     and not exists (select 1 from storage.objects o where o.bucket_id = 'company-files' and o.name = f.storage_path);
+end; $$;
+
+-- Vue d'administration des fichiers d'un projet
+create or replace view public.project_file_overview with (security_invoker = true) as
+  select pf.id, pf.project_id, pf.file_id, pf.folder_id, pf.task_id, pf.shared_by_kind, pf.created_at as shared_at,
+         f.display_name, f.mime_type, f.size_bytes, f.status, f.uploaded_by_kind, f.created_at,
+         case when f.uploaded_by_kind = 'client' then btrim(coalesce(pe.first_name, '') || ' ' || coalesce(pe.last_name, '')) else 'Vous' end as author
+    from public.project_files pf
+    join public.company_files f on f.id = pf.file_id
+    left join public.people pe on pe.id = f.uploaded_by_person
+   where f.status = 'ready';
+revoke all on public.project_file_overview from anon;
+grant select on public.project_file_overview to authenticated;
+
+revoke all on all functions in schema portal_private from public, anon, authenticated;
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'portal_files(text, text, uuid, int, int)', 'portal_file_start(text, text, uuid, uuid, uuid, text, text, bigint, text)',
+    'portal_file_confirm(text, text, uuid)', 'portal_file_abort(text, text, uuid)', 'portal_file_grant(text, text, uuid)',
+    'portal_file_update(text, text, uuid, text, uuid, boolean)', 'portal_file_delete(text, text, uuid)', 'portal_file_purge(text, text, uuid)',
+    'portal_storage_can_upload(text)', 'portal_storage_can(text, text)']
+  loop
+    execute format('revoke all on function public.%s from public', f);
+    execute format('grant execute on function public.%s to anon, authenticated', f);
+  end loop;
+end $$;
+
+
+-- ===== 20261107000500_projets_idees.sql =====
+-- Projets et portail client — phase 5 : boîte à idées. Migration additive.
+-- Tout membre autorisé propose et commente ; l'auteur modifie son idée tant qu'elle est « à explorer » ;
+-- seul l'administrateur décide du statut (avec une explication) et transforme une idée en tâche.
+
+create table public.project_ideas (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid not null references public.projects (id) on delete cascade,
+  title text not null check (char_length(btrim(title)) between 1 and 160),
+  description text check (description is null or char_length(description) <= 4000),
+  status text not null default 'a_explorer' check (status in ('a_explorer','retenue','plus_tard','ecartee')),
+  decision_note text check (decision_note is null or char_length(decision_note) <= 1000),
+  author_kind text not null check (author_kind in ('owner','client')),
+  author_person uuid references public.people (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index project_ideas_idx on public.project_ideas (project_id, created_at desc);
+
+create table public.project_idea_comments (
+  id uuid primary key default gen_random_uuid(),
+  idea_id uuid not null references public.project_ideas (id) on delete cascade,
+  author_kind text not null check (author_kind in ('owner','client')),
+  person_id uuid references public.people (id) on delete set null,
+  body text not null check (char_length(btrim(body)) between 1 and 1000),
+  created_at timestamptz not null default now()
+);
+create index project_idea_comments_idx on public.project_idea_comments (idea_id, created_at);
+
+-- idée transformée en tâche : lien d'origine, une seule tâche par idée
+alter table public.project_tasks add column idea_id uuid references public.project_ideas (id) on delete set null;
+create unique index project_tasks_idea_uniq on public.project_tasks (idea_id) where idea_id is not null;
+
+create trigger set_updated_at before update on public.project_ideas for each row execute function public.tg_set_updated_at();
+
+do $$
+declare t text;
+begin
+  foreach t in array array['project_ideas','project_idea_comments']
+  loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('create policy owner_select on public.%I for select to authenticated using ((select public.is_app_owner()))', t);
+    execute format('create policy owner_insert on public.%I for insert to authenticated with check ((select public.is_app_owner()) and public.current_actor() = ''user'')', t);
+    execute format('create policy owner_update on public.%I for update to authenticated using ((select public.is_app_owner()) and public.current_actor() = ''user'') with check ((select public.is_app_owner()))', t);
+    execute format('create policy owner_delete on public.%I for delete to authenticated using ((select public.is_app_owner()) and public.current_actor() = ''user'')', t);
+    execute format('revoke all on public.%I from anon', t);
+  end loop;
+end $$;
+
+create or replace function portal_private.person_name(p uuid)
+returns text language sql stable set search_path = '' as $$
+  select btrim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')) from public.people where id = p;
+$$;
+
+create or replace function portal_private.idea_json(i public.project_ideas, p_person uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object(
+    'id', i.id, 'title', i.title, 'description', i.description, 'status', i.status, 'decision_note', i.decision_note,
+    'created_at', i.created_at, 'updated_at', i.updated_at,
+    'author', case when i.author_kind = 'owner' then 'Cely Growth' else portal_private.person_name(i.author_person) end,
+    'mine', i.author_kind = 'client' and i.author_person = p_person,
+    'can_edit', i.author_kind = 'client' and i.author_person = p_person and i.status = 'a_explorer',
+    'has_task', exists (select 1 from public.project_tasks t where t.idea_id = i.id),
+    'comments', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', c.id, 'body', c.body, 'created_at', c.created_at,
+        'author', case when c.author_kind = 'owner' then 'Cely Growth' else portal_private.person_name(c.person_id) end) order by c.created_at)
+      from public.project_idea_comments c where c.idea_id = i.id), '[]'));
+$$;
+
+create or replace function public.portal_ideas(p_server_key text, p_session_hash text, p_project uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+begin
+  perform portal_private.assert_project(v_person, p_project);
+  return coalesce((select jsonb_agg(portal_private.idea_json(i, v_person) order by i.created_at desc)
+                     from (select * from public.project_ideas where project_id = p_project order by created_at desc limit 200) i), '[]');
+end; $$;
+
+create or replace function public.portal_idea_save(p_server_key text, p_session_hash text, p_project uuid, p_idea uuid, p_title text, p_description text)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  i public.project_ideas;
+begin
+  perform portal_private.assert_project(v_person, p_project, true);
+  if coalesce(btrim(p_title), '') = '' or char_length(p_title) > 160 then raise exception 'Titre obligatoire (160 caractères maximum)' using errcode = '22023'; end if;
+  if char_length(coalesce(p_description, '')) > 4000 then raise exception 'Description trop longue' using errcode = '22023'; end if;
+  if p_idea is null then
+    if (select count(*) from public.project_ideas where author_person = v_person and created_at > now() - interval '1 hour') >= 20 then
+      raise exception 'Beaucoup d''idées en peu de temps : réessayez plus tard' using errcode = '22023';
+    end if;
+    insert into public.project_ideas (project_id, title, description, author_kind, author_person)
+    values (p_project, btrim(p_title), nullif(btrim(coalesce(p_description, '')), ''), 'client', v_person) returning * into i;
+    perform portal_private.log(p_project, 'client', v_person, 'idea_created', jsonb_build_object('idea_id', i.id));
+  else
+    select * into i from public.project_ideas where id = p_idea and project_id = p_project for update;
+    if not found then raise exception 'Idée introuvable' using errcode = 'P0002'; end if;
+    if i.author_kind <> 'client' or i.author_person is distinct from v_person then raise exception 'Seul l''auteur peut modifier cette idée' using errcode = '42501'; end if;
+    if i.status <> 'a_explorer' then raise exception 'Une décision a été prise : l''idée n''est plus modifiable, ajoutez plutôt un commentaire' using errcode = '42501'; end if;
+    update public.project_ideas set title = btrim(p_title), description = nullif(btrim(coalesce(p_description, '')), '') where id = i.id returning * into i;
+  end if;
+  return portal_private.idea_json(i, v_person);
+end; $$;
+
+create or replace function public.portal_idea_comment(p_server_key text, p_session_hash text, p_project uuid, p_idea uuid, p_body text)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  i public.project_ideas;
+begin
+  perform portal_private.assert_project(v_person, p_project, true);
+  select * into i from public.project_ideas where id = p_idea and project_id = p_project;
+  if not found then raise exception 'Idée introuvable' using errcode = 'P0002'; end if;
+  if coalesce(btrim(p_body), '') = '' or char_length(p_body) > 1000 then raise exception 'Commentaire vide ou trop long (1 000 caractères)' using errcode = '22023'; end if;
+  insert into public.project_idea_comments (idea_id, author_kind, person_id, body) values (i.id, 'client', v_person, btrim(p_body));
+  return portal_private.idea_json(i, v_person);
+end; $$;
+
+-- Administration : idée → tâche, sans doublon, avec le lien d'origine
+create or replace function public.project_idea_to_task(p_idea uuid)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare
+  i public.project_ideas;
+  v_id uuid;
+begin
+  perform portal_private.assert_owner_user();
+  select * into i from public.project_ideas where id = p_idea for update;
+  if not found then raise exception 'Idée introuvable' using errcode = 'P0002'; end if;
+  select id into v_id from public.project_tasks where idea_id = p_idea;
+  if v_id is not null then return v_id; end if;
+  insert into public.project_tasks (project_id, title, description, idea_id, assignee_kind, visible_to_client)
+  values (i.project_id, left(i.title, 300), i.description, i.id, 'owner', true) returning id into v_id;
+  if i.status = 'a_explorer' then update public.project_ideas set status = 'retenue' where id = i.id; end if;
+  perform portal_private.log(i.project_id, 'owner', null, 'idea_to_task', jsonb_build_object('idea_id', i.id, 'task_id', v_id));
+  return v_id;
+end; $$;
+
+revoke all on all functions in schema portal_private from public, anon, authenticated;
+do $$
+declare f text;
+begin
+  foreach f in array array['portal_ideas(text, text, uuid)', 'portal_idea_save(text, text, uuid, uuid, text, text)', 'portal_idea_comment(text, text, uuid, uuid, text)']
+  loop
+    execute format('revoke all on function public.%s from public', f);
+    execute format('grant execute on function public.%s to anon, authenticated', f);
+  end loop;
+  execute 'revoke all on function public.project_idea_to_task(uuid) from public, anon';
+  execute 'grant execute on function public.project_idea_to_task(uuid) to authenticated';
+end $$;

@@ -17,6 +17,14 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // portail client : jamais en cache partagé, jamais indexé
+        source: "/portail/:path*",
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      },
+      {
         source: "/:path*",
         headers: [
           { key: "X-Frame-Options", value: "DENY" },

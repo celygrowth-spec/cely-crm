@@ -94,3 +94,12 @@ button, a, input, select, textarea { transition-property: color, background-colo
     scroll-behavior: auto !important;
   }
 }
+
+/* Timeline du portail : entrée discrète des phases, coche qui « répond » à une étape terminée. */
+@keyframes tl-grow { from { transform: scaleX(0.6); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes tl-pop { 0% { transform: scale(0.4); } 70% { transform: scale(1.25); } 100% { transform: scale(1); } }
+@keyframes mascot-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+.tl-in { animation: tl-grow 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both; transform-origin: left; }
+.tl-check { animation: tl-pop 420ms 300ms ease-out both; }
+.tl-paused { background-image: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.18) 0 6px, transparent 6px 12px); }
+.mascot-bob { animation: mascot-bob 3s ease-in-out 2; }

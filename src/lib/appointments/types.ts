@@ -122,6 +122,7 @@ export type Booking = {
   updated_at: string;
   crm_company_name: string | null;
   display_status: DisplayStatus;
+  google_drift?: { kind: "moved"; start: string; end: string | null } | { kind: "deleted" } | null;
 };
 
 export type BookingEvent = { id: number; kind: string; actor: "invitee" | "owner" | "system"; data: Record<string, unknown>; created_at: string };

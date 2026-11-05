@@ -12,6 +12,9 @@ de prospection aux pipelines sans jamais être copiée.
 - **Rendez-vous** : pages publiques de réservation (`/rdv/<type>`), types de rendez-vous, disponibilités
   (plages, exceptions, congés), connexion Google Calendar, agenda, liste, rattachement CRM sans doublon,
   annulation et report par lien privé. Configuration : `docs/integrations/google-calendar.md`.
+- **Projets et portail client** : projets liés aux fiches CRM (planning, points de suivi, récapitulatifs,
+  tâches, fichiers, idées) et espace client `/portail` accessible par code individuel, limité aux contenus
+  publiés. Guide : `docs/projets-portail-client.md`.
 - **Paramètres** : sources du lead, connexion à Claude, compte.
 - **Connecteur Claude (MCP)** : rechercher, consulter, créer, noter, déplacer, lister les relances, depuis Claude.
 
