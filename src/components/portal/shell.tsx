@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { FolderOpen, Home, Lightbulb, ListChecks, LogOut } from "lucide-react";
-import { cn } from "@/components/ui";
+import { cn } from "@/lib/cn";
 import type { PortalMe } from "@/lib/projects/types";
 
 export function PortalTopBar({ me, projectId }: { me: PortalMe; projectId?: string }) {

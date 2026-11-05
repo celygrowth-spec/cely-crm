@@ -78,3 +78,65 @@ export type PortalMe = {
   person: { id: string; first_name: string | null; last_name: string | null; company: string };
   projects: { id: string; name: string; status: ProjectStatus; read_only: boolean }[];
 };
+
+export type PhaseStatus = "a_venir" | "en_cours" | "termine" | "en_pause";
+export const PHASE_STATUS_LABELS: Record<PhaseStatus, string> = { a_venir: "À venir", en_cours: "En cours", termine: "Terminée", en_pause: "En pause" };
+export const PHASE_COLORS = ["violet", "blue", "teal", "green", "amber", "pink", "slate"] as const;
+export type PhaseColor = (typeof PHASE_COLORS)[number];
+
+export type Phase = {
+  id: string;
+  name: string;
+  description: string | null;
+  deliverables: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  color: PhaseColor;
+  status: PhaseStatus;
+  completed_at: string | null;
+};
+
+export type Milestone = { id: string; title: string; due_date: string; done: boolean; phase_id: string | null; visible_to_client?: boolean };
+
+export type PortalMeeting = {
+  id: string;
+  title: string;
+  starts_at: string;
+  ends_at: string;
+  timezone: string;
+  status: "upcoming" | "past" | "cancelled";
+  meeting_url: string | null;
+  location_kind: "video" | "phone" | "other" | null;
+  participants: string | null;
+  agenda?: string | null;
+  has_recap: boolean;
+};
+
+export type RecapAction = { text: string; task_id?: string | null };
+export type RecapLink = { label: string; url: string };
+export type Recap = { summary: string | null; decisions: string | null; actions: RecapAction[]; next_step: string | null; links: RecapLink[]; published_at?: string | null };
+
+export type PortalMeetingDetail = PortalMeeting & { recap: Recap | null };
+
+/** Vue client complète d'un projet (portail et aperçu). */
+export type PortalProjectView = PortalProject & {
+  today: string;
+  phases: Phase[];
+  milestones: Milestone[];
+  meetings: PortalMeeting[];
+};
+
+export type AdminMeeting = {
+  id: string;
+  booking_id: string;
+  title: string | null;
+  agenda: string | null;
+  participants: string | null;
+  visible_to_client: boolean;
+  booking: {
+    status: string; starts_at: string; ends_at: string; meeting_url: string | null; first_name: string; last_name: string;
+    schedule_timezone: string; event_snapshot: { name: string; slug: string }; google_drift: { kind: "moved"; start: string; end: string | null } | { kind: "deleted" } | null;
+    calendar_out_of_sync?: boolean;
+  };
+  recap: (Recap & { internal_note: string | null; status: "draft" | "published" }) | null;
+};

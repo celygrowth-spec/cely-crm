@@ -145,6 +145,14 @@ function BookingDetail({ id, onClose }: { id: string; onClose: () => void }) {
             Google Agenda pas encore à jour{b.calendar_sync_error ? ` : ${b.calendar_sync_error}` : ""}. Reprise automatique, ou depuis « Connexion agenda ».
           </p>
         )}
+        {b.google_drift && b.status === "confirmed" && (
+          <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2 py-1.5 text-xs text-warning">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+            {b.google_drift.kind === "moved"
+              ? `Déplacé directement dans Google Agenda au ${formatLongDate(b.google_drift.start, DEFAULT_TZ)} ${formatTimeShort(b.google_drift.start, DEFAULT_TZ)}. Cely garde l'horaire ci-dessus : reportez-le ici, ou rétablissez Google depuis « Connexion agenda ».`
+              : "Supprimé directement dans Google Agenda, mais toujours prévu dans Cely : annulez-le ici ou rétablissez Google."}
+          </p>
+        )}
         {b.status === "cancelled" && (
           <p className="mt-2 text-sm text-muted">
             Annulé {b.cancelled_by === "invitee" ? "par le contact" : "par vous"} le {formatDateTime(b.cancelled_at)}

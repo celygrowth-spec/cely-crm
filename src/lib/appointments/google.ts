@@ -227,3 +227,44 @@ export async function deleteEvent(token: string, calendarId: string, bookingId: 
   if (res.ok || res.status === 404 || res.status === 410) return;
   await fail(res, "Suppression de l'événement Google");
 }
+
+// ---------------------------------------------------------------------------
+// Synchronisation incrémentale (events.list + syncToken) : lit les changements de l'agenda de destination
+// pour repérer les événements de l'outil déplacés ou supprimés directement dans Google.
+// Un 410 signifie que le jeton a expiré : la synchronisation complète doit être refaite.
+// ---------------------------------------------------------------------------
+
+export type ChangedEvent = { id: string; status: string; start?: string | null; end?: string | null; bookingId: string | null };
+
+export async function listEventChanges(token: string, calendarId: string, syncToken: string | null, maxPages = 40): Promise<{ events: ChangedEvent[]; nextSyncToken: string }> {
+  const events: ChangedEvent[] = [];
+  let pageToken: string | undefined;
+  for (let i = 0; i < maxPages; i++) {
+    const q = new URLSearchParams({ maxResults: "250", showDeleted: "true" });
+    if (syncToken) q.set("syncToken", syncToken);
+    if (pageToken) q.set("pageToken", pageToken);
+    const res = await call(`${API}/calendars/${encodeURIComponent(calendarId)}/events?${q.toString()}`, { token });
+    if (!res.ok) await fail(res, "Lecture des changements Google");
+    const j = (await res.json()) as {
+      items?: { id: string; status?: string; start?: { dateTime?: string }; end?: { dateTime?: string }; extendedProperties?: { private?: Record<string, string> } }[];
+      nextPageToken?: string; nextSyncToken?: string;
+    };
+    for (const e of j.items ?? []) {
+      // seuls les événements créés par l'outil sont pris en compte (identifiant rdv<uuid>)
+      const m = /^rdv([0-9a-f]{32})$/.exec(e.id);
+      if (!m) continue;
+      const h = m[1];
+      events.push({
+        id: e.id,
+        status: e.status ?? "confirmed",
+        start: e.start?.dateTime ?? null,
+        end: e.end?.dateTime ?? null,
+        bookingId: `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`,
+      });
+    }
+    if (j.nextPageToken) { pageToken = j.nextPageToken; continue; }
+    if (j.nextSyncToken) return { events, nextSyncToken: j.nextSyncToken };
+    break;
+  }
+  throw new GoogleError("Synchronisation Google interrompue (trop de pages) : elle reprendra au prochain passage", 0);
+}

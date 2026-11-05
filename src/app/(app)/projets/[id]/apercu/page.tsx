@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireOwner } from "@/lib/auth";
 import { CrmError, friendlyError } from "@/lib/crm/service";
 import { projectMembers } from "@/lib/projects/owner";
-import type { PortalProject } from "@/lib/projects/types";
+import type { PortalProjectView } from "@/lib/projects/types";
 import { PortalOverview } from "@/components/portal/overview";
 import { EmptyState } from "@/components/ui";
 
@@ -29,7 +29,7 @@ export default async function PreviewPage({ params, searchParams }: { params: Pr
         <span className="text-xs text-muted">Contenu publié uniquement, comme sur le portail.</span>
       </div>
       <div className="rounded-2xl bg-surface p-4">
-        <PortalOverview project={data as PortalProject} />
+        <PortalOverview project={data as PortalProjectView} />
       </div>
     </div>
   );

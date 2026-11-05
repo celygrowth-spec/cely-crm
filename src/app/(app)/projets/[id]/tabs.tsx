@@ -8,6 +8,8 @@ export function ProjectTabs({ id }: { id: string }) {
     <Tabs
       items={[
         { href: base, label: "Général", exact: true },
+        { href: `${base}/planning`, label: "Planning" },
+        { href: `${base}/points`, label: "Points" },
         { href: `${base}/acces`, label: "Accès client" },
       ]}
     />
