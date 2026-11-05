@@ -208,6 +208,10 @@ Révoquer l'accès : Supabase › Authentication › OAuth Apps.
   (empreinte en base) ; les fonctions internes sont dans le schéma non exposé `appt_private`.
   Attention : une migration future qui ferait `revoke execute on all functions in schema public from anon`
   fermerait la réservation publique ; le test `tests/db/rendez-vous.test.ts` le détecte.
+- **Rappels** : règles par type (délais exacts : jours, heures, minutes avant), échéancier par rendez-vous
+  (personnalisation locale, ajout, annulation, désactivation, réapplication explicite avec aperçu),
+  recalcul au report, annulation des restants, suspension globale. **Aucun envoi** dans ce module :
+  « Envoi non connecté » tant que le module Mail n'est pas raccordé. Contrat : `docs/integrations/appointments-mail.md`.
 
 ## Tests
 

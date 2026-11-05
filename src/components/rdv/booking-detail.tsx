@@ -16,8 +16,10 @@ import { apiGet, attempt, useSync } from "@/lib/client/query";
 import type { SearchResult } from "@/lib/crm/types";
 import { formatDateTime } from "@/lib/format";
 import { DEFAULT_TZ, formatLongDate, formatRange, formatTimeShort, timeZoneLabel } from "@/lib/appointments/time";
-import { DISPLAY_STATUS_LABELS, LOCATION_LABELS, type Booking, type BookingEvent, type DisplayStatus } from "@/lib/appointments/types";
+import { DISPLAY_STATUS_LABELS, LOCATION_LABELS, type Booking, type DisplayStatus } from "@/lib/appointments/types";
 import { SlotPicker } from "./slot-picker";
+import { BookingReminders } from "./booking-reminders";
+import type { BookingDetail as BookingDetailData } from "@/lib/appointments/owner";
 
 export const STATUS_TONE: Record<DisplayStatus, "violet" | "warning" | "success" | "danger" | "neutral"> = {
   a_venir: "violet",
@@ -45,6 +47,8 @@ const EVENT_LABELS: Record<string, string> = {
   crm_linked: "Rattaché à une fiche",
   crm_created: "Fiche créée",
   crm_to_link: "À rattacher",
+  reminders: "Rappels activés / désactivés",
+  reminders_reapplied: "Règles de rappel réappliquées",
 };
 const ACTORS = { invitee: "le contact", owner: "vous", system: "automatique" } as const;
 
@@ -84,7 +88,7 @@ function BookingDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const { openCompany } = useCrm();
   const q = useQuery({
     queryKey: ["appt-booking", id],
-    queryFn: ({ signal }) => apiGet<{ booking: Booking; events: BookingEvent[] } | null>(`/api/rendez-vous/bookings/${id}`, signal),
+    queryFn: ({ signal }) => apiGet<BookingDetailData | null>(`/api/rendez-vous/bookings/${id}`, signal),
   });
   const [mode, setMode] = useState<"view" | "cancel" | "reschedule">("view");
   const [busy, setBusy] = useState(false);
@@ -111,7 +115,7 @@ function BookingDetail({ id, onClose }: { id: string; onClose: () => void }) {
   if (q.isLoading) return <div className="space-y-3"><Skeleton className="h-7 w-2/3" /><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /></div>;
   if (q.isError) return <p className="text-sm text-danger">{q.error.message}</p>;
   if (!q.data) return <p className="text-sm text-muted">Rendez-vous introuvable.</p>;
-  const { booking: b, events } = q.data;
+  const { booking: b, events, reminders, remindersOff, reminderSettings } = q.data;
   const future = Date.parse(b.starts_at) > now;
   const started = !future;
   const otherTz = b.invitee_timezone !== DEFAULT_TZ;
@@ -209,6 +213,10 @@ function BookingDetail({ id, onClose }: { id: string; onClose: () => void }) {
       )}
 
       <NoteBox key={b.internal_note ?? ""} booking={b} busy={busy} act={act} />
+
+      {(b.status === "confirmed" || reminders.length > 0) && (
+        <BookingReminders booking={b} reminders={reminders} off={remindersOff} settings={reminderSettings} onChanged={refresh} now={now} />
+      )}
 
       <section>
         <h4 className="mb-2 font-label text-xs font-semibold tracking-wide text-muted uppercase">Historique</h4>

@@ -12,12 +12,12 @@ import { attempt } from "@/lib/client/query";
 import { slugify } from "@/lib/appointments/schemas";
 import type { EventType, Question, QuestionKind } from "@/lib/appointments/types";
 
-type Draft = Omit<EventType, "id" | "position" | "created_at" | "updated_at">;
+type Draft = Omit<EventType, "id" | "position" | "created_at" | "updated_at" | "reminders_enabled">;
 
 function initial(t: EventType | null, scheduleId: string): Draft {
   if (t) {
-    const { id: _id, position: _p, created_at: _c, updated_at: _u, ...rest } = t;
-    void _id; void _p; void _c; void _u;
+    const { id: _id, position: _p, created_at: _c, updated_at: _u, reminders_enabled: _r, ...rest } = t;
+    void _id; void _p; void _c; void _u; void _r;
     return rest;
   }
   return {

@@ -4,14 +4,16 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Check, Copy, CopyPlus, ExternalLink, Pencil, Trash2 } from "lucide-react";
-import { deleteEventTypeAction, duplicateEventTypeAction, saveSettingsAction, setEventTypeActiveAction } from "@/app/rendez-vous-actions";
+import { deleteEventTypeAction, duplicateEventTypeAction, saveSettingsAction, setEventTypeActiveAction, setRemindersPausedAction } from "@/app/rendez-vous-actions";
+import { MailStatusNotice } from "@/components/rdv/reminder-rules";
 import { Badge, Button, Card, EmptyState, Field, Input, Textarea } from "@/components/ui";
 import { attempt, useSync } from "@/lib/client/query";
 import { LOCATION_LABELS, type EventType } from "@/lib/appointments/types";
 import { formatDuration } from "@/components/rdv/public-bits";
 
-export function TypesView({ types, schedules, baseUrl, settings }: {
+export function TypesView({ types, schedules, baseUrl, settings, reminders }: {
   types: EventType[]; schedules: { id: string; name: string }[]; baseUrl: string; settings: { display_name: string; intro: string | null };
+  reminders: { paused: boolean; mailConnectedAt: string | null };
 }) {
   const sync = useSync();
   const [busy, setBusy] = useState<string | null>(null);
@@ -71,6 +73,7 @@ export function TypesView({ types, schedules, baseUrl, settings }: {
           })}
         </ul>
       )}
+      <RemindersGlobal reminders={reminders} />
       <PublicIdentity settings={settings} />
     </div>
   );
@@ -98,6 +101,36 @@ function PublicIdentity({ settings }: { settings: { display_name: string; intro:
           else toast.error(r.error);
         }}>Enregistrer</Button>
       )}
+    </Card>
+  );
+}
+
+function RemindersGlobal({ reminders }: { reminders: { paused: boolean; mailConnectedAt: string | null } }) {
+  const sync = useSync();
+  const [busy, setBusy] = useState(false);
+  return (
+    <Card className="space-y-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="font-display text-base font-bold text-ink">Rappels</h2>
+          <p className="text-xs text-muted">Règles à définir dans chaque type. Envoi assuré par le module Mail une fois raccordé.</p>
+        </div>
+        <Badge tone={!reminders.mailConnectedAt ? "warning" : reminders.paused ? "warning" : "success"}>
+          {!reminders.mailConnectedAt ? "Envoi non connecté" : reminders.paused ? "Suspendus" : "Actifs"}
+        </Badge>
+      </div>
+      <MailStatusNotice mailConnectedAt={reminders.mailConnectedAt} paused={false} />
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={reminders.paused} disabled={busy} onChange={async (e) => {
+          setBusy(true);
+          const r = await attempt(() => setRemindersPausedAction(e.target.checked));
+          setBusy(false);
+          if (!r.ok) return toast.error(r.error);
+          toast.success(e.target.checked ? "Rappels suspendus" : "Rappels repris");
+          sync();
+        }} />
+        Suspendre tous les rappels (les échéances dépassées pendant la suspension ne seront pas rattrapées)
+      </label>
     </Card>
   );
 }

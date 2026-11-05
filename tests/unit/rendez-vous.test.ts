@@ -107,3 +107,43 @@ describe("divers", () => {
     expect(eventTypeSchema.safeParse({ ...base, meeting_url: null, questions: [{ id: "q", label: "Budget", kind: "choice", required: true, options: ["A"] }] }).success).toBe(false);
   });
 });
+
+describe("rappels : variables et rendu", () => {
+  test("variables dans le fuseau du contact, variables inconnues signalées", async () => {
+    const { buildVariables, renderTemplate, unknownVariables, offsetLabel } = await import("@/lib/appointments/reminders");
+    const vars = buildVariables(
+      { first_name: "Alice", last_name: "Martin", company_name: "Acme", event: { name: "Appel découverte", duration_min: 30 }, starts_at: "2026-12-07T08:00:00Z", invitee_timezone: "America/New_York", meeting_url: "https://meet.example.com/x" },
+      { cancel: "https://app/rdv/gerer/abc?action=annuler", reschedule: "https://app/rdv/gerer/abc?action=reporter" },
+    );
+    expect(vars.heure).toBe("03:00");
+    expect(vars.date).toBe("Lundi 7 décembre 2026");
+    expect(vars.fuseau).toBe("America/New York (UTC-5)");
+    expect(vars.duree).toBe("30 minutes");
+    const r = renderTemplate("Bonjour {{prenom}} ({{ entreprise }}), {{type}} à {{heure}} — {{lien_reunion}} {{lien_annulation}} {{inconnue}}", vars);
+    expect(r.text).toBe("Bonjour Alice (Acme), Appel découverte à 03:00 — https://meet.example.com/x https://app/rdv/gerer/abc?action=annuler {{inconnue}}");
+    expect(r.unknown).toEqual(["inconnue"]);
+    expect(unknownVariables("{{prenom}} {{date_veille}}")).toEqual(["date_veille"]);
+    expect(offsetLabel(24, "hours")).toBe("24 heures avant");
+    expect(offsetLabel(1, "days")).toBe("1 jour avant");
+  });
+
+  test("adaptateur Mail : message rendu avec liens privés propres au rendez-vous, clé de déduplication transmise", async () => {
+    const { renderReminder } = await import("@/lib/appointments/mail-adapter");
+    const { parseManageRef } = await import("@/lib/appointments/secrets");
+    const id = "33333333-3333-4333-8333-333333333333";
+    const m = renderReminder({
+      reminder_id: "r1", reminder_key: "k1", dedup_key: "appt-reminder:k1:v2", revision: 3, send_at: "2026-12-06T08:00:00Z",
+      subject: "Demain : {{type}}", body: "Annuler : {{lien_annulation}}\nReporter : {{lien_report}}",
+      booking_id: id, booking_version: 2, starts_at: "2026-12-07T08:00:00Z", ends_at: "2026-12-07T08:30:00Z", invitee_timezone: "Europe/Paris",
+      first_name: "Alice", last_name: "Martin", email: "alice@acme.fr", company_name: null, meeting_url: null,
+      event: { name: "Appel", slug: "appel", description: null, duration_min: 30, location_kind: "video", location_detail: null },
+      company_id: null, person_id: null,
+    }, "https://cely.example");
+    expect(m).toMatchObject({ dedupKey: "appt-reminder:k1:v2", revision: 3, to: { email: "alice@acme.fr", name: "Alice Martin" }, subject: "Demain : Appel", validUntil: "2026-12-07T08:00:00Z" });
+    const link = m.text.match(/Annuler : (\S+)/)![1];
+    expect(link.startsWith("https://cely.example/rdv/gerer/")).toBe(true);
+    const ref = new URL(link).pathname.split("/").pop()!;
+    expect(parseManageRef(ref)?.id).toBe(id);
+    expect(m.text).toContain("?action=reporter");
+  });
+});

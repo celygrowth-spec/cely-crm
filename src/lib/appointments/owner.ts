@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { CrmError, friendlyError } from "@/lib/crm/service";
 import { appointmentsSecretOrNull } from "./config";
 import { serverRpcKeyHash } from "./secrets";
+import type { Reminder, ReminderRule } from "./reminders";
 import type { Block, Booking, BookingEvent, EventType, GoogleConnection, Schedule } from "./types";
 
 function check<T>(res: { data: T; error: { message: string; code?: string } | null }): T {
@@ -72,14 +73,46 @@ export async function listBookings(sb: SupabaseClient, f: BookingFilters = {}, l
   return check(await q.order("starts_at", { ascending: asc }).limit(limit)) as Booking[];
 }
 
-export async function getBooking(sb: SupabaseClient, id: string): Promise<{ booking: Booking; events: BookingEvent[] } | null> {
-  const [b, e] = await Promise.all([
+export type BookingDetail = {
+  booking: Booking;
+  events: BookingEvent[];
+  reminders: Reminder[];
+  remindersOff: boolean;
+  reminderSettings: ReminderSettings;
+};
+
+export async function getBooking(sb: SupabaseClient, id: string): Promise<BookingDetail | null> {
+  const [b, e, r, off, s] = await Promise.all([
     sb.from("appt_booking_overview").select("*").eq("id", id).maybeSingle(),
     sb.from("appt_booking_events").select("id, kind, actor, data, created_at").eq("booking_id", id).order("id"),
+    sb.from("appt_reminders").select("*").eq("booking_id", id).order("send_at").order("created_at"),
+    sb.from("appt_bookings").select("reminders_off").eq("id", id).maybeSingle(),
+    getReminderSettings(sb),
   ]);
   const booking = check(b) as Booking | null;
   if (!booking) return null;
-  return { booking, events: check(e) as BookingEvent[] };
+  return {
+    booking,
+    events: check(e) as BookingEvent[],
+    reminders: check(r) as Reminder[],
+    remindersOff: !!(check(off) as { reminders_off: boolean } | null)?.reminders_off,
+    reminderSettings: s,
+  };
+}
+
+export type ReminderSettings = { paused: boolean; mailConnectedAt: string | null };
+
+export async function getReminderSettings(sb: SupabaseClient): Promise<ReminderSettings> {
+  const row = check(await sb.from("appt_settings").select("reminders_paused, mail_connected_at").maybeSingle()) as
+    | { reminders_paused: boolean; mail_connected_at: string | null }
+    | null;
+  return { paused: !!row?.reminders_paused, mailConnectedAt: row?.mail_connected_at ?? null };
+}
+
+export async function listReminderRules(sb: SupabaseClient, typeId: string): Promise<ReminderRule[]> {
+  return check(
+    await sb.from("appt_reminder_rules").select("id, enabled, offset_value, offset_unit, subject, body").eq("event_type_id", typeId).order("position"),
+  ) as ReminderRule[];
 }
 
 export async function companyBookings(sb: SupabaseClient, companyId: string): Promise<Booking[]> {

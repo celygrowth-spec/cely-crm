@@ -11,10 +11,13 @@ import { SlotPicker } from "@/components/rdv/slot-picker";
 import { browserTimeZone, formatLongDate, formatTimeShort, isValidTimeZone } from "@/lib/appointments/time";
 import type { PublicBooking } from "@/lib/appointments/types";
 
-export function ManageView({ booking, refToken, manageUrl, past }: { booking: PublicBooking; refToken: string; manageUrl: string; past: boolean }) {
+export function ManageView({ booking, refToken, manageUrl, past, initialMode = "view" }: {
+  booking: PublicBooking; refToken: string; manageUrl: string; past: boolean; initialMode?: "view" | "cancel" | "reschedule";
+}) {
   const router = useRouter();
   const [tz, setTz] = useState(booking.invitee_timezone);
-  const [mode, setMode] = useState<"view" | "cancel" | "reschedule">("view");
+  const usable = booking.status === "confirmed" && !past;
+  const [mode, setMode] = useState<"view" | "cancel" | "reschedule">(usable && (initialMode !== "reschedule" || booking.event_active) ? initialMode : "view");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

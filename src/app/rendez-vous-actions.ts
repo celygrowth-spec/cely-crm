@@ -77,7 +77,10 @@ export async function duplicateEventTypeAction(id: string) {
     }
     const copy: Record<string, unknown> = { ...src, slug, name: `${src.name as string} (copie)`, active: false };
     for (const k of ["id", "created_at", "updated_at"]) delete copy[k];
-    return (await q(sb.from("appt_event_types").insert(copy).select("id").single())) as { id: string };
+    const created = (await q(sb.from("appt_event_types").insert(copy).select("id").single())) as { id: string };
+    const rules = (await q(sb.from("appt_reminder_rules").select("enabled, offset_value, offset_unit, subject, body").eq("event_type_id", id).order("position"))) as unknown[];
+    if (rules.length) await rpc(sb, "appt_save_reminder_rules", { p_type: created.id, p_enabled: !!src.reminders_enabled, p_rules: rules });
+    return created;
   });
 }
 
@@ -241,4 +244,118 @@ export async function disconnectGoogleAction() {
 
 export async function newIdempotencyKey() {
   return randomUUID();
+}
+
+// Rappels (règles et échéances ; aucun envoi ici : voir docs/integrations/appointments-mail.md) -----------
+
+const ruleSchema = z.object({
+  id: z.uuid().optional(),
+  enabled: z.boolean(),
+  offset_value: z.coerce.number().int().min(1, "Délai invalide").max(10000),
+  offset_unit: z.enum(["days", "hours", "minutes"]),
+  subject: z.string().trim().min(1, "Objet obligatoire").max(200, "Objet : 200 caractères maximum"),
+  body: z.string().trim().min(1, "Message obligatoire").max(5000, "Message : 5 000 caractères maximum"),
+}).refine((r) => {
+  const m = r.offset_value * { days: 1440, hours: 60, minutes: 1 }[r.offset_unit];
+  return m >= 5 && m <= 43200;
+}, { message: "Délai entre 5 minutes et 30 jours" });
+type RuleInput = z.input<typeof ruleSchema>;
+
+export async function saveReminderRulesAction(typeId: string, enabled: boolean, rules: RuleInput[]) {
+  return run(async (sb) => {
+    const data = v(z.array(ruleSchema).max(10, "10 rappels maximum"), rules);
+    await rpc(sb, "appt_save_reminder_rules", { p_type: idv(typeId), p_enabled: enabled, p_rules: data });
+    // règles relues avec leurs identifiants : un nouvel enregistrement met à jour au lieu de recréer
+    return (await q(sb.from("appt_reminder_rules").select("id, enabled, offset_value, offset_unit, subject, body").eq("event_type_id", typeId).order("position"))) as {
+      id: string; enabled: boolean; offset_value: number; offset_unit: "days" | "hours" | "minutes"; subject: string; body: string;
+    }[];
+  });
+}
+
+/** Aperçu d'un modèle avec les données d'un rendez-vous réel (ou d'un exemple s'il n'y en a pas). */
+export async function previewReminderAction(typeId: string, subject: string, body: string, bookingId: string | null) {
+  return run(async (sb) => {
+    const { buildVariables, renderTemplate } = await import("@/lib/appointments/reminders");
+    const { manageLinks } = await import("@/lib/appointments/mail-adapter");
+    const type = (await q(sb.from("appt_event_types").select("name, duration_min").eq("id", idv(typeId)).single())) as { name: string; duration_min: number };
+    let sample: Parameters<typeof buildVariables>[0];
+    let links = { cancel: `${await origin()}/rdv/gerer/<lien-privé>?action=annuler`, reschedule: `${await origin()}/rdv/gerer/<lien-privé>?action=reporter` };
+    if (bookingId) {
+      const b = (await q(sb.from("appt_booking_overview").select("*").eq("id", idv(bookingId)).single())) as {
+        first_name: string; last_name: string; company_name: string | null; crm_company_name: string | null; starts_at: string; invitee_timezone: string;
+        meeting_url: string | null; event_snapshot: { name: string; duration_min: number };
+      };
+      sample = { ...b, company_name: b.crm_company_name ?? b.company_name, event: b.event_snapshot };
+      links = manageLinks(bookingId, await origin());
+    } else {
+      sample = {
+        first_name: "Camille", last_name: "Exemple", company_name: "Entreprise Exemple", event: type,
+        starts_at: new Date(Date.now() + 3 * 86400_000).toISOString(), invitee_timezone: "Europe/Paris", meeting_url: "https://meet.example.com/abc",
+      };
+    }
+    const vars = buildVariables(sample, links);
+    const s = renderTemplate(subject, vars);
+    const t = renderTemplate(body, vars);
+    return { subject: s.text, body: t.text, unknown: [...new Set([...s.unknown, ...t.unknown])] };
+  });
+}
+
+export async function updateReminderAction(id: string, input: { offset_value: number; offset_unit: "days" | "hours" | "minutes"; subject: string; body: string }) {
+  return run(async (sb) => {
+    const r = v(ruleSchema, { ...input, enabled: true });
+    await rpc(sb, "appt_reminder_update", { p_id: idv(id), p_offset_value: r.offset_value, p_offset_unit: r.offset_unit, p_subject: r.subject, p_body: r.body });
+  });
+}
+
+export async function cancelReminderAction(id: string) {
+  return run(async (sb) => {
+    await rpc(sb, "appt_reminder_cancel", { p_id: idv(id) });
+  });
+}
+
+export async function addReminderAction(bookingId: string, input: { offset_value: number; offset_unit: "days" | "hours" | "minutes"; subject: string; body: string }) {
+  return run(async (sb) => {
+    const r = v(ruleSchema, { ...input, enabled: true });
+    return rpc<string>(sb, "appt_reminder_add", { p_booking: idv(bookingId), p_offset_value: r.offset_value, p_offset_unit: r.offset_unit, p_subject: r.subject, p_body: r.body });
+  });
+}
+
+export async function setBookingRemindersOffAction(bookingId: string, off: boolean) {
+  return run(async (sb) => {
+    await rpc(sb, "appt_booking_reminders_off", { p_booking: idv(bookingId), p_off: off });
+  });
+}
+
+export async function reapplyRulesPreviewAction(bookingId: string) {
+  return run(async (sb) =>
+    rpc<{ removed: { send_at: string; subject: string; customized: boolean }[]; added: { send_at: string; subject: string }[]; skipped_past: number }>(
+      sb, "appt_reapply_rules_preview", { p_booking: idv(bookingId) }),
+  );
+}
+
+export async function reapplyRulesAction(bookingId: string) {
+  return run(async (sb) => rpc<number>(sb, "appt_reapply_rules", { p_booking: idv(bookingId) }));
+}
+
+export async function typeReapplyPreviewAction(typeId: string) {
+  return run(async (sb) => rpc<{ id: string; starts_at: string; name: string; customized: boolean }[]>(sb, "appt_type_reapply_preview", { p_type: idv(typeId) }));
+}
+
+/** Applique les règles actuelles à des rendez-vous choisis après aperçu. */
+export async function reapplyRulesManyAction(bookingIds: string[]) {
+  return run(async (sb) => {
+    const ids = v(z.array(z.uuid()).max(200), bookingIds);
+    let n = 0;
+    for (const id of ids) {
+      await rpc(sb, "appt_reapply_rules", { p_booking: id });
+      n++;
+    }
+    return n;
+  });
+}
+
+export async function setRemindersPausedAction(paused: boolean) {
+  return run(async (sb) => {
+    await q(sb.from("appt_settings").update({ reminders_paused: paused }).eq("id", true));
+  });
 }

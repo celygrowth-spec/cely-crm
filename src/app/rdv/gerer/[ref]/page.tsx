@@ -6,8 +6,9 @@ import { BookingError, getPublicBooking } from "@/lib/appointments/server";
 import { ManageView } from "./manage-view";
 
 // Lien privé d'un rendez-vous : le jeton est vérifié côté serveur (HMAC) puis en base (empreinte).
-export default async function ManagePage({ params }: { params: Promise<{ ref: string }> }) {
+export default async function ManagePage({ params, searchParams }: { params: Promise<{ ref: string }>; searchParams: Promise<{ action?: string }> }) {
   const { ref } = await params;
+  const { action } = await searchParams;
   let booking;
   try {
     booking = await getPublicBooking(ref);
@@ -25,5 +26,5 @@ export default async function ManagePage({ params }: { params: Promise<{ ref: st
   // instant de la requête : un rendez-vous commencé ne se modifie plus en ligne (la base le refuse aussi)
   // eslint-disable-next-line react-hooks/purity -- composant serveur rendu à chaque requête
   const past = Date.parse(booking.starts_at) <= Date.now();
-  return <ManageView booking={booking} refToken={ref} manageUrl={`${origin}/rdv/gerer/${ref}`} past={past} />;
+  return <ManageView booking={booking} refToken={ref} manageUrl={`${origin}/rdv/gerer/${ref}`} past={past} initialMode={action === "annuler" ? "cancel" : action === "reporter" ? "reschedule" : "view"} />;
 }

@@ -32,6 +32,7 @@ export type EventType = {
   phone_required: boolean;
   questions: Question[];
   active: boolean;
+  reminders_enabled: boolean;
   position: number;
   created_at: string;
   updated_at: string;
