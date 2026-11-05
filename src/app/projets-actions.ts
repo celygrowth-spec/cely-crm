@@ -298,3 +298,33 @@ export async function taskFromRecapAction(meetingId: string, index: number) {
     return { task_id: (t as { id: string }).id, existing: false };
   });
 }
+
+// Idées --------------------------------------------------------------------------------------
+
+export async function decideIdeaAction(id: string, status: "a_explorer" | "retenue" | "plus_tard" | "ecartee", note: string | null) {
+  return run(async (sb) => {
+    const n = v(z.string().trim().max(1000, "1 000 caractères maximum").nullable(), note);
+    const { error } = await sb.from("project_ideas").update({ status, decision_note: n || null }).eq("id", idv(id));
+    if (error) throw new CrmError(friendlyError(error));
+  });
+}
+
+export async function createIdeaAction(projectId: string, title: string, description: string | null) {
+  return run(async (sb) => {
+    const t = v(z.string().trim().min(1, "Titre obligatoire").max(160), title);
+    const { error } = await sb.from("project_ideas").insert({ project_id: idv(projectId), title: t, description: description?.trim() || null, author_kind: "owner" });
+    if (error) throw new CrmError(friendlyError(error));
+  });
+}
+
+export async function commentIdeaAction(ideaId: string, body: string) {
+  return run(async (sb) => {
+    const b = v(z.string().trim().min(1).max(1000), body);
+    const { error } = await sb.from("project_idea_comments").insert({ idea_id: idv(ideaId), author_kind: "owner", body: b });
+    if (error) throw new CrmError(friendlyError(error));
+  });
+}
+
+export async function ideaToTaskAction(ideaId: string) {
+  return run(async (sb) => ({ task_id: await rpc<string>(sb, "project_idea_to_task", { p_idea: idv(ideaId) }) }));
+}

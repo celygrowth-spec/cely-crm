@@ -191,3 +191,17 @@ export type PortalTask = {
   links?: RecapLink[];
   comments?: TaskComment[];
 };
+
+export type IdeaStatus = "a_explorer" | "retenue" | "plus_tard" | "ecartee";
+export const IDEA_STATUS_LABELS: Record<IdeaStatus, string> = { a_explorer: "À explorer", retenue: "Retenue", plus_tard: "Plus tard", ecartee: "Écartée" };
+export const IDEA_STATUS_STYLES: Record<IdeaStatus, string> = {
+  a_explorer: "bg-violet-soft text-violet-strong",
+  retenue: "bg-success/10 text-success",
+  plus_tard: "bg-amber-50 text-warning",
+  ecartee: "bg-surface text-muted",
+};
+export type Idea = {
+  id: string; title: string; description: string | null; status: IdeaStatus; decision_note: string | null; created_at: string; updated_at: string;
+  author: string; mine?: boolean; can_edit?: boolean; has_task: boolean; task_id?: string | null;
+  comments: { id: string; body: string; created_at: string; author: string }[];
+};
