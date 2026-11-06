@@ -18,7 +18,8 @@ import {
 } from "@/app/finance-actions";
 import { Button, Field, Input, Modal, Select, Spinner, Textarea } from "@/components/ui";
 import type { SearchResult } from "@/lib/crm/types";
-import { todayISO } from "@/lib/format";
+import { formatDate, todayISO } from "@/lib/format";
+import { nextOpenDue } from "@/lib/finance/revenues";
 import { addDays } from "@/lib/finance/dates";
 import { FREQUENCY, MISSION_KIND, MISSION_STATUS } from "@/lib/finance/labels";
 import { eur, mulDiv } from "@/lib/finance/money";
@@ -103,7 +104,7 @@ export function CompanyPicker({ value, onChange, suggestions }: { value: ClientO
 // Revenu (facture émise ailleurs)
 // ---------------------------------------------------------------------------
 
-export type InvoiceDefaults = { company?: ClientOption | null; missionId?: string | null; from?: Invoice | null; edit?: Invoice | null };
+export type InvoiceDefaults = { company?: ClientOption | null; missionId?: string | null; from?: Invoice | null; edit?: Invoice | null; coverDate?: string | null };
 
 export function InvoiceModal(props: {
   open: boolean;
@@ -112,6 +113,8 @@ export function InvoiceModal(props: {
   missions: Mission[];
   vatEnabled: boolean;
   clients: ClientOption[];
+  /** factures existantes : pour rattacher la facture à la prochaine échéance non couverte du revenu */
+  invoices?: Invoice[];
 }) {
   const title = props.defaults.edit ? "Modifier le revenu" : props.defaults.from ? "Dupliquer le revenu" : "Ajouter un revenu";
   return (
@@ -121,7 +124,7 @@ export function InvoiceModal(props: {
   );
 }
 
-function InvoiceBody({ onClose, defaults, missions, vatEnabled, clients }: Parameters<typeof InvoiceModal>[0]) {
+function InvoiceBody({ onClose, defaults, missions, vatEnabled, clients, invoices = [] }: Parameters<typeof InvoiceModal>[0]) {
   const src = defaults.edit ?? defaults.from ?? null;
   const today = todayISO();
   const [key] = useState(() => crypto.randomUUID());
@@ -142,7 +145,8 @@ function InvoiceBody({ onClose, defaults, missions, vatEnabled, clients }: Param
   const companyMissions = missions.filter((m) => m.company_id === company?.id);
   const mission = companyMissions.find((m) => m.id === missionId) ?? null;
   const [cover, setCover] = useState(true);
-  const coverDate = !defaults.edit && mission?.kind === "recurrent" ? mission.next_due_date : null;
+  // échéance du revenu couverte par cette facture : jamais compter deux fois le même revenu
+  const coverDate = defaults.edit || !mission ? null : mission.id === defaults.missionId && defaults.coverDate ? defaults.coverDate : nextOpenDue(mission, invoices, today);
   const { pending, submit } = useSubmit();
 
   const pickMission = (id: string) => {
@@ -194,7 +198,7 @@ function InvoiceBody({ onClose, defaults, missions, vatEnabled, clients }: Param
       {coverDate && (
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={cover} onChange={(e) => setCover(e.target.checked)} />
-          Cette facture couvre l&apos;échéance prévue du {coverDate} (l&apos;échéance suivante sera calculée)
+          Cette facture correspond à l&apos;échéance prévue du {formatDate(coverDate)} (elle remplace cette prévision)
         </label>
       )}
       <div className="grid grid-cols-2 gap-3">

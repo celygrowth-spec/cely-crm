@@ -7,7 +7,9 @@ de prospection aux pipelines sans jamais être copiée.
 - **Prospection** : base de prospects, listes, modèles de séquences, campagnes manuelles, doublons, import/export CSV.
 - **Pipelines** : pipelines et étapes personnalisables, kanban avec glisser-déposer, gagné/perdu.
 - **À faire** : tâches et relances (en retard, aujourd'hui, à venir).
-- **Finance** : missions par fiche CRM, revenus (factures émises ailleurs) et paiements partiels, charges et
+- **Finance** : un seul formulaire « Ajouter un revenu » (ponctuel ou mensuel, échéances calculées et
+  encaissables une à une), factures émises ailleurs et paiements partiels, accueil en trois chiffres (encaissé,
+  reste à encaisser, charges payées) avec graphique Réel / Prévisions et « À encaisser », charges et
   abonnements, suivi URSSAF (estimé / déclaré / payé), trésorerie, prévisions, EBITDA indicatif, simulation.
 - **Rendez-vous** : pages publiques de réservation (`/rdv/<type>`), types de rendez-vous, disponibilités
   (plages, exceptions, congés), connexion Google Calendar, agenda, liste, rattachement CRM sans doublon,
@@ -176,6 +178,11 @@ Révoquer l'accès : Supabase › Authentication › OAuth Apps.
   comme payées. Une cotisation URSSAF payée ne sort qu'une fois de la trésorerie (vue `finance_cash_movements`).
   Les déclarations URSSAF saisies sont figées ; un changement de taux ne les modifie pas, les écarts sont signalés.
   Taux officiels encodés avec source et date de vérification (Réglages Finance) ; pour un autre statut, suivi manuel.
+  Revenus (`src/lib/finance/revenues.ts`) : un revenu est une mission ; un mensuel a des échéances calculées
+  depuis la première (jour absent → dernier jour du mois). Une échéance reste une prévision tant qu'aucune
+  facture ne la couvre (`forecast_due_date`, ou facture du même mois pour les anciennes données) : la facture
+  et son règlement la remplacent, rien n'est compté deux fois. Écritures en une transaction
+  (`finance_add_revenue`, `finance_settle_due`, `finance_update_revenue`, `finance_stop_revenue`).
 - **Archivage** plutôt que suppression ; les fiches archivées sont masquées et restaurables.
 
 ## Fichiers, sources et performance

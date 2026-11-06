@@ -13,12 +13,15 @@ import { settingsAt } from "@/lib/finance/calc";
 
 import { INVOICE_STATUS } from "@/lib/finance/labels";
 import { eur, sum } from "@/lib/finance/money";
-import type { FinanceData, Invoice } from "@/lib/finance/types";
+import type { FinanceData, Invoice, Mission } from "@/lib/finance/types";
+import { RevenueModal, SettleModal, StopModal, type SettleTarget } from "@/components/finance/revenue-forms";
+import { REVENUE_STATUS } from "@/lib/finance/revenues";
+import { RevenuePanel, RevenueTable, revenueRows } from "./revenue-list";
 import { formatDate, formatDateTime } from "@/lib/format";
 
-type Filters = { client: string; from: string; to: string; status: string; view: "factures" | "paiements" };
+type Filters = { client: string; from: string; to: string; status: string; type: "" | "ponctuel" | "mensuel"; view: "revenus" | "factures" | "paiements"; ids: string[] };
 
-export function RevenusView({ data, initial, selectedId }: { data: FinanceData; initial: Filters; selectedId: string | null }) {
+export function RevenusView({ data, initial, selectedId, revenueId }: { data: FinanceData; initial: Filters; selectedId: string | null; revenueId: string | null }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -26,6 +29,10 @@ export function RevenusView({ data, initial, selectedId }: { data: FinanceData; 
   const [modal, setModal] = useState<InvoiceDefaults | null>(null);
   const [paying, setPaying] = useState<Invoice | null>(null);
   const [crediting, setCrediting] = useState<Invoice | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<Mission | null>(null);
+  const [stopping, setStopping] = useState<Mission | null>(null);
+  const [settling, setSettling] = useState<SettleTarget | null>(null);
   const vat = settingsAt(data.settings, data.today)?.vat_enabled ?? false;
   const clients = useMemo(() => [...new Map(data.invoices.map((i) => [i.company_id, { id: i.company_id, name: i.company_name }])).values()].sort((a, b) => a.name.localeCompare(b.name)), [data.invoices]);
   const missionClients = [...new Map(data.missions.map((m) => [m.company_id, { id: m.company_id, name: m.company_name }])).values()];
@@ -33,13 +40,28 @@ export function RevenusView({ data, initial, selectedId }: { data: FinanceData; 
 
   const select = (id: string | null) => {
     const sp = new URLSearchParams(params.toString());
+    sp.delete("revenu");
     if (id) sp.set("facture", id);
     else sp.delete("facture");
     router.push(`${pathname}?${sp.toString()}`, { scroll: false });
   };
+  const openRevenue = (id: string | null) => {
+    const sp = new URLSearchParams(params.toString());
+    sp.delete("facture");
+    if (id) sp.set("revenu", id);
+    else sp.delete("revenu");
+    router.push(`${pathname}?${sp.toString()}`, { scroll: false });
+  };
+  const allClients = [...new Map([...suggestions, ...data.missions.map((m) => ({ id: m.company_id, name: m.company_name }))].map((c) => [c.id, c])).values()].sort((a, b) => a.name.localeCompare(b.name));
+  const revenues = revenueRows(data)
+    .filter((r) => !f.client || r.client === f.client)
+    .filter((r) => !f.type || r.kind === f.type)
+    .filter((r) => !f.status || (f.status === "a_traiter" ? ["en_retard", "a_encaisser", "partiel", "a_verifier"].includes(r.status) : r.status === f.status));
+  const revenue = revenueId ? data.missions.find((m) => m.id === revenueId) ?? null : null;
 
   const rows = data.invoices
     .filter((i) => !f.client || i.company_id === f.client)
+    .filter((i) => !f.ids.length || f.ids.includes(i.id))
     .filter((i) => (!f.from || i.issue_date >= f.from) && (!f.to || i.issue_date <= f.to))
     .filter((i) => !f.status || (f.status === "ouvertes" ? ["a_encaisser", "partielle", "en_retard"].includes(i.status) : i.status === f.status))
     .sort((a, b) => b.issue_date.localeCompare(a.issue_date) || b.created_at.localeCompare(a.created_at));
@@ -55,30 +77,47 @@ export function RevenusView({ data, initial, selectedId }: { data: FinanceData; 
     <div className="max-w-6xl">
       <PageHeader
         title="Revenus"
-        description="Factures émises dans votre outil de facturation, enregistrées ici avec leurs paiements. Aucune facture n'est générée ni envoyée."
+        description="Ponctuels et mensuels au même endroit. Une échéance reste une prévision tant qu'aucune facture ou aucun règlement ne la couvre. Aucune facture n'est générée ni envoyée."
         actions={
           <>
             <a href="/api/finance/export?type=revenus" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line px-3 text-sm font-semibold hover:bg-surface"><Download size={14} /> Revenus CSV</a>
             <a href="/api/finance/export?type=paiements" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line px-3 text-sm font-semibold hover:bg-surface"><Download size={14} /> Paiements CSV</a>
-            <Button variant="primary" onClick={() => setModal({})}><Plus size={15} /> Ajouter un revenu</Button>
+            {f.view === "factures" && <Button onClick={() => setModal({})}>Enregistrer une facture</Button>}
+            <Button variant="primary" onClick={() => setAdding(true)}><Plus size={15} /> Ajouter un revenu</Button>
           </>
         }
       />
 
       <div className="mb-4 flex flex-wrap items-end gap-2">
         <div role="group" aria-label="Affichage" className="inline-flex rounded-lg border border-line p-0.5">
-          {(["factures", "paiements"] as const).map((v) => (
-            <button key={v} aria-pressed={f.view === v} onClick={() => setF({ ...f, view: v })} className={cn("rounded-md px-3 py-1 text-xs font-semibold", f.view === v ? "bg-ink text-white" : "text-muted")}>
-              {v === "factures" ? "Factures et avoirs" : "Paiements reçus"}
+          {(["revenus", "factures", "paiements"] as const).map((v) => (
+            <button key={v} aria-pressed={f.view === v} onClick={() => setF({ ...f, view: v, status: "" })} className={cn("rounded-md px-3 py-1 text-xs font-semibold", f.view === v ? "bg-ink text-white" : "text-muted")}>
+              {v === "revenus" ? "Revenus" : v === "factures" ? "Factures et avoirs" : "Paiements reçus"}
             </button>
           ))}
         </div>
+        {f.view === "revenus" && (
+          <div role="group" aria-label="Type" className="inline-flex rounded-lg border border-line p-0.5">
+            {([["", "Tous"], ["ponctuel", "Ponctuels"], ["mensuel", "Mensuels"]] as const).map(([k, l]) => (
+              <button key={k} aria-pressed={f.type === k} onClick={() => setF({ ...f, type: k })} className={cn("rounded-md px-3 py-1 text-xs font-semibold", f.type === k ? "bg-violet-soft text-violet-strong" : "text-muted")}>{l}</button>
+            ))}
+          </div>
+        )}
         <Select aria-label="Client" value={f.client} onChange={(e) => setF({ ...f, client: e.target.value })} className="h-8 w-48">
           <option value="">Tous les clients</option>
-          {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {(f.view === "revenus" ? allClients : clients).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Select>
+        {f.view === "revenus" && (
+          <Select aria-label="Statut" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} className="h-8 w-44">
+            <option value="">Tous les statuts</option>
+            <option value="a_traiter">À traiter</option>
+            {Object.entries(REVENUE_STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </Select>
+        )}
+        {f.view !== "revenus" && <>
         <Input aria-label="Du" type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} className="h-8 w-36" />
         <Input aria-label="Au" type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} className="h-8 w-36" />
+        </>}
         {f.view === "factures" && (
           <Select aria-label="Statut" value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} className="h-8 w-48">
             <option value="">Tous les statuts</option>
@@ -86,10 +125,22 @@ export function RevenusView({ data, initial, selectedId }: { data: FinanceData; 
             {Object.entries(INVOICE_STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </Select>
         )}
-        {(f.client || f.from || f.to || f.status) && <Button size="sm" variant="ghost" onClick={() => setF({ ...f, client: "", from: "", to: "", status: "" })}>Effacer les filtres</Button>}
+        {(f.client || f.from || f.to || f.status || f.type || f.ids.length > 0) && <Button size="sm" variant="ghost" onClick={() => setF({ ...f, client: "", from: "", to: "", status: "", type: "", ids: [] })}>Effacer les filtres</Button>}
       </div>
+      {f.ids.length > 0 && f.view === "factures" && <p className="mb-2 text-xs text-muted">{f.ids.length} facture(s) sélectionnée(s) depuis l&apos;accueil.</p>}
 
-      {f.view === "factures" ? (
+      {f.view === "revenus" ? (
+        data.missions.length || data.invoices.length ? (
+          <RevenueTable
+            rows={revenues}
+            onOpen={(r) => (r.type === "mission" ? openRevenue(r.id) : select(r.id))}
+            onSettle={(m, date, amount) => setSettling({ mission: m, date, amount })}
+            onPay={setPaying}
+          />
+        ) : (
+          <EmptyState title="Aucun revenu" description="Ajoutez un revenu ponctuel ou mensuel : il apparaît aussitôt dans vos prévisions." action={<Button variant="primary" onClick={() => setAdding(true)}><Plus size={15} /> Ajouter un revenu</Button>} />
+        )
+      ) : f.view === "factures" ? (
         rows.length ? (
           <Card className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">
@@ -129,7 +180,7 @@ export function RevenusView({ data, initial, selectedId }: { data: FinanceData; 
             </table>
           </Card>
         ) : (
-          <EmptyState title="Aucun revenu" description="Ajoutez une facture émise pour suivre son encaissement." action={<Button variant="primary" onClick={() => setModal({})}>Ajouter un revenu</Button>} />
+          <EmptyState title="Aucune facture" description="Enregistrez une facture émise pour suivre son encaissement." action={<Button variant="primary" onClick={() => setModal({})}>Enregistrer une facture</Button>} />
         )
       ) : payments.length ? (
         <Card className="overflow-x-auto">
@@ -165,7 +216,23 @@ export function RevenusView({ data, initial, selectedId }: { data: FinanceData; 
           onOpen={select}
         />
       )}
-      <InvoiceModal open={!!modal} onClose={() => setModal(null)} defaults={modal ?? {}} missions={data.missions} vatEnabled={vat} clients={suggestions} />
+      {revenue && !selected && (
+        <RevenuePanel
+          mission={revenue}
+          data={data}
+          onClose={() => openRevenue(null)}
+          onEdit={() => setEditing(revenue)}
+          onStop={() => setStopping(revenue)}
+          onSettle={(date, amount) => setSettling({ mission: revenue, date, amount })}
+          onPay={setPaying}
+          onInvoice={(coverDate) => setModal({ company: { id: revenue.company_id, name: revenue.company_name }, missionId: revenue.id, coverDate })}
+          onOpenInvoice={select}
+        />
+      )}
+      <InvoiceModal open={!!modal} onClose={() => setModal(null)} defaults={modal ?? {}} missions={data.missions} vatEnabled={vat} clients={suggestions} invoices={data.invoices} />
+      <RevenueModal open={adding || !!editing} onClose={() => { setAdding(false); setEditing(null); }} clients={allClients} vatEnabled={vat} edit={editing} onSaved={openRevenue} />
+      <SettleModal target={settling} onClose={() => setSettling(null)} vatEnabled={vat} />
+      <StopModal mission={stopping} onClose={() => setStopping(null)} />
       <PaymentModal invoice={paying} onClose={() => setPaying(null)} />
       <CreditNoteModal invoice={crediting} onClose={() => setCrediting(null)} />
     </div>
