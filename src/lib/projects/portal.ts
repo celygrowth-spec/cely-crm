@@ -26,7 +26,7 @@ export async function portalRpc<T>(fn: string, args: Record<string, unknown> = {
   if (error) {
     if (error.code === "28000") throw new PortalSessionError("Session expirée");
     if (error.code === "P0002") throw new PortalError(error.message, "not_found");
-    if (error.code === "42501") throw new PortalError(/archivé|autoris|réservé/i.test(error.message) ? error.message : "Action non autorisée.", "forbidden");
+    if (error.code === "42501") throw new PortalError(/archivé|autoris|réservé|ouvert/i.test(error.message) ? error.message : "Action non autorisée.", "forbidden");
     if (error.code === "22023") throw new PortalError(error.message, "invalid");
     console.error("[portail]", fn, error.message);
     throw new PortalError("Le service est momentanément indisponible. Réessayez.", "server");

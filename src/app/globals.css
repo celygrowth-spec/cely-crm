@@ -98,8 +98,13 @@ button, a, input, select, textarea { transition-property: color, background-colo
 /* Timeline du portail : entrée discrète des phases, coche qui « répond » à une étape terminée. */
 @keyframes tl-grow { from { transform: scaleX(0.6); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes tl-pop { 0% { transform: scale(0.4); } 70% { transform: scale(1.25); } 100% { transform: scale(1); } }
-@keyframes mascot-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
 .tl-in { animation: tl-grow 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both; transform-origin: left; }
 .tl-check { animation: tl-pop 420ms 300ms ease-out both; }
 .tl-paused { background-image: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.18) 0 6px, transparent 6px 12px); }
-.mascot-bob { animation: mascot-bob 3s ease-in-out 2; }
+
+/* Mascotte : arrivée discrète, petit saut quand une étape vient d'être terminée. Dépassement d'une phase. */
+@keyframes mascot-enter { 0% { transform: translateY(6px) scale(0.6); opacity: 0; } 70% { transform: translateY(-2px) scale(1.05); opacity: 1; } 100% { transform: none; } }
+@keyframes mascot-cheer { 0%, 100% { transform: none; } 25% { transform: translateY(-7px) rotate(-8deg); } 50% { transform: translateY(0) rotate(0); } 70% { transform: translateY(-4px) rotate(6deg); } }
+.mascot-enter { animation: mascot-enter 520ms 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.mascot-cheer { animation: mascot-cheer 900ms ease-in-out 2; }
+.tl-overrun { background-image: repeating-linear-gradient(135deg, rgb(245 158 11 / 0.35) 0 5px, rgb(245 158 11 / 0.12) 5px 10px); }

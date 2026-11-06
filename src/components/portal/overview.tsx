@@ -1,8 +1,8 @@
-// Vue d'ensemble du portail. Hiérarchie : 1. état du projet, 2. prochain point, 3. ce qui vous attend,
+// Vue d'ensemble du portail. Hiérarchie : 1. état du projet, 2. mes prochains points, 3. ce qui vous attend,
 // 4. timeline, 5. détail chronologique. Rien n'est inventé : une section sans contenu publié reste discrète.
 import Link from "next/link";
 import { CalendarRange, PauseCircle, Video } from "lucide-react";
-import { PROJECT_STATUS_LABELS, type PortalProject, type PortalProjectView } from "@/lib/projects/types";
+import { PROJECT_STATUS_LABELS, type PortalMeeting, type PortalProject, type PortalProjectView } from "@/lib/projects/types";
 import { formatDate } from "@/lib/format";
 import { MeetingTime } from "./meeting-time";
 import { TimelineList, TimelineVisual, currentPhase, isLate } from "./timeline";
@@ -67,26 +67,67 @@ export function ProjectStateCard({ project, view }: { project: PortalProject; vi
   );
 }
 
-export function NextMeetingCard({ view, linkBase }: { view: PortalProjectView; linkBase?: string }) {
-  const next = view.meetings.find((m) => m.status === "upcoming");
+export type UpcomingMeeting = PortalMeeting & { project_id?: string; project_name?: string };
+
+const joinLabel = (url: string) => (/^https:\/\/meet\.google\.com\//.test(url) ? "Rejoindre sur Google Meet" : "Rejoindre le point");
+
+function JoinOrPending({ m, compact }: { m: UpcomingMeeting; compact?: boolean }) {
+  if (m.meeting_url) {
+    return (
+      <a href={m.meeting_url} target="_blank" rel="noopener noreferrer"
+        className={compact
+          ? "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-line px-3 text-xs font-semibold text-ink hover:border-violet hover:text-violet-strong"
+          : "inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-white hover:bg-violet-strong"}>
+        <Video size={compact ? 14 : 16} aria-hidden /> {joinLabel(m.meeting_url)}
+      </a>
+    );
+  }
+  if (m.location_kind === "phone") return <span className="shrink-0 text-xs text-muted">Point téléphonique</span>;
+  return <span className={`shrink-0 rounded-full bg-surface px-2.5 py-1 font-label text-xs text-muted ${compact ? "" : "self-start sm:self-auto"}`}>Lien à venir</span>;
+}
+
+/**
+ * « Mes prochains points » : le prochain mis en avant, puis jusqu'à deux suivants en version compacte.
+ * Ne reçoit que des points rattachés et partagés ; l'ordre suit la date réelle (un report le déplace),
+ * un point annulé n'y figure pas (il reste dans le déroulé du projet).
+ */
+export function UpcomingMeetings({ meetings, hrefFor, showProject }: { meetings: UpcomingMeeting[]; hrefFor?: (m: UpcomingMeeting) => string; showProject?: boolean }) {
+  const list = meetings.filter((m) => m.status === "upcoming").sort((a, b) => a.starts_at.localeCompare(b.starts_at)).slice(0, 3);
+  const [next, ...rest] = list;
+  const title = (m: UpcomingMeeting, cls: string) => {
+    const href = hrefFor?.(m);
+    return href ? <Link href={href} className={`${cls} hover:text-violet-strong hover:underline`}>{m.title}</Link> : <span className={cls}>{m.title}</span>;
+  };
   return (
-    <section aria-labelledby="prochain-point" className="rounded-2xl border border-line bg-white p-5">
-      <h2 id="prochain-point" className="font-label text-[11px] font-semibold tracking-wide text-muted uppercase">Prochain point</h2>
-      {next ? (
-        <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="min-w-0 flex-1">
-            <p className="font-display text-lg font-bold text-ink">{next.title}</p>
-            <p className="text-sm text-ink"><MeetingTime start={next.starts_at} end={next.ends_at} tz={next.timezone} /></p>
-            {linkBase && <Link href={`${linkBase}/points/${next.id}`} className="text-xs font-semibold text-violet-strong underline">Ordre du jour et détails</Link>}
+    <section aria-labelledby="prochains-points" className="rounded-2xl border border-line bg-white p-5" data-upcoming>
+      <h2 id="prochains-points" className="font-label text-[11px] font-semibold tracking-wide text-muted uppercase">Mes prochains points</h2>
+      {!next ? <p className="mt-1 text-sm text-muted">Aucun point prévu pour le moment.</p> : (
+        <>
+          <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center" data-meeting={next.id}>
+            <div className="min-w-0 flex-1">
+              {showProject && next.project_name && <p className="font-label text-[11px] font-semibold text-violet-strong">{next.project_name}</p>}
+              {title(next, "font-display text-lg leading-snug font-bold text-ink")}
+              <p className="text-sm text-ink"><MeetingTime start={next.starts_at} end={next.ends_at} tz={next.timezone} /></p>
+            </div>
+            <JoinOrPending m={next} />
           </div>
-          {next.meeting_url ? (
-            <a href={next.meeting_url} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-ink px-4 text-sm font-semibold text-white hover:bg-violet-strong">
-              <Video size={16} aria-hidden /> Rejoindre le point
-            </a>
-          ) : next.location_kind === "phone" ? <span className="text-sm text-muted">Point téléphonique</span> : null}
-        </div>
-      ) : (
-        <p className="mt-1 text-sm text-muted">Aucun point programmé pour le moment.</p>
+          {rest.length > 0 && (
+            <ul className="mt-4 divide-y divide-line border-t border-line">
+              {rest.map((m) => (
+                <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5" data-meeting={m.id}>
+                  <div className="min-w-0 flex-1">
+                    {title(m, "text-sm font-semibold text-ink")}
+                    <p className="text-xs text-muted">
+                      {showProject && m.project_name && <span className="font-semibold text-violet-strong">{m.project_name} · </span>}
+                      <MeetingTime start={m.starts_at} end={m.ends_at} tz={m.timezone} />
+                    </p>
+                  </div>
+                  <JoinOrPending m={m} compact />
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </section>
   );
@@ -143,7 +184,7 @@ export function PortalOverview({ project, linkBase, attention }: { project: Port
   return (
     <div className="space-y-5">
       <ProjectStateCard project={project} view={project} />
-      <NextMeetingCard view={project} linkBase={linkBase} />
+      <UpcomingMeetings meetings={project.meetings} hrefFor={linkBase ? (m) => `${linkBase}/points/${m.id}` : undefined} />
       {attention ?? <WaitingForYou view={project} linkBase={linkBase} />}
       {hasPlan && (
         <section aria-labelledby="deroule" className="space-y-4">
