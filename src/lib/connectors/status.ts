@@ -221,8 +221,8 @@ const fmtTime = (iso: string) => new Intl.DateTimeFormat("fr-FR", { day: "numeri
 
 const MCP = {
   key: "claude_mcp" as const, name: "Claude · MCP Cely CRM", usage: "Accès au CRM depuis Claude",
-  feeds: ["Recherche et lecture des fiches, pipelines, relances", "Création de fiches, contacts, tâches et notes d'échange (journalisées, sans fusion ni suppression)"],
-  links: [{ label: "Paramètres", href: "/parametres" }],
+  feeds: ["Recherche et lecture des fiches, pipelines, relances", "Création de fiches, contacts, tâches et notes d'échange (journalisées, sans fusion ni suppression)", "Dossiers de diagnostic ouverts depuis une fiche (emails et appels lisibles pour cette seule fiche)"],
+  links: [{ label: "Bibliothèque de diagnostic", href: "/parametres/diagnostic" }],
 };
 
 /** Accès accordés par le propriétaire (Supabase Auth, serveur OAuth 2.1), avec délai maximal. */

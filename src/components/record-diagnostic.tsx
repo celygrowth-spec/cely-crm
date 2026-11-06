@@ -1,0 +1,265 @@
+"use client";
+
+// Onglet Diagnostic : le CRM crée le dossier et ouvre Claude avec un court message déjà écrit.
+// Claude lit le reste dans le CRM, puis y dépose questions et versions.
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { Copy, Download, ExternalLink, Sparkles } from "lucide-react";
+import { apiGet, attempt } from "@/lib/client/query";
+import { DIAGNOSTIC_STATUS_LABELS, answersPrompt, claudeLink, startPrompt, type Diagnostic, type DiagnosticQuestion, type DiagnosticStatus } from "@/lib/crm/diagnostic-rules";
+import { formatDateTime } from "@/lib/format";
+import { Badge, Button, Input, SaveIndicator, Skeleton, Textarea } from "./ui";
+
+const TONES: Record<DiagnosticStatus, "neutral" | "warning" | "success" | "danger"> = {
+  waiting_claude: "neutral",
+  researching: "neutral",
+  questions_ready: "warning",
+  answers_sent: "neutral",
+  generating: "neutral",
+  version_ready: "success",
+  failed: "danger",
+};
+// Claude travaille : l'écran se met à jour seul
+const WORKING: DiagnosticStatus[] = ["waiting_claude", "researching", "answers_sent", "generating"];
+
+const post = <T,>(url: string, body: Record<string, unknown>) =>
+  attempt(async () => {
+    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    return (await res.json()) as { ok: true; data: T } | { ok: false; error: string };
+  });
+
+/** Ouvre Claude et garde le message sous la main si le lien ne remplit pas la case. */
+function ClaudeActions({ prompt, chatUrl, label }: { prompt: string; chatUrl: string | null; label: string }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <a href={claudeLink(prompt, chatUrl)} target="_blank" rel="noreferrer noopener" className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-ink px-3.5 text-sm font-semibold text-white hover:bg-violet-strong">
+        <ExternalLink size={14} /> {label}
+      </a>
+      <Button onClick={async () => { await navigator.clipboard.writeText(prompt); toast.success("Message copié"); }}><Copy size={14} /> Copier le message</Button>
+      <p className="w-full text-xs text-muted">Dans Claude, appuyez sur Entrée pour envoyer. Si la case reste vide, collez le message copié.</p>
+    </div>
+  );
+}
+
+function ChatLink({ dossier, reload }: { dossier: Diagnostic; reload: () => void }) {
+  const [url, setUrl] = useState(dossier.chat_url ?? "");
+  async function save() {
+    if (url.trim() === (dossier.chat_url ?? "")) return;
+    const r = await post<null>(`/api/diagnostics/${dossier.id}`, { op: "chat", url });
+    if (!r.ok) return toast.error(r.error);
+    toast.success("Chat associé au dossier");
+    reload();
+  }
+  return (
+    <label className="block text-sm">
+      <span className="font-label text-xs font-semibold text-muted">Adresse du chat Claude, pour y revenir</span>
+      <Input className="mt-1" placeholder="https://claude.ai/chat/…" value={url} onChange={(e) => setUrl(e.target.value)} onBlur={save} />
+    </label>
+  );
+}
+
+function Question({ dossierId, q, locked, onSaved }: { dossierId: string; q: DiagnosticQuestion; locked: boolean; onSaved: () => void }) {
+  const [answer, setAnswer] = useState(q.answer ?? "");
+  const [dontKnow, setDontKnow] = useState(q.dont_know);
+  const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const seq = useRef(0);
+
+  async function save(nextAnswer: string, nextDontKnow: boolean) {
+    const token = ++seq.current;
+    setState("saving");
+    const r = await post<null>(`/api/diagnostics/${dossierId}`, { op: "answer", question_id: q.id, answer: nextAnswer, dont_know: nextDontKnow });
+    if (token !== seq.current) return; // une sauvegarde plus récente est partie
+    if (!r.ok) {
+      setState("error");
+      toast.error(r.error);
+      return;
+    }
+    setState("saved");
+    onSaved();
+  }
+
+  return (
+    <li className="rounded-xl border border-line p-3">
+      <p className="text-sm font-semibold"><span className="text-muted">{q.position}.</span> {q.question}</p>
+      {q.why && <p className="mt-0.5 text-xs text-muted">{q.why}</p>}
+      {locked ? (
+        <p className="mt-2 text-sm whitespace-pre-wrap">{q.dont_know ? <span className="text-muted">Je ne sais pas</span> : q.answer}</p>
+      ) : (
+        <>
+          <Textarea
+            className="mt-2"
+            rows={2}
+            value={answer}
+            disabled={dontKnow}
+            aria-label={`Réponse à la question ${q.position}`}
+            onChange={(e) => setAnswer(e.target.value)}
+            onBlur={() => { if (answer !== (q.answer ?? "")) save(answer, dontKnow); }}
+          />
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <label className="flex items-center gap-1.5 text-xs text-muted">
+              <input type="checkbox" checked={dontKnow} onChange={(e) => { setDontKnow(e.target.checked); save(answer, e.target.checked); }} /> Je ne sais pas
+            </label>
+            {state !== "idle" && <SaveIndicator state={state} />}
+          </div>
+        </>
+      )}
+    </li>
+  );
+}
+
+function Dossier({ dossier, reload }: { dossier: Diagnostic; reload: () => void }) {
+  const [sending, setSending] = useState(false);
+  const locked = dossier.status !== "questions_ready";
+  const missing = dossier.questions.filter((q) => !q.answer && !q.dont_know).length;
+
+  async function submit() {
+    setSending(true);
+    const r = await post<string>(`/api/diagnostics/${dossier.id}`, { op: "submit" });
+    setSending(false);
+    if (!r.ok) return toast.error(r.error);
+    reload();
+  }
+
+  async function download(fileId: string) {
+    const r = await post<string>("/api/files", { op: "url", id: fileId, download: true });
+    if (!r.ok) return toast.error(r.error);
+    window.location.assign(r.data);
+  }
+
+  return (
+    <div className="grid gap-5">
+      <section className="grid gap-2 rounded-xl border border-line p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge tone={TONES[dossier.status]}>{DIAGNOSTIC_STATUS_LABELS[dossier.status]}</Badge>
+          <span className="text-xs text-muted">Dossier créé le {formatDateTime(dossier.created_at)}</span>
+        </div>
+        {dossier.status === "failed" && dossier.last_error && <p className="text-sm text-danger">{dossier.last_error}</p>}
+        {dossier.status === "waiting_claude" && <ClaudeActions prompt={startPrompt(dossier.id)} chatUrl={null} label="Lancer dans Claude" />}
+        {dossier.status === "answers_sent" && <ClaudeActions prompt={answersPrompt(dossier.id)} chatUrl={dossier.chat_url} label="Générer les slides dans Claude" />}
+        <ChatLink key={dossier.chat_url ?? ""} dossier={dossier} reload={reload} />
+      </section>
+
+      {dossier.summary && (
+        <section>
+          <h3 className="font-display text-base font-bold">Synthèse</h3>
+          <p className="mt-1 text-sm whitespace-pre-wrap">{dossier.summary}</p>
+          {dossier.sources.length > 0 && (
+            <ul className="mt-2 space-y-0.5 text-xs text-muted">
+              {dossier.sources.map((s, i) => (
+                <li key={i}>
+                  {s.url && /^https?:\/\//.test(s.url) ? <a className="underline" href={s.url} target="_blank" rel="noreferrer noopener">{s.titre}</a> : s.titre}
+                  {" · "}{s.nature === "fait" ? "Fait vérifié" : s.nature === "hypothese" ? "Hypothèse" : "Fourni par le prospect"}
+                  {s.date && ` · ${s.date}`}{s.marche && ` · ${s.marche}`}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {dossier.questions.length > 0 && (
+        <section>
+          <h3 className="font-display text-base font-bold">Questions</h3>
+          <ol className="mt-2 grid gap-2">
+            {dossier.questions.map((q) => <Question key={q.id} dossierId={dossier.id} q={q} locked={locked} onSaved={reload} />)}
+          </ol>
+          {!locked && (
+            <div className="mt-3">
+              <Button variant="primary" disabled={sending || missing > 0} onClick={submit}>{sending ? "Envoi…" : "Envoyer et générer les slides"}</Button>
+              {missing > 0 && <p className="mt-1 text-xs text-muted">Encore {missing} question{missing > 1 ? "s" : ""} sans réponse.</p>}
+            </div>
+          )}
+        </section>
+      )}
+
+      {dossier.versions.length > 0 && (
+        <section>
+          <h3 className="font-display text-base font-bold">Versions</h3>
+          <ul className="mt-2 space-y-1">
+            {dossier.versions.map((v) => (
+              <li key={v.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm">
+                <span className="font-semibold">V{v.version}</span>
+                <Badge tone={v.status === "ready" ? "success" : "neutral"}>{v.status === "ready" ? "Fichier reçu" : "Dépôt en cours"}</Badge>
+                <span className="text-xs text-muted">{formatDateTime(v.ready_at ?? v.created_at)}</span>
+                {v.status === "ready" && (v.file_id
+                  ? <Button size="sm" className="ml-auto" onClick={() => download(v.file_id!)}><Download size={13} /> Télécharger</Button>
+                  : <span className="ml-auto text-xs text-muted">Fichier supprimé de la fiche</span>)}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
+}
+
+export function RecordDiagnostic({ companyId, startSignal }: { companyId: string; startSignal: number }) {
+  const qc = useQueryClient();
+  const key = ["company-diagnostics", companyId];
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: key,
+    queryFn: ({ signal }) => apiGet<Diagnostic[]>(`/api/fiches/${companyId}/diagnostics`, signal),
+    refetchInterval: (q) => (q.state.data?.some((d) => WORKING.includes(d.status)) ? 15_000 : false),
+  });
+  const [selected, setSelected] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  // une même demande garde sa clé : un double clic ou une nouvelle tentative ne crée pas un second dossier
+  const requestKey = useRef<string | null>(null);
+  const reload = () => qc.invalidateQueries({ queryKey: key });
+
+  async function create() {
+    if (creating) return;
+    setCreating(true);
+    requestKey.current ??= crypto.randomUUID();
+    const r = await post<string>(`/api/fiches/${companyId}/diagnostics`, { request_key: requestKey.current });
+    setCreating(false);
+    if (!r.ok) return toast.error(r.error);
+    requestKey.current = null;
+    setSelected(r.data);
+    await qc.invalidateQueries({ queryKey: key });
+  }
+
+  async function askNew() {
+    if (data?.length && !confirm("Créer un nouveau dossier de diagnostic ? Les dossiers existants restent conservés.")) return;
+    await create();
+  }
+
+  // le bouton de l'en-tête demande un lancement
+  const seen = useRef(0);
+  const ready = !!data;
+  const empty = data?.length === 0;
+  useEffect(() => {
+    if (!startSignal || startSignal === seen.current || !ready) return;
+    seen.current = startSignal;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- action demandée depuis l'en-tête de la fiche
+    if (empty) create();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startSignal, ready, empty]);
+
+  if (isLoading) return <Skeleton className="h-40 w-full" />;
+  if (isError) return <p className="text-sm text-danger">{error.message} <button className="underline" onClick={() => refetch()}>Réessayer</button></p>;
+  if (!data?.length) {
+    return (
+      <div className="rounded-xl border border-dashed border-line p-5 text-center">
+        <p className="font-semibold">Aucun diagnostic pour cette fiche</p>
+        <p className="mt-1 text-sm text-muted">Le CRM crée un dossier et ouvre Claude, qui lit la fiche et la bibliothèque, fait ses recherches, puis vous pose ses questions ici.</p>
+        <Button className="mt-3" variant="primary" disabled={creating} onClick={create}><Sparkles size={14} /> Générer un diagnostic</Button>
+      </div>
+    );
+  }
+  const current = data.find((d) => d.id === selected) ?? data[0];
+  return (
+    <div className="grid gap-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {data.length > 1 && (
+          <select className="h-9 rounded-lg border border-line bg-white px-2 text-sm" value={current.id} onChange={(e) => setSelected(e.target.value)} aria-label="Dossier affiché">
+            {data.map((d) => <option key={d.id} value={d.id}>Dossier du {formatDateTime(d.created_at)}</option>)}
+          </select>
+        )}
+        <Button className="ml-auto" disabled={creating} onClick={askNew}><Sparkles size={14} /> Nouveau diagnostic</Button>
+      </div>
+      <Dossier key={current.id} dossier={current} reload={reload} />
+    </div>
+  );
+}

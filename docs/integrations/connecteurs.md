@@ -53,4 +53,4 @@ Une variable d'environnement ou un jeton enregistré ne suffit jamais à affiche
 
 ## Migration
 
-`20261109000100_connecteurs.sql` : table `connector_checks` (propriétaire uniquement). Additive.
+`20261109000200_connecteurs.sql` : table `connector_checks` (propriétaire uniquement). Additive.

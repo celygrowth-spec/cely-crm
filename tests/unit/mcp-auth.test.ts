@@ -75,15 +75,30 @@ describe("connecteur MCP : périmètre des outils", () => {
     registerTools({ registerTool: (n: string) => names.push(n) } as never, () => ({}) as never);
     expect(names.sort()).toEqual([
       "add_person",
+      "confirm_diagnostic_version",
       "create_company",
       "create_task",
       "get_company",
+      "get_diagnostic_email_thread",
+      "get_diagnostic_file_url",
+      "get_diagnostic_transcript",
+      "get_library_file_url",
+      "list_diagnostic_appointments",
+      "list_diagnostic_calls",
+      "list_diagnostic_emails",
+      "list_diagnostic_files",
+      "list_diagnostic_history",
       "list_followups",
       "list_pipelines",
       "log_interaction",
       "move_company",
+      "open_diagnostic",
       "postpone_task",
+      "report_diagnostic_failure",
+      "save_diagnostic_questions",
+      "save_diagnostic_research",
       "search_companies",
+      "start_diagnostic_version",
     ]);
     expect(names.some((n) => /send|merge|delete|bulk/.test(n))).toBe(false);
   });

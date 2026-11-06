@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Archive, ArchiveRestore, Ban, CheckSquare, ChevronDown, ExternalLink, FileUp, Mail, Maximize2, MessageSquarePlus, MoreHorizontal, Pencil, Phone, Plus, StickyNote, UserRound, X } from "lucide-react";
+import { Archive, ArchiveRestore, Ban, CheckSquare, ChevronDown, ExternalLink, FileUp, Mail, Maximize2, MessageSquarePlus, MoreHorizontal, Pencil, Phone, Plus, Sparkles, StickyNote, UserRound, X } from "lucide-react";
 import { setArchivedAction } from "@/app/actions";
 import { attempt } from "@/lib/client/query";
 import type { ProspectStatus } from "@/lib/crm/types";
@@ -18,6 +18,7 @@ const TABS: { key: RecordTab; label: string }[] = [
   { key: "overview", label: "Aperçu" },
   { key: "activity", label: "Activité" },
   { key: "details", label: "Détails" },
+  { key: "diagnostic", label: "Diagnostic" },
 ];
 
 /** Ferme au clic extérieur et à Échap, sans que Échap ne ferme aussi le panneau de la fiche. */
@@ -216,7 +217,7 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
         )}
       </div>
 
-      <div className="mt-1 flex items-center justify-between gap-2">
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2">
         <nav role="tablist" aria-label="Sections de la fiche" className="flex gap-0.5">
           {TABS.map((t) => (
             <button
@@ -233,7 +234,8 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
             </button>
           ))}
         </nav>
-        <div className="flex shrink-0 items-center gap-1 pb-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1 pb-1 max-sm:pt-1">
+          <QuickAction icon={Sparkles} label="Générer un diagnostic" onClick={ctx.generateDiagnostic} />
           <QuickAction icon={StickyNote} label="Ajouter une note" onClick={() => ctx.logExchange("note")} />
           <QuickAction icon={CheckSquare} label="Créer une tâche" onClick={ctx.newTask} />
           <QuickAction icon={Mail} label="Écrire un email" onClick={() => ctx.compose({})} warn={c.do_not_contact} />
