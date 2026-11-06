@@ -62,7 +62,7 @@ function failureFor(code: string, retryAfter?: number): FirefliesFailure {
   return new FirefliesFailure("temporary", "unknown", "Réponse inattendue de Fireflies.");
 }
 
-async function graphql<T>(query: string, variables: Record<string, unknown>): Promise<{ data: T; errors: GraphQlError[] }> {
+async function graphql<T>(query: string, variables: Record<string, unknown>, timeoutMs = TIMEOUT_MS): Promise<{ data: T; errors: GraphQlError[] }> {
   const key = firefliesApiKey();
   if (!key) throw new FirefliesFailure("temporary", "not_configured", "Clé API Fireflies absente (FIREFLIES_API_KEY).");
   let res: Response;
@@ -72,7 +72,7 @@ async function graphql<T>(query: string, variables: Record<string, unknown>): Pr
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       body: JSON.stringify({ query, variables }),
       cache: "no-store",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch {
     throw new FirefliesFailure("temporary", "network", "Fireflies est injoignable.");
@@ -107,6 +107,13 @@ export async function fetchTranscript(id: string): Promise<FetchedTranscript> {
   }
   if (!data.user?.user_id) throw new FirefliesFailure("temporary", "account", "Compte Fireflies illisible.");
   return { account: { id: data.user.user_id, email: data.user.email ?? null }, transcript: data.transcript };
+}
+
+/** Vérification de la clé (espace Connecteurs) : compte associé, sans lire aucun appel. */
+export async function fetchAccount(timeoutMs = 10_000): Promise<{ id: string; email: string | null }> {
+  const { data } = await graphql<{ user?: { user_id?: string | null; email?: string | null } | null }>(`query CrmAccount { user { user_id email } }`, {}, timeoutMs);
+  if (!data.user?.user_id) throw new FirefliesFailure("temporary", "account", "Compte Fireflies illisible.");
+  return { id: data.user.user_id, email: data.user.email ?? null };
 }
 
 export async function listTranscriptIds(from: Date, to: Date, skip: number, limit: number): Promise<string[]> {

@@ -11,6 +11,9 @@ de prospection aux pipelines sans jamais être copiée.
   encaissables une à une), factures émises ailleurs et paiements partiels, accueil en trois chiffres (encaissé,
   reste à encaisser, charges payées) avec graphique Réel / Prévisions et « À encaisser », charges et
   abonnements, suivi URSSAF (estimé / déclaré / payé), trésorerie, prévisions, EBITDA indicatif, simulation.
+- **Connecteurs** (Paramètres › Connecteurs) : Gmail, Google Agenda et Meet, Fireflies, Claude (MCP) et
+  outils gérés dans Claude, en trois groupes (à vérifier, connectés, à configurer), vérification à la demande,
+  accès Claude listés et révocables. Voir `docs/integrations/connecteurs.md`.
 - **Rendez-vous** : pages publiques de réservation (`/rdv/<type>`), types de rendez-vous, disponibilités
   (plages, exceptions, congés), connexion Google Calendar, agenda, liste, rattachement CRM sans doublon,
   annulation et report par lien privé. Configuration : `docs/integrations/google-calendar.md`.
