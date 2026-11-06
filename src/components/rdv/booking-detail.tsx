@@ -17,7 +17,8 @@ import { apiGet, attempt, useSync } from "@/lib/client/query";
 import type { SearchResult } from "@/lib/crm/types";
 import { formatDateTime } from "@/lib/format";
 import { DEFAULT_TZ, formatLongDate, formatRange, formatTimeShort, timeZoneLabel } from "@/lib/appointments/time";
-import { DISPLAY_STATUS_LABELS, LOCATION_LABELS, type Booking, type DisplayStatus } from "@/lib/appointments/types";
+import { LOCATION_LABELS, type Booking } from "@/lib/appointments/types";
+import { StatusBadge } from "./status-badge";
 import { SlotPicker } from "./slot-picker";
 import { BookingReminders } from "./booking-reminders";
 import type { BookingDetail as BookingDetailData } from "@/lib/appointments/owner";
@@ -26,18 +27,7 @@ const BookingCalls = dynamic(() => import("@/components/record-calls").then((m) 
   loading: () => <Skeleton className="h-12 w-full" />,
 });
 
-export const STATUS_TONE: Record<DisplayStatus, "violet" | "warning" | "success" | "danger" | "neutral"> = {
-  a_venir: "violet",
-  a_renseigner: "warning",
-  done: "success",
-  no_show: "danger",
-  cancelled: "neutral",
-  pending: "neutral",
-};
-
-export function StatusBadge({ s }: { s: DisplayStatus }) {
-  return <Badge tone={STATUS_TONE[s]}>{DISPLAY_STATUS_LABELS[s]}</Badge>;
-}
+export { STATUS_TONE, StatusBadge } from "./status-badge";
 
 const EVENT_LABELS: Record<string, string> = {
   created: "Réservation reçue",

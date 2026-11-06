@@ -1,30 +1,30 @@
 "use client";
 
-// Emails de la fiche : brouillons, envois et leur état réel.
+// Fil d'un email de la fiche : brouillons, envois et leur état réel.
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Paperclip, PenLine } from "lucide-react";
+import { Paperclip } from "lucide-react";
 import { mailOp } from "@/lib/client/mail";
 import { apiGet, attempt, useSync } from "@/lib/client/query";
+import { emailThread } from "@/lib/crm/record-activity";
 import { formatDateTime } from "@/lib/format";
 import type { MailMessage } from "@/lib/mail/types";
 import type { ComposeTarget } from "./mail-compose";
 import { MailStatusBadge } from "./mail-status";
 import { Button, Skeleton } from "./ui";
 
-export function RecordMail({ companyId, onCompose }: { companyId: string; onCompose: (t: ComposeTarget) => void }) {
+/** Le fil d'un email : les messages du même fil Gmail, du plus ancien au plus récent, chargés à l'ouverture. */
+export function MailThread({ companyId, mailId, onCompose }: { companyId: string; mailId: string; onCompose: (t: ComposeTarget) => void }) {
   const mail = useQuery({ queryKey: ["company-mail", companyId], queryFn: ({ signal }) => apiGet<MailMessage[]>(`/api/mail/messages?company=${companyId}`, signal) });
+  if (mail.isLoading) return <Skeleton className="h-24 w-full" />;
+  if (mail.isError) return <p className="text-sm text-danger">{mail.error.message} <button className="underline" onClick={() => mail.refetch()}>Réessayer</button></p>;
+  const current = mail.data?.find((m) => m.id === mailId);
+  if (!current) return <p className="text-sm text-muted">Cet email n&apos;est plus disponible.</p>;
   return (
-    <div className="space-y-2">
-      <Button size="sm" onClick={() => onCompose({})}><PenLine size={13} /> Écrire un email</Button>
-      {mail.isLoading && <Skeleton className="h-12 w-full" />}
-      {mail.isError && <p className="text-sm text-danger">{mail.error.message} <button className="underline" onClick={() => mail.refetch()}>Réessayer</button></p>}
-      {mail.data && !mail.data.length && <p className="text-sm text-muted">Aucun email envoyé depuis le CRM sur cette fiche.</p>}
-      <ul className="space-y-1">
-        {mail.data?.map((m) => <MailRow key={m.id} m={m} companyId={companyId} onCompose={onCompose} />)}
-      </ul>
-    </div>
+    <ul className="space-y-2">
+      {emailThread(current, mail.data ?? []).map((m) => <MailRow key={m.id} m={m} companyId={companyId} onCompose={onCompose} />)}
+    </ul>
   );
 }
 
@@ -47,6 +47,7 @@ function MailRow({ m, companyId, onCompose }: { m: MailMessage; companyId: strin
         <span className="text-xs text-muted">{formatDateTime(m.sent_at ?? m.updated_at)}</span>
       </div>
       <p className="mt-0.5 truncate text-xs text-muted">À : {m.to_addrs.join(", ") || "—"}</p>
+      {m.body_text && <p className="mt-2 text-sm break-words whitespace-pre-wrap">{m.body_text}</p>}
       {m.last_error && <p className="mt-1 text-xs text-danger">{m.last_error}</p>}
       {m.status === "draft" && <Button size="sm" className="mt-1" onClick={() => onCompose({ message: m })}>Reprendre</Button>}
       {m.status === "failed" && (

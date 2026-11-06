@@ -5,46 +5,35 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Archive, ArchiveRestore, ExternalLink, Maximize2, X } from "lucide-react";
-import { addToListAction, removeFromListAction, setArchivedAction, updateCompanyAction } from "@/app/actions";
+import { X } from "lucide-react";
+import { updateCompanyAction } from "@/app/actions";
 import { apiGet, attempt, useSync } from "@/lib/client/query";
-import type { CompanyCore, CompanyDetail, CompanyTimeline, DuplicateCandidate, LeadSource, ProspectStatus } from "@/lib/crm/types";
+import type { ActivityEntry, ActivityFilter } from "@/lib/crm/record-activity";
+import type { CompanyCore, CompanyDetail, CompanyTimeline } from "@/lib/crm/types";
 import type { CompanyPatch } from "@/lib/crm/schemas";
-import { formatDate, formatDateTime, PROSPECT_STATUS_LABELS } from "@/lib/format";
 import { useCrm, type CompanySeed } from "./app-shell";
-import { DuplicateNotice } from "./duplicate-notice";
-import { RecordDeal } from "./record-deal";
-import { RecordPeople } from "./record-people";
 import type { ComposeTarget } from "./mail-compose";
-import { RecordProspecting } from "./record-prospecting";
-import { RecordTasks } from "./record-tasks";
-import { RecordTimeline } from "./record-timeline";
-import { SourcePicker } from "./source-picker";
-import { Badge, Button, Field, Input, SaveIndicator, Select, Skeleton, Textarea } from "./ui";
+import type { LogKind } from "./record-log-form";
+import { RecordHeader } from "./record-header";
+import { RecordOverview } from "./record-overview";
+import { Button, Modal, Skeleton } from "./ui";
 
-// section chargée à la demande : ne pèse pas sur l'ouverture de la fiche
-const RecordFiles = dynamic(() => import("./record-files").then((m) => m.RecordFiles), {
-  loading: () => <Skeleton className="h-20 w-full" />,
-});
-const RecordProjects = dynamic(() => import("./record-projects").then((m) => m.RecordProjects), {
-  loading: () => <Skeleton className="h-10 w-full" />,
-});
-const RecordAppointments = dynamic(() => import("./record-appointments").then((m) => m.RecordAppointments), {
-  loading: () => <Skeleton className="h-12 w-full" />,
-});
-const RecordCalls = dynamic(() => import("./record-calls").then((m) => m.RecordCalls), {
-  loading: () => <Skeleton className="h-16 w-full" />,
-});
-
-// idem : le composeur et la section Emails ne pèsent rien tant qu'on ne s'en sert pas
-const RecordMail = dynamic(() => import("./record-mail").then((m) => m.RecordMail), {
-  loading: () => <Skeleton className="h-12 w-full" />,
-});
+// L'en-tête et l'Aperçu s'affichent d'abord : le reste ne pèse rien tant qu'on ne l'ouvre pas.
+const loadActivity = () => import("./record-activity").then((m) => m.RecordActivity);
+const loadDetails = () => import("./record-details").then((m) => m.RecordDetails);
+const RecordActivity = dynamic(loadActivity, { loading: () => <Skeleton className="h-40 w-full" /> });
+const RecordDetails = dynamic(loadDetails, { loading: () => <Skeleton className="h-40 w-full" /> });
+const EntryDetail = dynamic(() => import("./record-entry-detail").then((m) => m.EntryDetail));
+const LogForm = dynamic(() => import("./record-log-form").then((m) => m.LogForm), { loading: () => <Skeleton className="h-32 w-full" /> });
+const TaskForm = dynamic(() => import("./record-tasks").then((m) => m.TaskForm), { loading: () => <Skeleton className="h-24 w-full" /> });
 const MailCompose = dynamic(() => import("./mail-compose").then((m) => m.MailCompose));
 
 type CompanyFields = Partial<CompanyCore["company"]>;
+
+export type RecordTab = "overview" | "activity" | "details";
+export type DetailsSection = "company" | "deal" | "prospecting" | "files";
 
 export type RecordCtx = {
   detail: CompanyDetail;
@@ -56,19 +45,31 @@ export type RecordCtx = {
   patch: (fields: CompanyPatch, derived?: CompanyFields) => Promise<boolean>;
   /** Ouvre le composeur d'email. */
   compose: (target: ComposeTarget) => void;
+  /** Change d'onglet, avec le filtre de l'Activité ou la section des Détails à montrer. */
+  go: (tab: RecordTab, opts?: { filter?: ActivityFilter; section?: DetailsSection; edit?: boolean }) => void;
+  filter: ActivityFilter;
+  setFilter: (f: ActivityFilter) => void;
+  detailsFocus: { section: DetailsSection; edit?: boolean; n: number } | null;
+  openEntry: (e: ActivityEntry) => void;
+  logExchange: (kind: LogKind) => void;
+  newTask: () => void;
 };
 
 export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () => void; page?: boolean }) {
   const qc = useQueryClient();
   const [compose, setCompose] = useState<ComposeTarget | null>(null);
+  const [tab, setTab] = useState<RecordTab>("overview");
+  const [visited, setVisited] = useState<Set<RecordTab>>(() => new Set(["overview"]));
+  const [filter, setFilter] = useState<ActivityFilter>("all");
+  const [detailsFocus, setDetailsFocus] = useState<RecordCtx["detailsFocus"]>(null);
+  const [entry, setEntry] = useState<ActivityEntry | null>(null);
+  const [log, setLog] = useState<LogKind | null>(null);
+  const [taskForm, setTaskForm] = useState(false);
+  const top = useRef<HTMLDivElement>(null);
   const sync = useSync();
   const coreKey = ["company", id];
   const core = useQuery({ queryKey: coreKey, queryFn: ({ signal }) => apiGet<CompanyCore | null>(`/api/fiches/${id}`, signal) });
   const timeline = useQuery({ queryKey: ["company-timeline", id], queryFn: ({ signal }) => apiGet<CompanyTimeline>(`/api/fiches/${id}/timeline`, signal) });
-  // lancé avec le reste de la fiche : la section Fichiers, chargée à la demande, trouve sa liste déjà prête
-  useEffect(() => {
-    qc.prefetchQuery({ queryKey: ["company-files", id], queryFn: ({ signal }) => apiGet(`/api/fiches/${id}/files`, signal) });
-  }, [id, qc]);
   const seed = qc.getQueryData<CompanySeed>(["company-seed", id]);
   const [save, setSave] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const seq = useRef(0);
@@ -114,12 +115,31 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
     retry.current = mutate;
   }, [mutate]);
 
+  const go = useCallback<RecordCtx["go"]>((t, opts) => {
+    setTab(t);
+    setVisited((v) => (v.has(t) ? v : new Set(v).add(t)));
+    if (opts?.filter) setFilter(opts.filter);
+    if (opts?.section) {
+      const { section, edit } = opts;
+      setDetailsFocus((f) => ({ section, edit, n: (f?.n ?? 0) + 1 }));
+    } else {
+      top.current?.scrollIntoView({ block: "start" });
+    }
+  }, []);
+
+  // les onglets arrivent sans délai au clic ; la liste des fichiers n'est demandée qu'à l'approche des Détails
+  const preload = useCallback(() => {
+    loadActivity();
+    loadDetails();
+    qc.prefetchQuery({ queryKey: ["company-files", id], queryFn: ({ signal }) => apiGet(`/api/fiches/${id}/files`, signal), staleTime: 30_000 });
+  }, [id, qc]);
+
   const patch = useCallback<RecordCtx["patch"]>(
     (fields, derived) =>
       mutate({ ...(fields as CompanyFields), ...derived }, async () => {
         const r = await updateCompanyAction(id, fields);
         if (!r.ok) return r;
-        if (r.data.status === "duplicates") return { ok: false, error: "Cette valeur correspond à une autre fiche : ouvrez « Informations » pour vérifier." };
+        if (r.data.status === "duplicates") return { ok: false, error: "Cette valeur correspond à une autre fiche : ouvrez l'onglet « Détails » pour vérifier." };
         return { ok: true };
       }),
     [mutate, id],
@@ -145,20 +165,22 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
     );
   }
 
-  const wrap = page ? "" : "p-5 md:p-6";
+  const body = page ? "pt-4" : "px-4 py-4 md:px-6";
 
   if (!core.data) {
     // en-tête immédiat avec les données déjà connues, structure réservée pour le reste
     return (
-      <div className={wrap} aria-busy="true">
-        <div className="flex items-start justify-between gap-3">
-          {seed ? <h2 className="font-display text-2xl font-extrabold break-words">{seed.name}</h2> : <Skeleton className="h-8 w-64" />}
-          {onClose && <button onClick={onClose} className="rounded-md p-1.5 text-muted hover:bg-surface" aria-label="Fermer"><X size={18} /></button>}
+      <div aria-busy="true">
+        <div className={page ? "border-b border-line pb-2" : "border-b border-line px-4 pt-3 pb-2 md:px-6"}>
+          <div className="flex items-center justify-between gap-3">
+            {seed ? <h2 className="truncate font-display text-xl font-extrabold">{seed.name}</h2> : <Skeleton className="h-7 w-56" />}
+            {onClose && <button onClick={onClose} className="rounded-md p-1.5 text-muted hover:bg-surface" aria-label="Fermer"><X size={18} /></button>}
+          </div>
+          <Skeleton className="mt-2 h-8 w-72 max-w-full" />
+          <Skeleton className="mt-2 h-8 w-full" />
         </div>
-        <Skeleton className="mt-2 h-4 w-72 max-w-full" />
-        <Skeleton className="mt-3 h-8 w-52" />
-        <div className="mt-6 space-y-5">
-          {[56, 112, 48, 72].map((h) => <div key={h} style={{ height: h }}><Skeleton className="h-full w-full" /></div>)}
+        <div className={`${body} grid gap-5`}>
+          {[96, 72, 160].map((h) => <div key={h} style={{ height: h }}><Skeleton className="h-full w-full" /></div>)}
         </div>
       </div>
     );
@@ -177,28 +199,45 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
 
   const detail: CompanyDetail = { ...core.data, interactions: timeline.data?.interactions ?? [], claudeLog: timeline.data?.claudeLog ?? [] };
   const openCompose = (t: ComposeTarget) => {
+    // le blocage existant porte sur la prospection : un email manuel reste possible, mais jamais par mégarde
+    if (!t.message && c.do_not_contact && !confirm(`Cette fiche est marquée « Ne plus contacter »${c.do_not_contact_reason ? ` (${c.do_not_contact_reason})` : ""}.\n\nÉcrire quand même ?`)) return;
     const primary = detail.people.find((p) => p.is_primary && p.email) ?? detail.people.find((p) => p.email);
     setCompose(t.message || t.to ? t : { personId: primary?.id ?? null, to: primary?.email ?? null });
   };
-  const ctx: RecordCtx = { detail, timelineLoading: timeline.isLoading, reload, mutate, patch, compose: openCompose };
+  const ctx: RecordCtx = {
+    detail,
+    timelineLoading: timeline.isLoading,
+    reload,
+    mutate,
+    patch,
+    compose: openCompose,
+    go,
+    filter,
+    setFilter,
+    detailsFocus,
+    openEntry: setEntry,
+    logExchange: setLog,
+    newTask: () => setTaskForm(true),
+  };
 
   return (
-    <div className={`${wrap} fade-in`}>
-      <Header ctx={ctx} onClose={onClose} page={page} save={save} />
-      <div className="mt-5 grid gap-5">
-        <Section title="Personnes"><RecordPeople ctx={ctx} /></Section>
-        <Section title="Suivi commercial"><RecordDeal key={c.id} ctx={ctx} /></Section>
-        <Section title="Prospection"><RecordProspecting ctx={ctx} /><Lists ctx={ctx} /></Section>
-        <Section title="Tâches"><RecordTasks ctx={ctx} /></Section>
-        <Section title="Historique des appels"><RecordCalls companyId={c.id} /></Section>
-        <Section title="Emails"><RecordMail companyId={c.id} onCompose={openCompose} /></Section>
-        <Section title="Projets"><RecordProjects companyId={c.id} companyName={c.name} /></Section>
-        <Section title="Rendez-vous"><RecordAppointments companyId={c.id} /></Section>
-        <Section title="Fichiers"><RecordFiles companyId={c.id} /></Section>
-        <Section title="Historique"><RecordTimeline ctx={ctx} /></Section>
-        <Section title="Informations"><InfoForm key={c.id} ctx={ctx} /></Section>
+    <div className="fade-in">
+      <div ref={top} className="scroll-mt-40" />
+      <RecordHeader ctx={ctx} tab={tab} onClose={onClose} page={page} save={save} onPreload={preload} />
+      {/* un onglet déjà ouvert reste monté : ses filtres et une saisie en cours survivent au changement d'onglet */}
+      <div className={body}>
+        <div role="tabpanel" aria-label="Aperçu" hidden={tab !== "overview"}><RecordOverview ctx={ctx} /></div>
+        {visited.has("activity") && <div role="tabpanel" aria-label="Activité" hidden={tab !== "activity"}><RecordActivity ctx={ctx} /></div>}
+        {visited.has("details") && <div role="tabpanel" aria-label="Détails" hidden={tab !== "details"}><RecordDetails ctx={ctx} /></div>}
       </div>
       {compose && <MailCompose companyId={c.id} target={compose} onClose={() => setCompose(null)} />}
+      {entry && <EntryDetail key={entry.key} entry={entry} ctx={ctx} onClose={() => setEntry(null)} />}
+      <Modal open={!!log} onClose={() => setLog(null)} title={log === "note" ? "Ajouter une note" : "Enregistrer un échange"} wide>
+        {log && <LogForm ctx={ctx} initial={log} onDone={() => setLog(null)} />}
+      </Modal>
+      <Modal open={taskForm} onClose={() => setTaskForm(false)} title="Créer une tâche">
+        {taskForm && <TaskForm companyId={c.id} people={detail.people} onDone={async () => { setTaskForm(false); await ctx.reload(); }} />}
+      </Modal>
     </div>
   );
 }
@@ -209,182 +248,5 @@ function ButtonOpen({ id, page }: { id: string; page?: boolean }) {
     <Link href={`/fiches/${id}`} className="mt-3 inline-block font-semibold text-violet-strong">Ouvrir la fiche conservée</Link>
   ) : (
     <Button className="mt-3" onClick={() => openCompany(id)}>Ouvrir la fiche conservée</Button>
-  );
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section>
-      <h3 className="mb-2 font-label text-xs font-bold tracking-wide text-muted uppercase">{title}</h3>
-      {children}
-    </section>
-  );
-}
-
-function Header({ ctx, onClose, page, save }: { ctx: RecordCtx; onClose?: () => void; page?: boolean; save: "idle" | "saving" | "saved" | "error" }) {
-  const { sources } = useCrm();
-  const c = ctx.detail.company;
-
-  function setSource(id: string | null, s: LeadSource | null) {
-    ctx.patch({ source_id: id }, { source: s ? { id: s.id, name: s.name, color: s.color } : null });
-  }
-  async function toggleArchive() {
-    const value = !c.archived_at;
-    const ok = await ctx.mutate({ archived_at: value ? new Date().toISOString() : null }, async () => {
-      const r = await attempt(() => setArchivedAction([c.id], value));
-      return r.ok ? { ok: true } : r;
-    });
-    if (ok) toast.success(value ? "Fiche archivée" : "Fiche restaurée");
-  }
-
-  return (
-    <header>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="font-display text-2xl font-extrabold break-words">{c.name}</h2>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
-            {c.website && (
-              <a
-                href={/^https?:\/\//.test(c.website) ? c.website : `https://${c.website}`}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="inline-flex items-center gap-1 text-violet-strong hover:underline"
-              >
-                {c.domain_norm ?? c.website} <ExternalLink size={12} />
-              </a>
-            )}
-            <span>· Créée le {formatDate(c.created_at)}</span>
-            <span>· Modifiée le {formatDateTime(c.updated_at)}</span>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <SaveIndicator state={save} />
-          {!page && (
-            <Link href={`/fiches/${c.id}`} className="rounded-md p-1.5 text-muted hover:bg-surface" aria-label="Ouvrir en pleine page" title="Pleine page">
-              <Maximize2 size={16} />
-            </Link>
-          )}
-          {onClose && (
-            <button onClick={onClose} className="rounded-md p-1.5 text-muted hover:bg-surface" aria-label="Fermer">
-              <X size={18} />
-            </button>
-          )}
-        </div>
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Select
-          value={c.prospect_status}
-          onChange={(e) => ctx.patch({ prospect_status: e.target.value as ProspectStatus })}
-          className="h-8 w-auto text-xs"
-          aria-label="Statut de prospection"
-        >
-          {Object.entries(PROSPECT_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>Prospection : {v}</option>)}
-        </Select>
-        <SourcePicker sources={sources} value={c.source_id} onChange={setSource} placeholder="Source du contact" className="w-52 [&>button]:h-8 [&>button]:text-xs" />
-        {c.pipeline && (
-          <Badge tone={c.deal_status === "won" ? "success" : c.deal_status === "lost" ? "danger" : "violet"}>
-            {c.pipeline.name} › {c.stage?.name ?? "—"}
-            {c.deal_status === "won" && " · Gagné"}
-            {c.deal_status === "lost" && " · Perdu"}
-          </Badge>
-        )}
-        {c.last_interaction_at && <Badge>Dernier échange : {formatDate(c.last_interaction_at)}</Badge>}
-        {c.tags.map((t) => <Badge key={t} tone="neutral">#{t}</Badge>)}
-        {c.archived_at && <Badge tone="warning">Archivée</Badge>}
-        <Button size="sm" variant="ghost" onClick={toggleArchive} className="ml-auto">
-          {c.archived_at ? <><ArchiveRestore size={14} /> Restaurer</> : <><Archive size={14} /> Archiver</>}
-        </Button>
-      </div>
-    </header>
-  );
-}
-
-function InfoForm({ ctx }: { ctx: RecordCtx }) {
-  const { openCompany } = useCrm();
-  const c = ctx.detail.company;
-  const server = { name: c.name, website: c.website ?? "", description: c.description ?? "", tags: c.tags.join(", ") };
-  const [f, setF] = useState(server);
-  const [baseline, setBaseline] = useState(server);
-  const serverKey = JSON.stringify(server);
-  const [prevKey, setPrevKey] = useState(serverKey);
-  const [candidates, setCandidates] = useState<DuplicateCandidate[] | null>(null);
-  const [pending, setPending] = useState(false);
-
-  // suit le serveur sans jamais effacer une saisie en cours
-  if (serverKey !== prevKey) {
-    setPrevKey(serverKey);
-    if (JSON.stringify(f) === JSON.stringify(baseline)) setF(server);
-    setBaseline(server);
-  }
-  const dirty = JSON.stringify(f) !== JSON.stringify(baseline);
-
-  async function save(force: boolean) {
-    setPending(true);
-    const tags = f.tags.split(",").map((t) => t.trim()).filter(Boolean);
-    const r = await attempt(() => updateCompanyAction(c.id, { name: f.name, website: f.website, description: f.description, tags }, force));
-    setPending(false);
-    if (!r.ok) return toast.error(r.error, { action: { label: "Réessayer", onClick: () => save(force) } });
-    if (r.data.status === "duplicates") return setCandidates(r.data.candidates);
-    setCandidates(null);
-    setBaseline(f);
-    toast.success("Fiche enregistrée");
-    ctx.reload();
-  }
-
-  return (
-    <form onSubmit={(e) => { e.preventDefault(); save(false); }} className="grid gap-3 rounded-xl border border-line p-3 sm:grid-cols-2">
-      <Field label="Entreprise *"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required /></Field>
-      <Field label="Site web / domaine"><Input value={f.website} onChange={(e) => setF({ ...f, website: e.target.value })} /></Field>
-      <Field label="Tags" hint="Séparés par des virgules" className="sm:col-span-2"><Input value={f.tags} onChange={(e) => setF({ ...f, tags: e.target.value })} /></Field>
-      <Field label="Description / besoin identifié" className="sm:col-span-2">
-        <Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} rows={3} />
-      </Field>
-      {candidates && (
-        <div className="sm:col-span-2">
-          <DuplicateNotice candidates={candidates} onOpen={openCompany} onForce={() => save(true)} forceLabel="Enregistrer quand même" pending={pending} />
-        </div>
-      )}
-      <div className="flex justify-end sm:col-span-2">
-        <Button type="submit" variant="primary" size="sm" disabled={!dirty || pending}>{pending ? "Enregistrement…" : "Enregistrer"}</Button>
-      </div>
-    </form>
-  );
-}
-
-function Lists({ ctx }: { ctx: RecordCtx }) {
-  const { lists } = useCrm();
-  const c = ctx.detail.company;
-  const mine = new Set(ctx.detail.lists.map((l) => l.id));
-  const available = lists.filter((l) => !mine.has(l.id));
-
-  async function add(listId: string) {
-    if (!listId) return;
-    const res = await attempt(() => addToListAction(listId, [c.id]));
-    if (!res.ok) return toast.error(res.error);
-    ctx.reload();
-  }
-  async function remove(listId: string) {
-    const res = await attempt(() => removeFromListAction(listId, [c.id]));
-    if (!res.ok) return toast.error(res.error);
-    ctx.reload();
-  }
-
-  return (
-    <div className="mt-3 flex flex-wrap items-center gap-2">
-      <span className="text-xs text-muted">Listes :</span>
-      {ctx.detail.lists.map((l) => (
-        <Badge key={l.id} tone="violet">
-          {l.name}
-          <button onClick={() => remove(l.id)} aria-label={`Retirer de ${l.name}`} className="hover:text-danger"><X size={11} /></button>
-        </Badge>
-      ))}
-      {available.length > 0 && (
-        <Select value="" onChange={(e) => add(e.target.value)} className="h-7 w-auto text-xs" aria-label="Ajouter à une liste">
-          <option value="">+ Ajouter à une liste</option>
-          {available.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-        </Select>
-      )}
-      {!lists.length && <span className="text-xs text-muted">aucune liste créée</span>}
-    </div>
   );
 }
