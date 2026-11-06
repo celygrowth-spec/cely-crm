@@ -23,7 +23,8 @@ de prospection aux pipelines sans jamais être copiée.
   tâches, fichiers, idées) et espace client `/portail` accessible par code individuel, limité aux contenus
   publiés. Guide : `docs/projets-portail-client.md`.
 - **Paramètres** : sources du lead, connexion à Claude, compte.
-- **Connecteur Claude (MCP)** : rechercher, consulter, créer, noter, déplacer, lister les relances, depuis Claude.
+- **Connecteur Claude (MCP)** : rechercher, consulter, créer, noter, déplacer, lister les relances, gérer les
+  espaces client, depuis Claude.
 
 Stack : Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · Supabase (Postgres, Auth, RLS) · Vercel.
 
@@ -154,8 +155,11 @@ Côté Claude :
 Outils disponibles : `search_companies`, `get_company`, `create_company` (avec contrôle des doublons),
 `add_person`, `log_interaction` (note, message envoyé ou reçu, appel, rendez-vous), `create_task`,
 `postpone_task`, `list_pipelines`, `move_company`, `list_followups`.
-Volontairement absents : envoi de messages, fusion, suppression, modifications en masse (refusés aussi
-en base pour un jeton Claude).
+Espaces client : voir la liste dans `docs/projets-portail-client.md` (section « Depuis Claude »). Tout ce qui
+devient visible du client, tout retrait et toute suppression y attendent votre accord.
+Volontairement absents : envoi de messages, fusion, suppression hors espaces client, modifications en masse,
+génération d'un code d'accès, effacement définitif d'un fichier, création, report ou annulation d'un rendez-vous
+(refusés aussi en base pour un jeton Claude).
 
 Révoquer l'accès : Supabase › Authentication › OAuth Apps.
 

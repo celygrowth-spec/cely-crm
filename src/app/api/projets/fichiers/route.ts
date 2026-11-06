@@ -4,7 +4,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { CrmError, friendlyError } from "@/lib/crm/service";
-import { abortUpload, confirmUpload, deleteFile, fileUrl, startUpload, updateFile } from "@/lib/crm/files";
+import { abortUpload, deleteFile, startUpload } from "@/lib/crm/files";
+import * as svc from "@/lib/projects/service";
 
 const reply = (b: unknown, status = 200) => NextResponse.json(b, { status, headers: { "Cache-Control": "private, no-store" } });
 const id = z.uuid();
@@ -46,28 +47,21 @@ export async function POST(req: NextRequest) {
         return reply({ file_id: s.id, signedUrl: s.signedUrl });
       }
       case "confirm": {
-        await confirmUpload(sb, b.file);
-        await q(sb.from("project_files").insert({ project_id: b.project, file_id: b.file, folder_id: b.folder }));
+        await svc.attachUpload(sb, b.project, b.file, b.folder);
         return reply({ ok: true });
       }
       case "abort":
         await abortUpload(sb, b.file);
         return reply({ ok: true });
-      case "url": {
-        const r = (await q(sb.from("project_files").select("file_id").eq("id", b.id).single())) as { file_id: string };
-        return reply({ url: await fileUrl(sb, r.file_id, b.download) });
-      }
-      case "rename": {
-        const r = (await q(sb.from("project_files").select("file_id").eq("id", b.id).single())) as { file_id: string };
-        await updateFile(sb, r.file_id, { display_name: b.name });
+      case "url":
+        return reply({ url: await svc.projectFileUrl(sb, b.id, b.download) });
+      case "rename":
+        await svc.renameProjectFile(sb, b.id, b.name);
         return reply({ ok: true });
-      }
       case "move":
-        // la base refuse (et signale) un déplacement qui rendrait visible un document interne sans confirmation
-        return reply(await q(sb.rpc("project_files_move", { p_project: b.project, p_ids: b.ids, p_folder: b.folder, p_confirm: b.confirm })));
+        return reply(await svc.moveFiles(sb, b.project, b.ids, b.folder, b.confirm));
       case "unshare":
-        // retrait du projet uniquement : le document reste dans la fiche CRM
-        await q(sb.from("project_files").delete().eq("id", b.id));
+        await svc.unshareFile(sb, b.id);
         return reply({ ok: true });
       case "delete": {
         const r = (await q(sb.from("project_files").select("file_id").eq("id", b.id).single())) as { file_id: string };
@@ -75,15 +69,12 @@ export async function POST(req: NextRequest) {
         return reply({ ok: true });
       }
       case "share":
-        await q(sb.from("project_files").insert(b.files.map((f) => ({ project_id: b.project, file_id: f, folder_id: b.folder }))));
+        await svc.shareFiles(sb, b.project, b.files, b.folder);
         return reply({ ok: true });
       case "folder-save":
-        return reply(await q(sb.rpc("project_folder_save", {
-          p_project: b.project, p_folder: b.id, p_name: b.name, p_parent: b.parent, p_visible: b.visible, p_upload: b.upload, p_confirm: b.confirm,
-        })));
+        return reply(await svc.saveFolder(sb, b.project, { id: b.id, name: b.name, parent: b.parent, visible: b.visible, upload: b.upload, confirm: b.confirm }));
       case "folder-delete":
-        // les fichiers sont d'abord déplacés vers la destination choisie (racine ou autre dossier), rien n'est supprimé
-        return reply(await q(sb.rpc("project_folder_delete", { p_folder: b.id, p_target: b.target, p_confirm: b.confirm })));
+        return reply(await svc.deleteFolder(sb, b.id, b.target, b.confirm));
     }
   } catch (e) {
     if (e instanceof CrmError) return reply({ error: e.message }, 400);
