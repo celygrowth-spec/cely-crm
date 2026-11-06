@@ -31,15 +31,15 @@ export function AdminFiles({ projectId, companyId, folders, files, internal }: {
     abort: (file) => op({ op: "abort", file }),
     url: (id, download) => op({ op: "url", id, download }),
     rename: (id, name) => op({ op: "rename", id, name }),
-    move: (id, folder) => op({ op: "move", id, folder }),
+    move: (id, folder, confirm) => op({ op: "move", project: projectId, ids: [id], folder, confirm }),
     remove: (id) => op({ op: "delete", id }),
     unshare: (id) => op({ op: "unshare", id }),
-    createFolder: (name, parent) => op({ op: "folder", project: projectId, name, parent }),
-    deleteFolder: (id) => op({ op: "folder-delete", id }),
+    saveFolder: (f, confirm) => op({ op: "folder-save", project: projectId, ...f, confirm }),
+    deleteFolder: (id, target, confirm) => op({ op: "folder-delete", id, target, confirm }),
   };
   return (
     <div className="max-w-6xl space-y-4">
-      <div className="flex items-center gap-2 text-sm text-muted"><VisibilityTag client /> Tout ce qui figure ici est visible et téléchargeable par les contacts du projet.</div>
+      <div className="flex items-center gap-2 text-sm text-muted"><VisibilityTag client /> La racine et les dossiers partagés sont visibles et téléchargeables par les contacts du projet ; les dossiers marqués « Interne » ne le sont jamais.</div>
       <FileLibrary folders={folders} files={files} adapter={adapter} canUpload canManage={() => true} onChanged={() => router.refresh()} />
       <Card className="p-4">
         <div className="mb-2 flex items-center justify-between"><h2 className="font-display text-base font-bold">Documents de la fiche non partagés</h2><VisibilityTag client={false} /></div>
