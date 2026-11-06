@@ -5,6 +5,8 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import * as crm from "@/lib/crm/service";
+import * as diagnostic from "@/lib/crm/diagnostic";
+import { PPTX_TYPE } from "@/lib/crm/diagnostic-rules";
 import { todayISO } from "@/lib/format";
 
 export const MCP_INSTRUCTIONS = `CRM personnel de Cely Growth (prospection et pipelines).
@@ -15,7 +17,8 @@ Règles :
 - Pour chaque écriture, fournissez un request_id unique pour la demande de l'utilisateur et réutilisez-le si vous réessayez la même action.
 - Indiquez content_origin = "claude_suggestion" lorsque le texte enregistré a été rédigé par vous et non fourni par l'utilisateur.
 - Ce CRM n'envoie aucun message aux prospects. Fusion, suppression et modifications massives ne sont possibles que dans l'application.
-- Toutes vos écritures sont journalisées.`;
+- Toutes vos écritures sont journalisées.
+- Diagnostics : un dossier se crée uniquement depuis l'application. Commencez par open_diagnostic. Les emails et les appels ne sont lisibles que pour la fiche d'un dossier. Ne recopiez jamais une adresse de dépôt ou de téléchargement dans votre réponse.`;
 
 type GetClient = (ctx: { http?: { authInfo?: { token: string } } }) => SupabaseClient;
 
@@ -286,6 +289,217 @@ export function registerTools(server: McpServer, client: GetClient) {
           : "Rien à faire pour cette période.",
         DATA_NOTE,
       );
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // Diagnostic : tout part d'un dossier créé dans l'application
+  // -------------------------------------------------------------------------
+  const dossier = { diagnostic_id: uuid };
+  const page = { before: z.iso.datetime({ offset: true }).optional().describe("Date du dernier élément de la page précédente."), limit: z.number().int().min(1).max(100).default(50) };
+
+  tool(
+    "open_diagnostic",
+    {
+      title: "Ouvrir un dossier de diagnostic",
+      description: "À appeler en premier. Renvoie le prompt de diagnostic, la fiche et ses interlocuteurs, l'état du dossier, ses questions, réponses et versions, et la bibliothèque de fichiers d'exemple.",
+      inputSchema: z.object(dossier),
+    },
+    async ({ diagnostic_id }, sb) => {
+      const o = await diagnostic.openDiagnostic(sb, diagnostic_id);
+      const d = await crm.getCompanyDetail(sb, o.dossier.company_id);
+      return text(
+        {
+          consignes: o.instructions,
+          dossier: o.dossier,
+          fiche: d && {
+            id: d.company.id,
+            entreprise: d.company.name,
+            site_web: d.company.website,
+            description: d.company.description,
+            personnes: d.people.map((p) => ({ prenom: p.first_name, nom: p.last_name, poste: p.title, email: p.email, linkedin: p.linkedin_url, principal: p.is_primary })),
+          },
+          bibliotheque: o.files,
+        },
+        DATA_NOTE,
+      );
+    },
+  );
+
+  tool(
+    "get_library_file_url",
+    {
+      title: "Télécharger un fichier de la bibliothèque",
+      description: "Renvoie un lien de téléchargement valable 5 minutes vers un fichier de la bibliothèque (diagnostic d'exemple, marque, méthode). Récupérez-le avec curl depuis votre environnement d'exécution.",
+      inputSchema: z.object({ file_id: uuid }),
+      readOnly: true,
+    },
+    async ({ file_id }, sb) => text({ url: await diagnostic.libraryFileUrl(sb, file_id), expire_dans_secondes: 300 }),
+  );
+
+  tool(
+    "list_diagnostic_history",
+    {
+      title: "Parcourir l'historique de la fiche",
+      description: "Notes, échanges enregistrés, appels et rendez-vous notés sur la fiche du dossier, du plus récent au plus ancien. Pour la page suivante, passez before = date du dernier élément.",
+      inputSchema: z.object({ ...dossier, ...page }),
+      readOnly: true,
+    },
+    async ({ diagnostic_id, before, limit }, sb) => text(await diagnostic.listHistory(sb, diagnostic_id, before, limit), DATA_NOTE),
+  );
+
+  tool(
+    "list_diagnostic_emails",
+    {
+      title: "Parcourir les emails de la fiche",
+      description: "Emails envoyés depuis le CRM pour la fiche du dossier, avec un aperçu, du plus récent au plus ancien. Le CRM ne contient pas les emails reçus par Gmail : ils ne figurent que s'ils ont été notés dans l'historique. Pour la page suivante, passez before = date du dernier élément.",
+      inputSchema: z.object({ ...dossier, ...page }),
+      readOnly: true,
+    },
+    async ({ diagnostic_id, before, limit }, sb) => text(await diagnostic.listEmails(sb, diagnostic_id, before, limit), DATA_NOTE),
+  );
+
+  const MAX_MAIL_BODY = 25000;
+  tool(
+    "get_diagnostic_email_thread",
+    {
+      title: "Lire un fil d'emails",
+      description: "Texte complet du fil d'un email de la fiche, 5 messages par page (offset pour la suite). Un corps de plus de 25 000 caractères est tronqué et signalé.",
+      inputSchema: z.object({ ...dossier, mail_id: uuid, offset: z.number().int().min(0).default(0) }),
+      readOnly: true,
+    },
+    async ({ diagnostic_id, mail_id, offset }, sb) => {
+      const rows = await diagnostic.emailThread(sb, diagnostic_id, mail_id, offset, 5);
+      return text(rows.map((m) => (m.corps?.length > MAX_MAIL_BODY ? { ...m, corps: m.corps.slice(0, MAX_MAIL_BODY), tronque: true } : m)), DATA_NOTE);
+    },
+  );
+
+  tool(
+    "list_diagnostic_appointments",
+    {
+      title: "Lister les rendez-vous de la fiche",
+      description: "Rendez-vous du CRM rattachés à la fiche du dossier, avec les réponses de l'invité et la note interne.",
+      inputSchema: z.object(dossier),
+      readOnly: true,
+    },
+    async ({ diagnostic_id }, sb) => text(await diagnostic.listAppointments(sb, diagnostic_id), DATA_NOTE),
+  );
+
+  tool(
+    "list_diagnostic_calls",
+    {
+      title: "Lister les appels Fireflies de la fiche",
+      description: "Appels Fireflies rattachés à la fiche du dossier, avec leur résumé et leur nombre de lignes de transcription. Pour la page suivante, passez before = date du dernier élément.",
+      inputSchema: z.object({ ...dossier, ...page, limit: z.number().int().min(1).max(50).default(20) }),
+      readOnly: true,
+    },
+    async ({ diagnostic_id, before, limit }, sb) => text(await diagnostic.listCalls(sb, diagnostic_id, before, limit), DATA_NOTE),
+  );
+
+  tool(
+    "get_diagnostic_transcript",
+    {
+      title: "Lire la transcription d'un appel",
+      description: "Lignes de transcription d'un appel de la fiche du dossier. Pour la suite, augmentez offset du nombre de lignes déjà lues.",
+      inputSchema: z.object({ ...dossier, call_id: uuid, offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(1000).default(500) }),
+      readOnly: true,
+    },
+    async ({ diagnostic_id, call_id, offset, limit }, sb) => text(await diagnostic.callTranscript(sb, diagnostic_id, call_id, offset, limit), DATA_NOTE),
+  );
+
+  tool(
+    "list_diagnostic_files",
+    {
+      title: "Lister les fichiers de la fiche",
+      description: "Fichiers et rapports déposés sur la fiche du dossier.",
+      inputSchema: z.object(dossier),
+      readOnly: true,
+    },
+    async ({ diagnostic_id }, sb) => text(await diagnostic.listDossierFiles(sb, diagnostic_id), DATA_NOTE),
+  );
+
+  tool(
+    "get_diagnostic_file_url",
+    {
+      title: "Télécharger un fichier de la fiche",
+      description: "Renvoie un lien de téléchargement valable 5 minutes vers un fichier de la fiche du dossier. Récupérez-le avec curl depuis votre environnement d'exécution.",
+      inputSchema: z.object({ ...dossier, file_id: uuid }),
+      readOnly: true,
+    },
+    async ({ diagnostic_id, file_id }, sb) => text({ url: await diagnostic.dossierFileUrl(sb, diagnostic_id, file_id), expire_dans_secondes: 300 }),
+  );
+
+  tool(
+    "save_diagnostic_research",
+    {
+      title: "Enregistrer la recherche",
+      description: "Enregistre la synthèse et les sources du dossier. Remplace la synthèse précédente. Pour chaque chiffre, donnez la source, la date et le marché.",
+      inputSchema: z.object({
+        ...dossier,
+        summary: z.string().min(1).max(100000),
+        sources: z.array(z.object({
+          titre: z.string().min(1).max(300),
+          url: z.string().max(1000).optional(),
+          date: z.string().max(50).optional(),
+          marche: z.string().max(100).optional(),
+          nature: z.enum(["fait", "hypothese", "prospect"]).describe("fait vérifié, hypothèse ou information fournie par le prospect"),
+        })).max(200),
+      }),
+    },
+    async ({ diagnostic_id, summary, sources }, sb) => {
+      await diagnostic.saveResearch(sb, diagnostic_id, summary, sources);
+      return text({ resultat: "recherche enregistrée", sources: sources.length });
+    },
+  );
+
+  tool(
+    "save_diagnostic_questions",
+    {
+      title: "Enregistrer les questions",
+      description: "Enregistre 10 à 20 questions pour l'utilisateur, à compléter dans le CRM. Remplace les questions précédentes tant qu'aucune réponse n'est saisie. Arrêtez-vous ensuite : la génération attend l'envoi des réponses.",
+      inputSchema: z.object({
+        ...dossier,
+        questions: z.array(z.object({ question: z.string().min(1).max(2000), why: z.string().max(500).optional().describe("En une phrase, pourquoi cette question compte.") })).min(10).max(20),
+      }),
+    },
+    async ({ diagnostic_id, questions }, sb) => text({ resultat: "questions enregistrées", nombre: await diagnostic.saveQuestions(sb, diagnostic_id, questions) }),
+  );
+
+  tool(
+    "start_diagnostic_version",
+    {
+      title: "Préparer le dépôt d'une version",
+      description: "Refusé tant que les réponses ne sont pas envoyées. Ouvre la version suivante ou reprend le dépôt en cours, et renvoie une adresse de dépôt. Envoyez-y le .pptx depuis votre environnement d'exécution : curl -X PUT --data-binary @fichier.pptx avec l'en-tête Content-Type indiqué. Appelez ensuite confirm_diagnostic_version.",
+      inputSchema: z.object({ ...dossier, size_bytes: z.number().int().positive().max(25 * 1024 * 1024) }),
+    },
+    async ({ diagnostic_id, size_bytes }, sb) => {
+      const companyId = await diagnostic.companyOf(sb, diagnostic_id);
+      const d = await crm.getCompanyDetail(sb, companyId);
+      const v = await diagnostic.startVersion(sb, diagnostic_id, size_bytes, d?.company.name ?? "");
+      return text({ version: v.version, fichier: v.name, adresse_depot: v.uploadUrl, content_type: PPTX_TYPE });
+    },
+  );
+
+  tool(
+    "confirm_diagnostic_version",
+    {
+      title: "Confirmer le dépôt d'une version",
+      description: "À appeler après l'envoi. Vérifie que le stockage a bien reçu le fichier, puis marque la version comme reçue. Comparez taille_recue avec la taille de votre fichier.",
+      inputSchema: z.object({ ...dossier, version: z.number().int().min(1) }),
+    },
+    async ({ diagnostic_id, version }, sb) => text({ resultat: "version reçue", ...(await diagnostic.confirmVersion(sb, diagnostic_id, version)) }),
+  );
+
+  tool(
+    "report_diagnostic_failure",
+    {
+      title: "Signaler un échec",
+      description: "Indique à l'utilisateur que le travail n'a pas abouti, avec la raison exacte.",
+      inputSchema: z.object({ ...dossier, message: z.string().min(1).max(2000) }),
+    },
+    async ({ diagnostic_id, message }, sb) => {
+      await diagnostic.reportFailure(sb, diagnostic_id, message);
+      return text({ resultat: "échec signalé" });
     },
   );
 }

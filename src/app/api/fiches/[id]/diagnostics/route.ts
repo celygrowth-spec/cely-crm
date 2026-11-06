@@ -1,0 +1,15 @@
+// Dossiers de diagnostic d'une fiche : lecture et création (un double clic renvoie le même dossier).
+import type { NextRequest } from "next/server";
+import { apiRead, apiWrite } from "@/lib/api";
+import { listDiagnostics, startDiagnostic } from "@/lib/crm/diagnostic";
+
+export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return apiRead((sb) => listDiagnostics(sb, id));
+}
+
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const body = await req.json().catch(() => null);
+  return apiWrite(req, (sb) => startDiagnostic(sb, id, body?.request_key));
+}

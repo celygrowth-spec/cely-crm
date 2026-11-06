@@ -230,6 +230,22 @@ fonctionne normalement.
   recalcul au report, annulation des restants, suspension globale. **Aucun envoi** dans ce module :
   « Envoi non connecté » tant que le module Mail n'est pas raccordé. Contrat : `docs/integrations/appointments-mail.md`.
 
+## Diagnostic
+
+Sur une fiche, « Générer un diagnostic » crée un dossier et ouvre une conversation Claude avec un court message déjà
+écrit (`claude.ai/new?q=…`, lien non documenté, d'où le bouton « Copier le message » en secours). Claude lit le prompt et
+les fichiers de la bibliothèque (Paramètres › Bibliothèque de diagnostic), travaille avec le connecteur, puis dépose
+synthèse, questions et versions sur le dossier.
+
+- **Sens unique** : Anthropic ne propose pas d'interface pour écrire dans un chat claude.ai. Le CRM ouvre un lien, Claude
+  appelle le connecteur.
+- **Droits** : emails et appels restent fermés au connecteur, sauf par les fonctions `diagnostic_*` et `fireflies_diagnostic_*`, pour la seule fiche d'un dossier
+  créé dans l'application. Le CRM ne contient que les emails envoyés par lui : les emails reçus par Gmail n'y sont pas.
+- **Fichiers** : Claude doit pouvoir joindre le domaine Supabase (réglage d'exécution de code de son compte). L'adresse de
+  dépôt passe par le connecteur : collée dans un chat, elle est arrivée masquée. Les fichiers de version vont dans les
+  fichiers privés de la fiche.
+- **Migration** : `20261109000100_diagnostic.sql`, à lancer dans le SQL Editor.
+
 ## Tests
 
 `npm test` exécute :

@@ -12,6 +12,7 @@ begin
   delete from public.campaigns where name like '[TEST]%';
   delete from public.campaign_participants where company_id = any (test_ids);
   delete from public.mail_messages where company_id = any (test_ids) or business_type = 'mail_test';
+  delete from public.diagnostics where company_id = any (test_ids);
   delete from public.company_files where company_id = any (test_ids);
   delete from public.interactions where company_id = any (test_ids);
   delete from public.tasks where company_id = any (test_ids);

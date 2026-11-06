@@ -25,6 +25,7 @@ const loadActivity = () => import("./record-activity").then((m) => m.RecordActiv
 const loadDetails = () => import("./record-details").then((m) => m.RecordDetails);
 const RecordActivity = dynamic(loadActivity, { loading: () => <Skeleton className="h-40 w-full" /> });
 const RecordDetails = dynamic(loadDetails, { loading: () => <Skeleton className="h-40 w-full" /> });
+const RecordDiagnostic = dynamic(() => import("./record-diagnostic").then((m) => m.RecordDiagnostic), { loading: () => <Skeleton className="h-40 w-full" /> });
 const EntryDetail = dynamic(() => import("./record-entry-detail").then((m) => m.EntryDetail));
 const LogForm = dynamic(() => import("./record-log-form").then((m) => m.LogForm), { loading: () => <Skeleton className="h-32 w-full" /> });
 const TaskForm = dynamic(() => import("./record-tasks").then((m) => m.TaskForm), { loading: () => <Skeleton className="h-24 w-full" /> });
@@ -32,7 +33,7 @@ const MailCompose = dynamic(() => import("./mail-compose").then((m) => m.MailCom
 
 type CompanyFields = Partial<CompanyCore["company"]>;
 
-export type RecordTab = "overview" | "activity" | "details";
+export type RecordTab = "overview" | "activity" | "details" | "diagnostic";
 export type DetailsSection = "company" | "deal" | "prospecting" | "files";
 
 export type RecordCtx = {
@@ -53,6 +54,8 @@ export type RecordCtx = {
   openEntry: (e: ActivityEntry) => void;
   logExchange: (kind: LogKind) => void;
   newTask: () => void;
+  /** Ouvre l'onglet Diagnostic et crée le premier dossier s'il n'y en a pas. */
+  generateDiagnostic: () => void;
 };
 
 export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () => void; page?: boolean }) {
@@ -65,6 +68,7 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
   const [entry, setEntry] = useState<ActivityEntry | null>(null);
   const [log, setLog] = useState<LogKind | null>(null);
   const [taskForm, setTaskForm] = useState(false);
+  const [diagnosticStart, setDiagnosticStart] = useState(0);
   const top = useRef<HTMLDivElement>(null);
   const sync = useSync();
   const coreKey = ["company", id];
@@ -218,6 +222,10 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
     openEntry: setEntry,
     logExchange: setLog,
     newTask: () => setTaskForm(true),
+    generateDiagnostic: () => {
+      go("diagnostic");
+      setDiagnosticStart((n) => n + 1);
+    },
   };
 
   return (
@@ -229,6 +237,7 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
         <div role="tabpanel" aria-label="Aperçu" hidden={tab !== "overview"}><RecordOverview ctx={ctx} /></div>
         {visited.has("activity") && <div role="tabpanel" aria-label="Activité" hidden={tab !== "activity"}><RecordActivity ctx={ctx} /></div>}
         {visited.has("details") && <div role="tabpanel" aria-label="Détails" hidden={tab !== "details"}><RecordDetails ctx={ctx} /></div>}
+        {visited.has("diagnostic") && <div role="tabpanel" aria-label="Diagnostic" hidden={tab !== "diagnostic"}><RecordDiagnostic companyId={c.id} startSignal={diagnosticStart} /></div>}
       </div>
       {compose && <MailCompose companyId={c.id} target={compose} onClose={() => setCompose(null)} />}
       {entry && <EntryDetail key={entry.key} entry={entry} ctx={ctx} onClose={() => setEntry(null)} />}
