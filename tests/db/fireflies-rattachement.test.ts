@@ -418,3 +418,62 @@ describe("cycle de vie des fiches", () => {
     await db.exec(`reset role; alter table people_cache rename to people;`);
   });
 });
+
+describe("historique des appels", () => {
+  test("liste d'une fiche : plus récents en premier, états, sans transcription", async () => {
+    const acme = await company("[TEST] Acme", ["c@acme-test.fr"]);
+    await importCall(nextId(), { title: "[TEST] Ancien", date: START_MS - 86_400_000, participants: ["c@acme-test.fr"] });
+    await importCall(nextId(), { title: "[TEST] Récent", date: START_MS, participants: ["c@acme-test.fr"], summary: null, meeting_info: { summary_status: "processing", silent_meeting: false } });
+    await db.as("owner");
+    const { rows } = await db.query<Record<string, unknown>>(`select * from fireflies_call_list where company_id = $1 order by occurred_at desc nulls last`, [acme]);
+    expect(rows.map((r) => [r.title, r.display_state, r.company_name])).toEqual([
+      ["[TEST] Récent", "summary_pending", "[TEST] Acme"],
+      ["[TEST] Ancien", "imported", "[TEST] Acme"],
+    ]);
+    expect(rows[0]).not.toHaveProperty("lines");
+  });
+
+  test("note interne : distincte du résumé, conservée à l'import suivant", async () => {
+    const id = nextId();
+    const c = await importCall(id);
+    await db.rpc("fireflies_set_call_note", { p_call: c.id, p_note: "  Rappeler lundi  " });
+    await importCall(id, { summary: { overview: "Nouveau résumé" } }, 10);
+    const row = await db.one<{ internal_note: string; summary: { overview: string } }>(`select internal_note, summary from fireflies_call_list where id = $1`, [c.id]);
+    expect(row).toEqual({ internal_note: "Rappeler lundi", summary: { overview: "Nouveau résumé" } });
+    await db.rpc("fireflies_set_call_note", { p_call: c.id, p_note: "" });
+    expect((await db.one<{ internal_note: string | null }>(`select internal_note from fireflies_call_list where id = $1`, [c.id])).internal_note).toBeNull();
+  });
+
+  test("portail client, visiteur, autre compte, connecteur Claude : ni liste, ni résumé, ni lien, ni transcription", async () => {
+    const c = await importCall(nextId(), { summary: { overview: "Secret commercial" } });
+    await db.as("anon");
+    await expect(db.query(`select * from fireflies_call_list`)).rejects.toThrow(/permission denied/);
+    await expect(db.query(`select * from fireflies_call_transcripts`)).rejects.toThrow(/permission denied/);
+    await expect(db.rpc("fireflies_set_call_note", { p_call: c.id, p_note: "x" })).rejects.toThrow(/permission denied/);
+    for (const who of ["stranger", "claude"] as const) {
+      await db.as(who);
+      expect((await db.query(`select * from fireflies_call_list`)).rows).toEqual([]);
+      expect((await db.query(`select * from fireflies_call_transcripts`)).rows).toEqual([]);
+      await expect(db.rpc("fireflies_set_call_note", { p_call: c.id, p_note: "x" })).rejects.toThrow(/Accès refusé|réservée/);
+    }
+  });
+
+  test("aucune fonction du portail n'expose les tables Fireflies", async () => {
+    await db.exec("reset role;");
+    const { rows } = await db.query<{ proname: string }>(`
+      select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.prosrc ilike '%fireflies%' and p.proname not like 'fireflies\\_%'`);
+    expect(rows).toEqual([]);
+  });
+
+  test("import historique : une réunion connue ne repart pas, un choix manuel reste", async () => {
+    const beta = await company("[TEST] Beta");
+    const id = nextId();
+    const c = await importCall(id);
+    await db.rpc("fireflies_link_call", { p_call: c.id, p_company: beta });
+    await db.as("anon");
+    expect(await db.rpc("fireflies_enqueue", { p_server_key: KEY, p_meeting_id: id, p_event: "sync", p_reprocessed_at: null })).toBe("duplicate");
+    expect(await db.rpc("fireflies_claim_jobs", { p_server_key: KEY, p_limit: 5 })).toEqual([]);
+    expect(await link(id)).toMatchObject({ company_id: beta, link_source: "manual" });
+  });
+});

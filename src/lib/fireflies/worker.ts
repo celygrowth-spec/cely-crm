@@ -89,30 +89,34 @@ export async function drainImports(sb: SupabaseClient, budgetMs = DRAIN_BUDGET_M
 const SYNC_WINDOW_MS = 3 * 24 * 3600_000;
 const SYNC_PAGE = 50; // maximum de l'API
 const SYNC_MAX_PAGES = 5;
+const BACKFILL_MAX_PAGES = 20;
 
 /**
  * Rattrapage : met en file les réunions d'une période absentes de la base (webhook perdu ou indisponible).
  * Une réunion déjà connue n'est pas refetchée : une page par passage suffit à ne coûter presque aucun quota.
  */
-export async function enqueueRange(sb: SupabaseClient, from: Date, to: Date): Promise<{ seen: number; queued: number }> {
+export async function enqueueRange(sb: SupabaseClient, from: Date, to: Date, maxPages = SYNC_MAX_PAGES): Promise<{ seen: number; queued: number; truncated: boolean }> {
   let seen = 0;
   let queued = 0;
-  for (let page = 0; page < SYNC_MAX_PAGES; page++) {
+  for (let page = 0; page < maxPages; page++) {
     const ids = await listTranscriptIds(from, to, page * SYNC_PAGE, SYNC_PAGE);
     for (const id of ids) {
       seen++;
       const r = await rpc<string>(sb, "fireflies_enqueue", { p_meeting_id: id, p_event: "sync", p_reprocessed_at: null });
       if (r === "queued") queued++;
     }
-    if (ids.length < SYNC_PAGE) break;
+    if (ids.length < SYNC_PAGE) return { seen, queued, truncated: false };
   }
-  return { seen, queued };
+  return { seen, queued, truncated: true };
 }
 
+/** Import historique sur une période choisie : mêmes tâches, donc mêmes règles anti-doublons et mêmes choix manuels conservés. */
+export const backfillRange = (sb: SupabaseClient, from: Date, to: Date) => enqueueRange(sb, from, to, BACKFILL_MAX_PAGES);
+
 export async function syncRecent(sb: SupabaseClient, now = new Date()) {
-  const res = await enqueueRange(sb, new Date(now.getTime() - SYNC_WINDOW_MS), now);
+  const { seen, queued } = await enqueueRange(sb, new Date(now.getTime() - SYNC_WINDOW_MS), now);
   await rpc(sb, "fireflies_sync_done", {});
-  return res;
+  return { seen, queued };
 }
 
 /** Reprend les appels à rattacher : un contact ajouté depuis peut désormais les désigner. Les choix manuels ne bougent pas. */

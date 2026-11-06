@@ -1,8 +1,27 @@
 # Fireflies : import automatique des appels
 
-État : **phases 1 (import) et 2 (rattachement)** livrées sur `feature/fireflies-crm`. L'onglet « Historique des
-appels » (phase 3) vient ensuite. D'ici là, les appels sont enregistrés et rattachés en base, avec une activité
-sur la fiche, mais le résumé et la transcription ne s'affichent nulle part.
+État : **phases 1 (import), 2 (rattachement) et 3 (historique)** livrées sur `feature/fireflies-crm`. Le parcours
+complet reste à vérifier sur un appel réel, une fois la configuration faite.
+
+## Où retrouver un appel
+
+- **Sur la fiche, section « Historique des appels »**, plus récents en premier : titre, date, durée, principaux
+  participants, aperçu de la description, bouton « Ouvrir dans Fireflies ». La section se charge à part et
+  n'alourdit pas l'ouverture de la fiche. Le résumé arrive avec la liste.
+- **Au clic, le panneau de détail** : « Description de l'appel » (résumé, prochaines actions, points clés, ou l'état
+  si le résumé manque), note interne, rattachement, puis « Transcription complète », chargée seulement à ce moment.
+  Fireflies n'a pas de champ « décisions » : elles apparaissent dans le résumé et les points clés.
+- **Dans la transcription** : 200 lignes s'affichent d'abord, puis la suite en défilant ou avec « Tout afficher ». La
+  recherche (sans tenir compte des accents ni des majuscules) et « Copier la transcription » portent toujours sur
+  le texte complet.
+- **Depuis un rendez-vous** : section « Compte rendu de l'appel » du détail. Depuis l'appel : « Voir le rendez-vous ».
+- **Menu Appels › Appels à rattacher** : candidates, autre fiche, ignorer, recalculer, appels ignorés.
+- **Menu Appels › Suivi Fireflies** : dernière synchro, configuration, imports en échec et relance, import d'une
+  période passée, vos autres adresses.
+
+**Import d'une période passée** : un an au maximum. Les réunions déjà connues ne sont pas reprises et vos choix
+restent. Les appels sont mis en file, puis « Traiter maintenant » les importe, écran ouvert. Sans cela, le
+passage quotidien n'en traite qu'une partie (environ 30 secondes par jour).
 
 ## Comment ça marche
 
@@ -65,7 +84,7 @@ résumé ni lien. Elle compte comme dernier échange et suit l'appel s'il est d�
 **Fusion de fiches** : les appels et vos choix suivent la fiche conservée. **Fiche supprimée** : l'appel revient
 dans la file avec sa transcription.
 
-**Du rendez-vous à l'appel** : `fireflies_calls.booking_id` relie les deux. L'affichage arrive en phase 3.
+**Du rendez-vous à l'appel** : `fireflies_calls.booking_id` relie les deux.
 
 | Route (propriétaire uniquement) | Rôle |
 | --- | --- |
@@ -83,27 +102,28 @@ du webhook doit répondre sans protection : une préversion Vercel protégée re
 Fireflies.
 
 1. **Migrations** : dans Supabase › SQL Editor, coller et exécuter, dans cet ordre, le contenu de
-   `supabase/migrations/20261108000100_fireflies.sql` puis de `20261108000200_fireflies_rattachement.sql`. Les
-   modules Rendez-vous et Mail doivent déjà être installés.
+   `supabase/migrations/20261108000100_fireflies.sql`, `20261108000200_fireflies_rattachement.sql` puis
+   `20261108000300_fireflies_historique.sql`. Les modules Rendez-vous et Mail doivent déjà être installés.
 2. **Clé API** : dans Fireflies › Integrations › Fireflies API, copier la clé. Dans Vercel › projet › Settings ›
    Environment Variables, créer `FIREFLIES_API_KEY` avec cette valeur.
 3. **Secret de signature** : dans un terminal, lancer `openssl rand -hex 32`. Dans Vercel, créer
    `FIREFLIES_WEBHOOK_SECRET` avec le résultat. Garder la valeur sous la main pour l'étape 6.
 4. **Secrets existants** : vérifier dans Vercel que `APPOINTMENTS_SECRET` (Rendez-vous) existe. Créer
    `CRON_SECRET` s'il manque (`openssl rand -hex 32`). Vercel le transmet tout seul au passage quotidien.
-5. **Déploiement** : redéployer pour que les variables soient prises en compte. Ouvrir une fois la page
-   Rendez-vous, ou `/api/fireflies/status`, connecté avec votre compte : cela enregistre la clé serveur si besoin.
+5. **Déploiement** : redéployer pour que les variables soient prises en compte. Ouvrir une fois **Appels › Suivi
+   Fireflies**, connecté avec votre compte : cela enregistre la clé serveur si besoin. Les quatre lignes de
+   configuration doivent être cochées.
 6. **Webhook** : sur https://app.fireflies.ai/integrations/api/webhook :
    - URL : `https://<adresse de production du CRM>/api/fireflies/webhook`
    - Signing secret : la valeur de l'étape 3
    - Événements : cocher `meeting.transcribed` et `meeting.summarized`
    - Activer « Resend when a meeting's notes change »
    - Enregistrer
-7. **Contrôle** : cliquer « Send Test Event », puis ouvrir `/api/fireflies/status`. `last_webhook_at` doit être
-   renseigné. Si l'événement de test porte un identifiant fictif, il apparaîtra en `failed`
-   (`object_not_found`) : c'est sans conséquence. Le format exact de cet événement reste à observer.
-8. **Vrai test** : passer un court appel de test avec Fireflies, vérifier dans `/api/fireflies/status` que
-   l'état devient `imported`, et comparer la dernière phrase à celle de Fireflies.
+7. **Contrôle** : cliquer « Send Test Event », puis ouvrir **Appels › Suivi Fireflies**. « Dernier webhook reçu »
+   doit être renseigné. Si l'événement de test porte un identifiant fictif, il apparaîtra dans les imports en échec :
+   c'est sans conséquence. Le format exact de cet événement reste à observer.
+8. **Vrai test** : passer un court appel de test avec Fireflies, le retrouver sur la fiche (ou dans Appels à
+   rattacher), l'ouvrir, et comparer la dernière phrase à celle de Fireflies.
 
 ## Limites à connaître
 
@@ -139,7 +159,8 @@ en bêta. Un service externe peut aussi appeler `/api/fireflies/cron` avec `Auth
 - Les journaux contiennent l'identifiant de tâche et un code d'erreur, jamais de contenu. Les messages d'erreur
   enregistrés sont ceux du CRM, pas ceux de Fireflies.
 - Les réponses Fireflies sont du contenu non fiable : seul un lien `https` vers `fireflies.ai` est conservé,
-  contrôlé dans le serveur et en base. L'affichage (phase 3) devra les traiter en texte simple.
+  contrôlé dans le serveur et en base. Titres, résumés et transcriptions s'affichent comme du texte simple,
+  jamais comme du HTML.
 
 ## Points à confirmer sur un appel réel
 
@@ -147,7 +168,7 @@ Ces points ne sont pas précisés par la documentation et n'ont été testés qu
 
 - l'unité de `start_time` et `end_time` (typés « chaîne », supposés en secondes) ;
 - la forme exacte des erreurs GraphQL et de l'événement de test ;
-- la présence du résumé selon le forfait ;
+- la présence du résumé selon le forfait et la mise en forme réelle de ses champs ;
 - que `cal_id` correspond bien au `google_event_id` enregistré par Rendez-vous : la documentation l'indique, mais
   Google Agenda n'est pas encore vérifié de bout en bout. Sinon, la règle horaire + participant prend le relais ;
 - que les fonctions lisent bien `auth.users` sur Supabase (pour votre adresse). En cas de refus, l'appel reste
