@@ -96,4 +96,21 @@ describe("cloisonnement transverse", () => {
     await expect(portal(db, "portal_task", alice, { p_task: ids.internalTask })).rejects.toThrow(/introuvable/);
     await expect(portal(db, "portal_file_grant", alice, { p_project_file: ids.internalFile })).rejects.toThrow(/introuvable/);
   });
+
+  test("notes internes de la fiche : absentes de toute réponse du portail, illisibles hors du CRM", async () => {
+    await db.as("owner");
+    const { company_id } = await db.one<{ company_id: string }>(`select company_id from projects where id = $1`, [ids.project]);
+    await db.query(`insert into interactions (company_id, kind, content) values ($1, 'note', 'NOTE-PRIVEE')`, [company_id]);
+    const replies: unknown[] = [];
+    for (const [fn, args] of calls()) {
+      if (/update|comment|save|start|grant/.test(fn)) continue;
+      replies.push(await portal(db, fn, alice, args).catch(() => null));
+    }
+    expect(replies.some(Boolean)).toBe(true);
+    expect(JSON.stringify(replies)).not.toContain("NOTE-PRIVEE");
+    await db.as("anon");
+    await expect(db.query(`select * from interactions`)).rejects.toThrow(/permission denied/);
+    await db.as("stranger");
+    expect((await db.query(`select * from interactions`)).rows).toEqual([]);
+  });
 });

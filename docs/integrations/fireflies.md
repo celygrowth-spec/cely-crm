@@ -5,7 +5,7 @@ complet reste à vérifier sur un appel réel, une fois la configuration faite.
 
 ## Où retrouver un appel
 
-- **Sur la fiche, section « Historique des appels »**, plus récents en premier : titre, date, durée, principaux
+- **Sur la fiche, onglet « Activité », filtre « Appels »**, plus récents en premier : titre, date, durée, principaux
   participants, aperçu de la description, bouton « Ouvrir dans Fireflies ». La section se charge à part et
   n'alourdit pas l'ouverture de la fiche. Le résumé arrive avec la liste.
 - **Au clic, le panneau de détail** : « Description de l'appel » (résumé, prochaines actions, points clés, ou l'état

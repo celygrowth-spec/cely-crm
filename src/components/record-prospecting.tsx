@@ -13,7 +13,7 @@ import type { StepType } from "@/lib/prospection/steps";
 import type { RecordCtx } from "./company-record";
 import { Button } from "./ui";
 
-export function RecordProspecting({ ctx }: { ctx: RecordCtx }) {
+export function RecordProspecting({ ctx, editing }: { ctx: RecordCtx; editing?: boolean }) {
   const router = useRouter();
   const { participants, company } = ctx.detail;
   const today = todayISO();
@@ -46,7 +46,7 @@ export function RecordProspecting({ ctx }: { ctx: RecordCtx }) {
           </div>
         );
       })}
-      {!company.do_not_contact && (
+      {editing && !company.do_not_contact && (
         <button
           className="text-xs text-muted hover:text-danger"
           onClick={async () => {
