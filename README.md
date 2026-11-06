@@ -11,6 +11,8 @@ de prospection aux pipelines sans jamais être copiée.
   encaissables une à une), factures émises ailleurs et paiements partiels, accueil en trois chiffres (encaissé,
   reste à encaisser, charges payées) avec graphique Réel / Prévisions et « À encaisser », charges et
   abonnements, suivi URSSAF (estimé / déclaré / payé), trésorerie, prévisions, EBITDA indicatif, simulation.
+- **Temps** : chrono par client (un seul à la fois, heure du serveur, pastille visible partout, démarrage depuis la
+  fiche), saisie manuelle et correction, temps par client sur la période (Europe/Paris). Voir `docs/suivi-du-temps.md`.
 - **Connecteurs** (Paramètres › Connecteurs) : Gmail, Google Agenda et Meet, Fireflies, Claude (MCP) et
   outils gérés dans Claude, en trois groupes (à vérifier, connectés, à configurer), vérification à la demande,
   accès Claude listés et révocables. Voir `docs/integrations/connecteurs.md`.

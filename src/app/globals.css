@@ -108,3 +108,10 @@ button, a, input, select, textarea { transition-property: color, background-colo
 .mascot-enter { animation: mascot-enter 520ms 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .mascot-cheer { animation: mascot-cheer 900ms ease-in-out 2; }
 .tl-overrun { background-image: repeating-linear-gradient(135deg, rgb(245 158 11 / 0.35) 0 5px, rgb(245 158 11 / 0.12) 5px 10px); }
+
+/* Chrono : pastille qui « respire » discrètement ; retour visuel à l'arrêt. */
+@keyframes timer-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgb(104 45 254 / 0.45); } 60% { box-shadow: 0 0 0 6px rgb(104 45 254 / 0); } }
+@keyframes timer-saved { from { transform: scale(0.92); opacity: 0; } to { transform: none; opacity: 1; } }
+.timer-dot { animation: timer-pulse 1.8s ease-out infinite; }
+.timer-saved { animation: timer-saved 220ms ease-out both; }
+@media (prefers-reduced-motion: reduce) { .timer-dot { animation: none; } }

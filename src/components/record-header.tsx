@@ -4,7 +4,8 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Archive, ArchiveRestore, Ban, CheckSquare, ChevronDown, ExternalLink, FileUp, Mail, Maximize2, MessageSquarePlus, MoreHorizontal, Pencil, Phone, Plus, Sparkles, StickyNote, UserRound, X } from "lucide-react";
+import { Archive, ArchiveRestore, Ban, CheckSquare, ChevronDown, ExternalLink, FileUp, Mail, Maximize2, MessageSquarePlus, MoreHorizontal, Pencil, Phone, Plus, Sparkles, StickyNote, Timer, UserRound, X } from "lucide-react";
+import { useTimer } from "./time/timer";
 import { setArchivedAction } from "@/app/actions";
 import { attempt } from "@/lib/client/query";
 import type { ProspectStatus } from "@/lib/crm/types";
@@ -149,6 +150,8 @@ function ContactControl({ ctx }: { ctx: RecordCtx }) {
 
 export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx: RecordCtx; tab: RecordTab; onClose?: () => void; page?: boolean; save: "idle" | "saving" | "saved" | "error"; onPreload: () => void }) {
   const c = ctx.detail.company;
+  const timer = useTimer();
+  const timing = timer.running?.company_id === c.id;
 
   async function toggleArchive() {
     const value = !c.archived_at;
@@ -235,6 +238,7 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
           ))}
         </nav>
         <div className="ml-auto flex shrink-0 items-center gap-1 pb-1 max-sm:pt-1">
+          <QuickAction icon={Timer} label={timing ? "Arrêter le chrono" : "Démarrer un chrono"} onClick={() => (timing ? timer.stop() : timer.openStart({ id: c.id, name: c.name }))} />
           <QuickAction icon={Sparkles} label="Générer un diagnostic" onClick={ctx.generateDiagnostic} />
           <QuickAction icon={StickyNote} label="Ajouter une note" onClick={() => ctx.logExchange("note")} />
           <QuickAction icon={CheckSquare} label="Créer une tâche" onClick={ctx.newTask} />
