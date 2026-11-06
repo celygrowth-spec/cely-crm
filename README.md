@@ -13,6 +13,9 @@ de prospection aux pipelines sans jamais être copiée.
   abonnements, suivi URSSAF (estimé / déclaré / payé), trésorerie, prévisions, EBITDA indicatif, simulation.
 - **Temps** : chrono par client (un seul à la fois, heure du serveur, pastille visible partout, démarrage depuis la
   fiche), saisie manuelle et correction, temps par client sur la période (Europe/Paris). Voir `docs/suivi-du-temps.md`.
+- **Connecteurs** (Paramètres › Connecteurs) : Gmail, Google Agenda et Meet, Fireflies, Claude (MCP) et
+  outils gérés dans Claude, en trois groupes (à vérifier, connectés, à configurer), vérification à la demande,
+  accès Claude listés et révocables. Voir `docs/integrations/connecteurs.md`.
 - **Rendez-vous** : pages publiques de réservation (`/rdv/<type>`), types de rendez-vous, disponibilités
   (plages, exceptions, congés), connexion Google Calendar, agenda, liste, rattachement CRM sans doublon,
   annulation et report par lien privé. Configuration : `docs/integrations/google-calendar.md`.
