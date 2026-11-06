@@ -3,6 +3,7 @@
 // Détail rapide d'un rendez-vous (ouvert par ?rdv=<id> depuis la vue d'ensemble, l'agenda ou la liste) :
 // réponses, fiche CRM, note interne, report, annulation, qualification, historique.
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -20,6 +21,10 @@ import { DISPLAY_STATUS_LABELS, LOCATION_LABELS, type Booking, type DisplayStatu
 import { SlotPicker } from "./slot-picker";
 import { BookingReminders } from "./booking-reminders";
 import type { BookingDetail as BookingDetailData } from "@/lib/appointments/owner";
+
+const BookingCalls = dynamic(() => import("@/components/record-calls").then((m) => m.BookingCalls), {
+  loading: () => <Skeleton className="h-12 w-full" />,
+});
 
 export const STATUS_TONE: Record<DisplayStatus, "violet" | "warning" | "success" | "danger" | "neutral"> = {
   a_venir: "violet",
@@ -219,6 +224,11 @@ function BookingDetail({ id, onClose }: { id: string; onClose: () => void }) {
           </dl>
         </section>
       )}
+
+      <section>
+        <h4 className="mb-2 font-label text-xs font-semibold tracking-wide text-muted uppercase">Compte rendu de l&apos;appel</h4>
+        <BookingCalls bookingId={b.id} />
+      </section>
 
       <NoteBox key={b.internal_note ?? ""} booking={b} busy={busy} act={act} />
 

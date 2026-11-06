@@ -34,6 +34,9 @@ const RecordProjects = dynamic(() => import("./record-projects").then((m) => m.R
 const RecordAppointments = dynamic(() => import("./record-appointments").then((m) => m.RecordAppointments), {
   loading: () => <Skeleton className="h-12 w-full" />,
 });
+const RecordCalls = dynamic(() => import("./record-calls").then((m) => m.RecordCalls), {
+  loading: () => <Skeleton className="h-16 w-full" />,
+});
 
 // idem : le composeur et la section Emails ne pèsent rien tant qu'on ne s'en sert pas
 const RecordMail = dynamic(() => import("./record-mail").then((m) => m.RecordMail), {
@@ -187,6 +190,7 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
         <Section title="Suivi commercial"><RecordDeal key={c.id} ctx={ctx} /></Section>
         <Section title="Prospection"><RecordProspecting ctx={ctx} /><Lists ctx={ctx} /></Section>
         <Section title="Tâches"><RecordTasks ctx={ctx} /></Section>
+        <Section title="Historique des appels"><RecordCalls companyId={c.id} /></Section>
         <Section title="Emails"><RecordMail companyId={c.id} onCompose={openCompose} /></Section>
         <Section title="Projets"><RecordProjects companyId={c.id} companyName={c.name} /></Section>
         <Section title="Rendez-vous"><RecordAppointments companyId={c.id} /></Section>

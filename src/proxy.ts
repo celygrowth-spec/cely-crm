@@ -5,7 +5,8 @@ import { NextResponse, type NextRequest } from "next/server";
 // Le contrôle d'accès réel est fait côté serveur (requireOwner) et en base (RLS).
 // /rdv et /api/rdv : réservation publique sans compte (protégée par la clé serveur et les jetons privés)
 // /portail et /api/portail : portail client (session propre, vérifiée en base à chaque appel)
-const PUBLIC_PATHS = ["/login", "/api/mcp", "/.well-known", "/auth", "/rdv", "/api/rdv", "/portail", "/api/portail"];
+// /api/fireflies/webhook (signature) et /api/fireflies/cron (CRON_SECRET ou session) : appelés sans session
+const PUBLIC_PATHS = ["/login", "/api/mcp", "/.well-known", "/auth", "/rdv", "/api/rdv", "/portail", "/api/portail", "/api/fireflies/webhook", "/api/fireflies/cron"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });

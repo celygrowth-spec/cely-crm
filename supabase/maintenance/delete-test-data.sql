@@ -7,6 +7,8 @@ declare
   test_ids uuid[];
 begin
   select coalesce(array_agg(id), '{}') into test_ids from public.companies where name like '[TEST]%';
+  delete from public.fireflies_import_jobs where call_id in (select id from public.fireflies_calls where title like '[TEST]%');
+  delete from public.fireflies_calls where title like '[TEST]%';
   delete from public.campaigns where name like '[TEST]%';
   delete from public.campaign_participants where company_id = any (test_ids);
   delete from public.mail_messages where company_id = any (test_ids) or business_type = 'mail_test';
