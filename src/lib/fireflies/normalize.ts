@@ -66,7 +66,6 @@ export const transcriptSchema = z.object({
   transcript_url: text,
   meeting_link: text,
   cal_id: text,
-  calendar_id: text,
   calendar_type: text,
   is_live: z.boolean().nullish().catch(null),
   meeting_info: z.object({ silent_meeting: z.boolean().nullish(), summary_status: text }).nullish().catch(null),
@@ -200,7 +199,8 @@ export function normalizeTranscript(input: unknown): { call: NormalizedCall; lin
       }),
       transcript_url: safeTranscriptUrl(raw.transcript_url),
       meeting_link: trimmed(raw.meeting_link),
-      calendar_event_id: trimmed(raw.cal_id) ?? trimmed(raw.calendar_id),
+      // cal_id : identifiant de cette occurrence chez Google. calendar_id désigne toute une série récurrente.
+      calendar_event_id: trimmed(raw.cal_id),
       calendar_type: trimmed(raw.calendar_type),
       silent,
       summary,

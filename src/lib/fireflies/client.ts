@@ -19,7 +19,7 @@ const TRANSCRIPT_QUERY = `query CrmTranscript($id: String!) {
   user { user_id email }
   transcript(id: $id) {
     id title date dateString duration organizer_email participants transcript_url meeting_link
-    cal_id calendar_id calendar_type is_live
+    cal_id calendar_type is_live
     speakers { id name }
     meeting_attendees { displayName email name }
     meeting_info { silent_meeting summary_status }

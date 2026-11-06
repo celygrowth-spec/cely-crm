@@ -385,7 +385,7 @@ describe("synchronisation périodique", () => {
     list = [{ id: "meetRattrape" }];
     meeting = processed();
     const res = await cron(authorized());
-    expect(await res.json()).toEqual({ sync: { seen: 1, queued: 1 }, drain: { processed: 1, failed: 0 } });
+    expect(await res.json()).toEqual({ sync: { seen: 1, queued: 1 }, drain: { processed: 1, failed: 0 }, rematched: 0 });
     expect((await overview("meetRattrape")).display_state).toBe("imported");
     const first = graphqlTranscriptCalls();
     await cron(authorized());

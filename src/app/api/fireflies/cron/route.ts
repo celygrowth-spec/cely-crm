@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { publicClient } from "@/lib/appointments/server";
 import { getSession } from "@/lib/auth";
 import { firefliesApiKey } from "@/lib/fireflies/config";
-import { drainImports, syncRecent } from "@/lib/fireflies/worker";
+import { drainImports, rematchPending, syncRecent } from "@/lib/fireflies/worker";
 
 export const maxDuration = 60;
 
@@ -37,7 +37,8 @@ async function handle(req: Request) {
     sync = { error: "Liste Fireflies indisponible" }; // les tâches déjà enregistrées restent à traiter
   }
   try {
-    return reply({ sync, drain: await drainImports(sb) });
+    const drain = await drainImports(sb);
+    return reply({ sync, drain, rematched: await rematchPending(sb) });
   } catch {
     return reply({ sync, error: "Traitement interrompu" }, 500);
   }

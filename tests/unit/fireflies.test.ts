@@ -1,9 +1,12 @@
 // Fireflies : signature, conversion des réponses et accès publics au niveau du proxy.
 import { NextRequest } from "next/server";
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { normalizeTranscript, safeTranscriptUrl } from "@/lib/fireflies/normalize";
 import { signPayload, verifySignature } from "@/lib/fireflies/signature";
 
+const rpc = vi.fn();
+let session: { supabase: { rpc: typeof rpc } } | null = null;
+vi.mock("@/lib/auth", () => ({ getSession: async () => session }));
 vi.mock("@supabase/ssr", () => ({
   createServerClient: () => ({ auth: { getClaims: async () => ({ data: null }) } }),
 }));
@@ -22,6 +25,9 @@ const base = {
     { index: 1, speaker_name: null, text: null, raw_text: "brut", start_time: 3, end_time: 4 },
   ],
 };
+
+const CALL = "11111111-1111-4111-8111-111111111111";
+const COMPANY = "22222222-2222-4222-8222-222222222222";
 
 describe("signature", () => {
   test("accepte la signature exacte du corps brut, refuse tout écart", () => {
@@ -93,7 +99,55 @@ describe("proxy", () => {
     const status = async (path: string) => (await proxy(new NextRequest(`https://crm.test${path}`))).status;
     expect(await status("/api/fireflies/webhook")).toBe(200);
     expect(await status("/api/fireflies/cron")).toBe(200);
-    expect(await status("/api/fireflies/status")).toBe(401);
+    for (const path of ["/api/fireflies/status", "/api/fireflies/to-link", "/api/fireflies/rematch", `/api/fireflies/calls/${CALL}/link`]) {
+      expect(await status(path)).toBe(401);
+    }
     vi.unstubAllEnvs();
+  });
+});
+
+describe("route de rattachement", () => {
+  const post = async (body: unknown, id = CALL, origin = "https://crm.test") => {
+    const { POST } = await import("@/app/api/fireflies/calls/[id]/link/route");
+    return POST(
+      new NextRequest(`https://crm.test/api/fireflies/calls/${id}/link`, { method: "POST", body: JSON.stringify(body), headers: { origin } }),
+      { params: Promise.resolve({ id }) },
+    );
+  };
+
+  beforeEach(() => {
+    rpc.mockReset();
+    rpc.mockResolvedValue({ data: null, error: null });
+    session = { supabase: { rpc } };
+  });
+
+  test("sans session ou depuis une autre origine : refus, aucune écriture", async () => {
+    expect((await post({ action: "ignore" }, CALL, "https://ailleurs.test")).status).toBe(403);
+    session = null;
+    expect((await post({ action: "ignore" })).status).toBe(401);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  test("données invalides : refus, aucune écriture", async () => {
+    for (const r of [await post({ action: "supprimer" }), await post({ action: "link" }), await post({ action: "link", company_id: "x" }), await post({ action: "ignore" }, "pas-un-id")]) {
+      expect(r.status).toBe(400);
+    }
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  test("chaque action appelle sa fonction en base", async () => {
+    expect((await post({ action: "link", company_id: COMPANY })).status).toBe(200);
+    expect(rpc).toHaveBeenLastCalledWith("fireflies_link_call", { p_call: CALL, p_company: COMPANY, p_person: null, p_booking: null });
+    await post({ action: "ignore" });
+    expect(rpc).toHaveBeenLastCalledWith("fireflies_ignore_call", { p_call: CALL });
+    await post({ action: "reset" });
+    expect(rpc).toHaveBeenLastCalledWith("fireflies_reset_call_link", { p_call: CALL });
+  });
+
+  test("le refus de la base est rendu lisible", async () => {
+    rpc.mockResolvedValue({ data: null, error: { message: "Fiche introuvable", code: "P0002" } });
+    const r = await post({ action: "link", company_id: COMPANY });
+    expect(r.status).toBe(400);
+    expect(await r.json()).toEqual({ ok: false, error: "Fiche introuvable" });
   });
 });

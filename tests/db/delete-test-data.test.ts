@@ -27,7 +27,16 @@ test("le script supprime les données [TEST] et rien d'autre", async () => {
   await db.rpc("mail_save_draft", { p_id: "44444444-4444-4444-8444-444444444444", p: { company_id: test_, to: ["a@b.fr"], subject: "x", body: "y" } });
   await db.rpc("mail_save_draft", { p_id: "55555555-5555-4555-8555-555555555555", p: { company_id: real, to: ["a@b.fr"], subject: "garde", body: "y" } });
 
+  // Un appel Fireflies de test rattaché à la fiche de test, un vrai appel rattaché à cette même fiche : ce dernier revient dans la file.
+  await db.exec(`reset role;
+    insert into fireflies_calls (account_id, fireflies_id, title, link_state, company_id) values
+      ('c', 'test1', '[TEST] Appel', 'linked', '${test_}'), ('c', 'vrai1', 'Vrai appel', 'linked', '${test_}');
+    insert into fireflies_import_jobs (meeting_id, status, call_id) select fireflies_id, 'done', id from fireflies_calls;`);
+
+  // Script prévu pour le SQL Editor de Supabase : il s'y exécute avec les droits d'administration.
   await db.exec(readFileSync(join(__dirname, "..", "..", "supabase", "maintenance", "delete-test-data.sql"), "utf8"));
+  expect((await db.query(`select title, link_state, company_id from fireflies_calls`)).rows).toEqual([{ title: "Vrai appel", link_state: "to_link", company_id: null }]);
+  expect((await db.query(`select meeting_id from fireflies_import_jobs`)).rows).toEqual([{ meeting_id: "vrai1" }]);
 
   const names = await db.query<{ name: string }>(`select name from companies order by name`);
   expect(names.rows.map((r) => r.name).sort()).toEqual(["TEST2", "Vraie entreprise"].sort());

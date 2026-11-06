@@ -114,3 +114,8 @@ export async function syncRecent(sb: SupabaseClient, now = new Date()) {
   await rpc(sb, "fireflies_sync_done", {});
   return res;
 }
+
+/** Reprend les appels à rattacher : un contact ajouté depuis peut désormais les désigner. Les choix manuels ne bougent pas. */
+export async function rematchPending(sb: SupabaseClient) {
+  return rpc<number>(sb, "fireflies_rematch", {});
+}

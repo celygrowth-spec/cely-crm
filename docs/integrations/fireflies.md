@@ -1,8 +1,8 @@
 # Fireflies : import automatique des appels
 
-État : **phase 1 (import)** livrée sur `feature/fireflies-crm`. Le rattachement aux fiches (phase 2) et
-l'onglet « Historique des appels » (phase 3) viennent ensuite. Tant qu'ils n'existent pas, les appels sont
-enregistrés en base mais ne s'affichent sur aucune fiche.
+État : **phases 1 (import) et 2 (rattachement)** livrées sur `feature/fireflies-crm`. L'onglet « Historique des
+appels » (phase 3) vient ensuite. D'ici là, les appels sont enregistrés et rattachés en base, avec une activité
+sur la fiche, mais le résumé et la transcription ne s'affichent nulle part.
 
 ## Comment ça marche
 
@@ -29,6 +29,50 @@ Règles qui évitent les doublons et les pertes :
 - Un événement reçu pendant un traitement relance un passage ensuite.
 - Une réponse sans résumé ou sans ligne n'efface jamais ce qui est déjà enregistré.
 
+## Rattachement à une fiche
+
+À chaque import, dans la même transaction que l'appel, les règles s'appliquent dans cet ordre :
+
+1. **Rendez-vous du CRM déjà rattaché à une fiche.** Reconnu par l'identifiant d'événement Google (`cal_id`), qui
+   ne change pas après un report. Sinon, il faut l'horaire (de 30 min avant à 30 min après le rendez-vous) **et**
+   l'email de l'invité parmi les participants. Un lien Meet seul ne suffit jamais, il ne sert qu'à départager
+   deux rendez-vous possibles.
+2. **Email exact d'un participant externe connu**, si les contacts désignent une seule entreprise.
+3. **Sinon, « Appels à rattacher »**, avec jusqu'à 10 fiches candidates et leurs raisons : contact, candidate du
+   rendez-vous, domaine du site ou d'un contact, même nom de personne, nom de l'entreprise dans le titre. Ces
+   indices aident à trouver la fiche, ils ne rattachent jamais seuls.
+
+**Adresses ignorées** : celle de votre compte, vos boîtes Mail, votre agenda Google, le compte Fireflies, celles
+ajoutées avec `fireflies_set_own_addresses`, tout le domaine d'une de ces adresses s'il est professionnel, ainsi
+que les comptes techniques (enregistreurs de réunion, salles d'agenda, `noreply`, etc.).
+
+**Vos choix sont conservés.** Rattacher, déplacer ou ignorer verrouille l'appel : ni un nouvel import ni le
+recalcul n'y touchent. « Annuler mon choix » le rend aux règles automatiques. Sans choix de votre part, chaque
+import réapplique les règles.
+
+**Jamais de création** : un appel ne crée ni entreprise, ni contact, ni opportunité.
+
+**Mise à jour des appels à rattacher** : le passage quotidien (ou `POST /api/fireflies/rematch`) les reprend, car
+un contact ajouté depuis peut maintenant les désigner.
+
+**Une seule activité par appel** sur la fiche, avec le texte fixe « Appel enregistré par Fireflies », sans titre,
+résumé ni lien. Elle compte comme dernier échange et suit l'appel s'il est déplacé.
+
+- Si « Rendez-vous réalisé » existe déjà, cette activité est réutilisée. Elle reste sur la fiche du rendez-vous
+  si l'appel part ailleurs.
+- Si l'appel arrive d'abord, qualifier le rendez-vous n'ajoute pas de seconde activité.
+
+**Fusion de fiches** : les appels et vos choix suivent la fiche conservée. **Fiche supprimée** : l'appel revient
+dans la file avec sa transcription.
+
+**Du rendez-vous à l'appel** : `fireflies_calls.booking_id` relie les deux. L'affichage arrive en phase 3.
+
+| Route (propriétaire uniquement) | Rôle |
+| --- | --- |
+| `GET /api/fireflies/to-link` | File à rattacher, sans résumé ni transcription |
+| `POST /api/fireflies/calls/<id>/link` | `{"action":"link","company_id":…}`, `{"action":"ignore"}` ou `{"action":"reset"}` |
+| `POST /api/fireflies/rematch` | Recalcule les appels à rattacher |
+
 ## Configuration, étape par étape
 
 Les valeurs secrètes se saisissent uniquement dans Vercel et dans Fireflies, jamais dans une conversation ni
@@ -38,8 +82,9 @@ dans le code.
 du webhook doit répondre sans protection : une préversion Vercel protégée renverrait une page de connexion à
 Fireflies.
 
-1. **Migration** : dans Supabase › SQL Editor, coller et exécuter le contenu de
-   `supabase/migrations/20261108000100_fireflies.sql`. Le module Rendez-vous doit déjà être installé.
+1. **Migrations** : dans Supabase › SQL Editor, coller et exécuter, dans cet ordre, le contenu de
+   `supabase/migrations/20261108000100_fireflies.sql` puis de `20261108000200_fireflies_rattachement.sql`. Les
+   modules Rendez-vous et Mail doivent déjà être installés.
 2. **Clé API** : dans Fireflies › Integrations › Fireflies API, copier la clé. Dans Vercel › projet › Settings ›
    Environment Variables, créer `FIREFLIES_API_KEY` avec cette valeur.
 3. **Secret de signature** : dans un terminal, lancer `openssl rand -hex 32`. Dans Vercel, créer
@@ -102,14 +147,16 @@ Ces points ne sont pas précisés par la documentation et n'ont été testés qu
 
 - l'unité de `start_time` et `end_time` (typés « chaîne », supposés en secondes) ;
 - la forme exacte des erreurs GraphQL et de l'événement de test ;
-- la présence du résumé selon le forfait.
+- la présence du résumé selon le forfait ;
+- que `cal_id` correspond bien au `google_event_id` enregistré par Rendez-vous : la documentation l'indique, mais
+  Google Agenda n'est pas encore vérifié de bout en bout. Sinon, la règle horaire + participant prend le relais ;
+- que les fonctions lisent bien `auth.users` sur Supabase (pour votre adresse). En cas de refus, l'appel reste
+  enregistré, mais à rattacher.
 
 ## Raccordements prévus, sans dépendance de branche
 
-- **Rendez-vous (phase 2)** : `fireflies_calls.calendar_event_id` et `meeting_link` serviront à reconnaître un
-  rendez-vous, à recouper avec l'horaire et les participants.
-- **Mail** : le module pourra lire l'adresse des participants dans `fireflies_calls.participants`. La liste de
-  vos propres adresses à ignorer en phase 2 pourra inclure `mail_accounts` lorsque ce module est présent, sans
-  que l'import en dépende.
+- **Rendez-vous** : `fireflies_calls.booking_id` relie l'appel au rendez-vous. La lecture de `appt_bookings` suffit.
+- **Mail** : `mail_accounts`, déjà dans `main`, alimente vos adresses à ignorer. Le module Mail pourra lire
+  `fireflies_calls.participants`, sans dépendance de sa branche.
 - **Portail client** : aucun raccordement. Le portail passe par le rôle anon et ses propres fonctions, sans
   droit sur ces tables. Ne jamais y ajouter de fonction rendant un résumé, un lien ou une transcription.
