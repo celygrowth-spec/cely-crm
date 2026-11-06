@@ -23,6 +23,12 @@ import {
   subscriptionSchema,
   urssafDeclareSchema,
   urssafPaySchema,
+  revenueSchema,
+  revenueUpdateSchema,
+  settleSchema,
+  type RevenueInput,
+  type RevenueUpdateInput,
+  type SettleInput,
   type CreditNoteInput,
   type ExpenseInput,
   type InvoiceInput,
@@ -58,7 +64,27 @@ export async function saveMissionAction(id: string | null, input: MissionInput, 
   return run((sb) => rpc(sb, "finance_save_mission", { p_id: id ? idv(id) : null, p_data: v(missionSchema, input), p_idempotency_key: optKey(key) }));
 }
 
-// Revenus -------------------------------------------------------------------
+// Revenus unifiés (ponctuel / mensuel) -------------------------------------
+
+/** Ajouter un revenu : un seul appel, une seule transaction (revenu, et facture + règlement si déjà reçu). */
+export async function addRevenueAction(input: RevenueInput, key: string) {
+  return run((sb) => rpc<{ id: string; invoice_id: string | null }>(sb, "finance_add_revenue", { p_data: v(revenueSchema, input), p_idempotency_key: v(keySchema, key) }));
+}
+
+/** Encaisser (ou facturer) une échéance : facture rattachée + règlement éventuel, partiel accepté. */
+export async function settleDueAction(missionId: string, input: SettleInput, key: string) {
+  return run((sb) => rpc(sb, "finance_settle_due", { p_mission: idv(missionId), p_data: v(settleSchema, input), p_idempotency_key: v(keySchema, key) }));
+}
+
+export async function updateRevenueAction(missionId: string, input: RevenueUpdateInput) {
+  return run((sb) => rpc(sb, "finance_update_revenue", { p_mission: idv(missionId), p_data: v(revenueUpdateSchema, input) }));
+}
+
+export async function stopRevenueAction(missionId: string, end: string) {
+  return run((sb) => rpc(sb, "finance_stop_revenue", { p_mission: idv(missionId), p_end: v(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide"), end) }));
+}
+
+// Factures --------------------------------------------------------------------
 
 export async function recordInvoiceAction(input: InvoiceInput, key: string, paidNow?: { paid_on: string } | null) {
   return run(async (sb) => {

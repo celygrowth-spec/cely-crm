@@ -15,6 +15,7 @@ import {
   type Periodicity,
 } from "./dates";
 import { applyRate, mulDiv, sum, sumKnown, type KnownSum } from "./money";
+import { forecastDues } from "./revenues";
 import type { Expense, FinanceData, Invoice, Mission, Rate, Regime, Settings, Subscription, UrssafPeriod } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -182,25 +183,6 @@ export function contractualMrr(missions: Mission[]): KnownSum {
 
 export function activeClientIds(missions: Mission[]): string[] {
   return [...new Set(missions.filter((m) => m.status === "actif").map((m) => m.company_id))];
-}
-
-/** Échéances prévisionnelles d'une mission entre deux dates (jamais des encaissements). */
-export function missionDueDates(m: Mission, from: string, to: string): string[] {
-  if (!m.next_due_date || m.status === "termine" || m.status === "en_pause") return [];
-  if (m.kind === "ponctuel") return inRange(m.next_due_date, from, to) ? [m.next_due_date] : [];
-  const out: string[] = [];
-  for (let k = 0, d = m.next_due_date; d <= to && k < 400; k++, d = addFrequency(m.next_due_date, m.frequency!, k)) {
-    if (m.end_date && d > m.end_date) break;
-    if (d >= from) out.push(d);
-  }
-  return out;
-}
-
-/** Montant restant à facturer prévu à une échéance de mission. */
-function missionDueAmount(m: Mission): number | null {
-  if (m.amount == null) return null;
-  if (m.kind === "recurrent") return m.amount;
-  return Math.max(m.amount - m.invoiced_ht, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -460,13 +442,13 @@ export function forecast(data: FinanceData, months = 6): ForecastMonth[] {
     slot(d)!.inPrevu += i.balance;
     addBase(d < cur ? cur : d, i.amount_ttc ? mulDiv(i.balance, i.amount_ht, i.amount_ttc) : i.balance);
   }
+  // revenus prévus (ponctuels et échéances mensuelles) non encore couverts par une facture
   for (const m of data.missions) {
-    for (const d of missionDueDates(m, cur, last)) {
-      const a = missionDueAmount(m);
-      if (a == null) slot(d)!.unknown++;
+    for (const d of forecastDues(m, data.invoices, cur, last)) {
+      if (d.amount == null) slot(d.date)!.unknown++;
       else {
-        slot(d)!.inEstime += a;
-        addBase(d, a);
+        slot(d.date)!.inEstime += d.amount;
+        addBase(d.date, d.amount);
       }
     }
   }
@@ -622,4 +604,68 @@ export function simulate(data: FinanceData, input: SimulationInput) {
     savedSubscription: saved,
     months: n,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Accueil simplifié : trois chiffres, mêmes sources que les lignes de détail
+// ---------------------------------------------------------------------------
+
+/** Reste dû d'une facture à une date (avoirs et règlements datés jusqu'à cette date inclus). */
+export function invoiceBalanceAt(data: FinanceData, i: Invoice, at: string): number {
+  if (i.kind !== "facture" || i.cancelled_at || i.issue_date > at) return 0;
+  let paid = 0;
+  for (const p of data.payments) {
+    if (p.invoice_id !== i.id || p.cancelled_at || p.paid_on > at) continue;
+    paid += p.kind === "paiement" ? p.amount : -p.amount;
+  }
+  let credited = 0;
+  for (const a of data.invoices) if (a.kind === "avoir" && !a.cancelled_at && a.credited_invoice_id === i.id && a.issue_date <= at) credited += a.amount_ttc;
+  return Math.max(i.amount_ttc - credited - paid, 0);
+}
+
+/** Factures ouvertes à la fin d'une période, avec la part en retard (échéance dépassée à cette date). */
+export function openInvoicesAt(data: FinanceData, at: string) {
+  const asOf = at < data.today ? at : data.today;
+  const rows = data.invoices
+    .map((i) => ({ invoice: i, balance: invoiceBalanceAt(data, i, at) }))
+    .filter((r) => r.balance > 0)
+    .map((r) => ({ ...r, late: !!r.invoice.due_date && r.invoice.due_date < asOf }));
+  return { rows, total: sum(rows.map((r) => r.balance)), late: sum(rows.filter((r) => r.late).map((r) => r.balance)), lateCount: rows.filter((r) => r.late).length };
+}
+
+/** Argent réellement reçu (règlements − remboursements) et réellement dépensé (charges + URSSAF), par date de paiement. */
+export function homeKpis(data: FinanceData, from: string, to: string) {
+  const cin = cashIn(data, from, to);
+  const cout = cashOut(data, from, to);
+  const open = openInvoicesAt(data, to);
+  return { received: cin.net, outstanding: open.total, late: open.late, lateCount: open.lateCount, spent: cout.expenses + cout.urssaf, spentUrssaf: cout.urssaf };
+}
+
+/** Série « Réel » : par mois, encaissé net et dépensé (même définition que les chiffres de l'accueil). */
+export function realSeries(data: FinanceData, from: string, to: string) {
+  return monthsBetween(from, to).map((m) => {
+    const k = homeKpis(data, m, monthEnd(m));
+    return { month: m, in: k.received, out: k.spent };
+  });
+}
+
+export type AgingBucket = { key: "retard" | "j7" | "j30" | "plus" | "sans"; label: string; total: number; ids: string[] };
+
+/** Factures ouvertes aujourd'hui par échéance : en retard, sous 7 j, sous 30 j, au-delà, sans échéance. */
+export function receivableAging(data: FinanceData): AgingBucket[] {
+  const b: AgingBucket[] = [
+    { key: "retard", label: "En retard", total: 0, ids: [] },
+    { key: "j7", label: "Sous 7 j", total: 0, ids: [] },
+    { key: "j30", label: "Sous 30 j", total: 0, ids: [] },
+    { key: "plus", label: "Plus tard", total: 0, ids: [] },
+    { key: "sans", label: "Sans échéance", total: 0, ids: [] },
+  ];
+  for (const i of data.invoices) {
+    if (!isOpen(i) || i.balance <= 0) continue;
+    const d = i.due_date;
+    const k = !d ? 4 : d < data.today ? 0 : d <= addDays(data.today, 7) ? 1 : d <= addDays(data.today, 30) ? 2 : 3;
+    b[k].total += i.balance;
+    b[k].ids.push(i.id);
+  }
+  return b;
 }

@@ -149,3 +149,50 @@ export type RateInput = z.input<typeof rateSchema>;
 export const openingSchema = z.object({ amount: z.number().int().min(-9_999_999_999).max(9_999_999_999), as_of: date });
 
 export const categorySchema = z.object({ name: z.string().trim().min(1, "Le nom est obligatoire").max(80), ebitda_included: z.boolean() });
+
+// ---------------------------------------------------------------------------
+// Revenus unifiés (ponctuel / mensuel)
+// ---------------------------------------------------------------------------
+
+const vatRate = z.string().regex(/^\d{1,2}([.,]\d{1,2})?$/, "Taux de TVA invalide").nullable().optional()
+  .or(z.literal("").transform(() => null)).transform((r) => (r ? r.replace(",", ".") : null));
+
+export const revenueSchema = z
+  .object({
+    company_id: id,
+    label: z.string().trim().min(1, "Le libellé de la prestation est obligatoire").max(200),
+    kind: z.enum(["ponctuel", "mensuel"]),
+    amount: positive,
+    date,
+    end_date: optDate,
+    note: optText(2000),
+    received: z.object({ paid_on: date, amount: optCents, vat_rate: vatRate }).nullable().optional(),
+  })
+  .refine((r) => r.kind === "ponctuel" || !r.end_date || r.end_date >= r.date, { message: "La date de fin précède la première échéance" })
+  .refine((r) => r.kind === "ponctuel" || !r.received, { message: "Un revenu mensuel s'encaisse échéance par échéance" })
+  .transform((r) => ({
+    ...r,
+    amount: centsToDb(r.amount),
+    end_date: r.kind === "mensuel" ? r.end_date ?? null : null,
+    received: r.received ? { ...r.received, amount: centsToDb(r.received.amount ?? null) } : null,
+  }));
+export type RevenueInput = z.input<typeof revenueSchema>;
+
+export const settleSchema = z
+  .object({
+    due_date: date,
+    amount: positive,
+    vat_rate: vatRate,
+    reference: optText(100),
+    paid_on: optDate,
+    paid_amount: optCents,
+    note: optText(2000),
+  })
+  .transform((s) => ({ ...s, amount: centsToDb(s.amount), paid_amount: centsToDb(s.paid_amount ?? null) }));
+export type SettleInput = z.input<typeof settleSchema>;
+
+export const revenueUpdateSchema = z
+  .object({ label: z.string().trim().min(1, "Le libellé est obligatoire").max(200), amount: positive, date, end_date: optDate, note: optText(2000) })
+  .refine((r) => !r.end_date || r.end_date >= r.date, { message: "La date de fin précède la première échéance" })
+  .transform((r) => ({ ...r, amount: centsToDb(r.amount) }));
+export type RevenueUpdateInput = z.input<typeof revenueUpdateSchema>;
