@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { formatDate } from "@/lib/format";
 import { formatLongDate, formatTimeShort } from "@/lib/appointments/time";
 import { PHASE_STATUS_LABELS, type Milestone, type Phase, type PhaseColor, type PortalMeeting } from "@/lib/projects/types";
+import { REACH_CLASS, axisTicks, makeScale } from "@/lib/projects/timeline-axis";
 import { Mascot } from "./mascot";
 
 export const PHASE_STYLES: Record<PhaseColor, { bar: string; soft: string; text: string; dot: string }> = {
@@ -19,9 +20,6 @@ export const PHASE_STYLES: Record<PhaseColor, { bar: string; soft: string; text:
   slate: { bar: "bg-[#64748b]", soft: "bg-[#eef1f5]", text: "text-[#334155]", dot: "bg-[#64748b]" },
 };
 
-const DAY = 86400_000;
-const t = (d: string) => Date.parse(`${d.slice(0, 10)}T12:00:00Z`);
-
 /** Phase dont la date de fin est dépassée sans être terminée : décalage, pas d'échec. */
 export function isLate(p: Phase, today: string) {
   return p.status !== "termine" && !!p.end_date && p.end_date < today;
@@ -33,109 +31,140 @@ export function currentPhase(phases: Phase[]): Phase | null {
 
 type Props = { phases: Phase[]; milestones: Milestone[]; meetings: PortalMeeting[]; today: string; start: string | null; end: string | null; projectId: string; linkBase?: string };
 
-export function TimelineVisual({ phases, milestones, meetings, today, start, end, linkBase }: Props) {
-  const dates = [
+const edgeAlign = (left: number) => (left < 4 ? "translate-x-0" : left > 96 ? "-translate-x-full" : "-translate-x-1/2");
+const shortDay = (d: string) => new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(`${d}T12:00:00Z`));
+
+export function TimelineVisual({ phases, milestones, meetings, today, start, end, projectId, linkBase }: Props) {
+  const scale = makeScale([
     start, end,
     ...phases.flatMap((p) => [p.start_date, p.end_date]),
     ...milestones.map((m) => m.due_date),
     ...meetings.filter((m) => m.status !== "cancelled").map((m) => m.starts_at.slice(0, 10)),
-  ].filter((d): d is string => !!d);
-  const dated = dates.length >= 2;
-  const min = dated ? Math.min(...dates.map(t)) : 0;
-  const max = dated ? Math.max(...dates.map(t)) : 1;
-  const span = Math.max(max - min, DAY);
-  const pos = (d: string) => Math.min(100, Math.max(0, ((t(d) - min) / span) * 100));
-  const todayPos = dated ? ((t(today) - min) / span) * 100 : null;
+  ]);
+  const ticks = scale ? axisTicks(scale) : [];
+  // aujourd'hui : milieu de la journée, à sa position exacte dans la période
+  const todayPos = scale ? scale.at(today, "mid") : null;
   const showToday = todayPos !== null && todayPos >= 0 && todayPos <= 100;
   const current = currentPhase(phases);
-
-  // mois affichés en repères
-  const months: { label: string; left: number }[] = [];
-  if (dated) {
-    const d = new Date(min);
-    d.setUTCDate(1);
-    for (let i = 0; i < 24; i++) {
-      d.setUTCMonth(d.getUTCMonth() + (i === 0 ? 1 : 1));
-      const x = ((d.getTime() - min) / span) * 100;
-      if (x > 100) break;
-      if (x > 2 && x < 98) months.push({ label: new Intl.DateTimeFormat("fr-FR", { month: "short", timeZone: "UTC" }).format(d), left: x });
-    }
-  }
+  const done = phases.filter((p) => p.status === "termine").length;
+  const placed = (p: Phase) => !!scale && !!p.start_date && !!p.end_date;
+  const curLeft = current && placed(current) ? scale!.at(current.start_date!) : null;
 
   return (
-    <div className="relative rounded-2xl border border-line bg-white p-4 sm:p-6" aria-hidden="false">
-      <div className="relative" role="img" aria-label={`Frise du projet : ${phases.map((p) => `${p.name} (${PHASE_STATUS_LABELS[p.status]})`).join(", ")}`}>
-        {/* repères de mois */}
-        {dated && (
-          <div className="relative mb-2 h-4 font-label text-[10px] text-muted uppercase">
-            {months.map((m) => <span key={m.left} className="absolute -translate-x-1/2" style={{ left: `${m.left}%` }}>{m.label}</span>)}
-          </div>
-        )}
-        {/* temps écoulé */}
-        {showToday && <div className="pointer-events-none absolute top-6 bottom-0 left-0 rounded-l-lg bg-surface/80" style={{ width: `${todayPos}%` }} />}
-
-        {/* phases */}
-        <div className="relative flex h-12 gap-1 sm:h-14">
-          {phases.map((p, i) => {
-            const st = PHASE_STYLES[p.color] ?? PHASE_STYLES.violet;
-            const style = dated && p.start_date && p.end_date
-              ? { position: "absolute" as const, left: `${pos(p.start_date)}%`, width: `${Math.max(pos(p.end_date) - pos(p.start_date), 3)}%`, top: 0, bottom: 0 }
-              : { flex: 1 };
-            const isCurrent = current?.id === p.id;
-            return (
-              <div
-                key={p.id}
-                className={cn(
-                  "tl-in flex min-w-0 items-center gap-1.5 overflow-hidden rounded-lg px-2 text-xs font-semibold shadow-sm sm:text-sm",
-                  p.status === "termine" ? `${st.bar} text-white` : p.status === "a_venir" ? `${st.soft} ${st.text}` : `${st.bar} text-white`,
-                  p.status === "en_pause" && "tl-paused",
-                  isCurrent && "ring-2 ring-ink/80 ring-offset-2",
-                )}
-                style={{ ...style, animationDelay: `${i * 70}ms` }}
-                title={`${p.name} · ${PHASE_STATUS_LABELS[p.status]}${p.start_date ? ` · ${formatDate(p.start_date)} → ${formatDate(p.end_date)}` : ""}`}
-              >
-                {p.status === "termine" && <Check size={14} className="tl-check shrink-0" aria-hidden />}
-                {p.status === "en_pause" && <Pause size={13} className="shrink-0" aria-hidden />}
-                <span className="truncate">{p.name}</span>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* jalons et points */}
-        {dated && (milestones.length > 0 || meetings.length > 0) && (
-          <div className="relative mt-3 h-7">
-            {milestones.map((m) => (
-              <span key={m.id} className="absolute -translate-x-1/2" style={{ left: `${pos(m.due_date)}%` }} title={`Jalon : ${m.title} · ${formatDate(m.due_date)}`}>
-                <Diamond size={14} className={m.done ? "fill-success text-success" : "fill-white text-ink"} aria-hidden />
+    <div className="relative rounded-2xl border border-line bg-white p-4 sm:p-6">
+      <div className="relative" role="img" aria-label={`Frise du projet${showToday ? `, aujourd'hui ${shortDay(today)}` : ""} : ${phases.map((p) => `${p.name} (${PHASE_STATUS_LABELS[p.status]}${p.start_date ? `, du ${formatDate(p.start_date)} au ${formatDate(p.end_date)}` : ""})`).join(", ")}`}>
+        {/* axe : mois et repères 10 · 20 · 30 (seulement les dates qui existent dans la période) */}
+        {scale && (
+          <div className="relative h-8 border-b border-line" data-axis>
+            {ticks.map((tk) => (
+              <span key={tk.key} className={cn("absolute bottom-0", REACH_CLASS[tk.reach])} style={{ left: `${tk.left}%` }} data-tick={tk.kind}>
+                <span className={cn("absolute bottom-1.5 whitespace-nowrap", edgeAlign(tk.left),
+                  tk.kind === "month" ? "font-label text-[11px] font-semibold text-ink" : "text-[10px] text-muted tabular-nums")}>
+                  {tk.label}{tk.year ? <span className="hidden sm:inline"> {tk.year}</span> : null}
+                </span>
+                <span className={cn("absolute bottom-0 w-px", tk.kind === "month" ? "h-1.5 bg-ink/40" : "h-1 bg-line")} />
               </span>
             ))}
-            {meetings.filter((m) => m.status !== "cancelled").map((m) => {
-              const dot = (
-                <span className={cn("block size-3 rounded-full border-2 border-white shadow", m.status === "upcoming" ? "bg-violet-strong" : "bg-muted")} />
-              );
+          </div>
+        )}
+
+        {/* phase réellement en cours : repère distinct de la date du jour (une phase peut durer au-delà de sa fin prévue) */}
+        {current && (
+          <div className="relative mt-2 h-7">
+            <span
+              className={cn("absolute inline-flex items-center gap-1.5 whitespace-nowrap", curLeft === null ? "left-0" : edgeAlign(Math.min(curLeft, 90)))}
+              style={curLeft === null ? undefined : { left: `${Math.min(Math.max(curLeft, 0), 90)}%` }}
+              data-current-phase={current.id}
+            >
+              <Mascot projectId={projectId} phase={current.name} done={done} />
+              <span className={cn("rounded-full px-2 py-0.5 font-label text-[11px] font-semibold", current.status === "en_pause" ? "bg-amber-50 text-warning" : "bg-violet-soft text-violet-strong")}>
+                {current.status === "en_pause" ? "En pause" : "En cours"} · {current.name}
+              </span>
+            </span>
+          </div>
+        )}
+
+        <div className="relative mt-1">
+          {/* lignes de mois, en fond */}
+          {ticks.filter((tk) => tk.kind === "month" && tk.left > 0).map((tk) => (
+            <span key={tk.key} className={cn("pointer-events-none absolute top-0 bottom-0 w-px bg-line/70", REACH_CLASS[tk.reach])} style={{ left: `${tk.left}%` }} aria-hidden />
+          ))}
+          {/* temps écoulé */}
+          {showToday && <div className="pointer-events-none absolute top-0 bottom-0 left-0 rounded-l-lg bg-surface/80" style={{ width: `${todayPos}%` }} />}
+
+          {/* phases, à leurs dates réelles (du premier au dernier jour inclus) */}
+          <div className="relative flex h-12 gap-1 sm:h-14">
+            {phases.map((p, i) => {
+              const st = PHASE_STYLES[p.color] ?? PHASE_STYLES.violet;
+              const left = placed(p) ? scale!.at(p.start_date!) : 0;
+              const right = placed(p) ? scale!.at(p.end_date!, "end") : 0;
+              const style = placed(p)
+                ? { position: "absolute" as const, left: `${left}%`, width: `${Math.max(right - left, 2)}%`, top: 0, bottom: 0 }
+                : { flex: 1 };
+              const isCurrent = current?.id === p.id;
+              const late = isLate(p, today) && placed(p) && showToday && todayPos! > right;
               return (
-                <span key={m.id} className="absolute top-3.5 -translate-x-1/2" style={{ left: `${pos(m.starts_at.slice(0, 10))}%` }} title={`Point : ${m.title} · ${formatDate(m.starts_at)}`}>
-                  {linkBase ? <Link href={`${linkBase}/points/${m.id}`} aria-label={`Point : ${m.title}`}>{dot}</Link> : dot}
-                </span>
+                <div key={p.id} className="contents">
+                  {late && (
+                    // dépassement : la phase se poursuit au-delà de sa fin prévue, jusqu'à aujourd'hui
+                    <div className="tl-overrun absolute top-1 bottom-1 rounded-r-lg" style={{ left: `${right}%`, width: `${todayPos! - right}%` }} title={`${p.name} : dépasse la date prévue (${formatDate(p.end_date)})`} aria-hidden />
+                  )}
+                  <div
+                    className={cn(
+                      "tl-in flex min-w-0 items-center gap-1.5 overflow-hidden rounded-lg px-2 text-xs font-semibold shadow-sm sm:text-sm",
+                      p.status === "a_venir" ? `${st.soft} ${st.text}` : `${st.bar} text-white`,
+                      p.status === "en_pause" && "tl-paused",
+                      isCurrent && "z-[1] ring-2 ring-violet-strong ring-offset-2",
+                    )}
+                    style={{ ...style, animationDelay: `${i * 70}ms` }}
+                    title={`${p.name} · ${PHASE_STATUS_LABELS[p.status]}${p.start_date ? ` · ${formatDate(p.start_date)} → ${formatDate(p.end_date)}` : ""}`}
+                    data-phase={p.id}
+                  >
+                    {p.status === "termine" && <Check size={14} className="tl-check shrink-0" aria-hidden />}
+                    {p.status === "en_pause" && <Pause size={13} className="shrink-0" aria-hidden />}
+                    <span className="truncate">{p.name}</span>
+                  </div>
+                </div>
               );
             })}
           </div>
-        )}
 
-        {/* aujourd'hui */}
-        {showToday && (
-          <div className="pointer-events-none absolute top-5 bottom-0 z-10" style={{ left: `${todayPos}%` }}>
-            <div className="h-full w-0.5 -translate-x-1/2 rounded bg-ink" />
-            <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-full rounded-full bg-ink px-2 py-0.5 font-label text-[10px] font-semibold whitespace-nowrap text-white">Aujourd&apos;hui</span>
-          </div>
-        )}
+          {/* jalons et points, à leur date */}
+          {scale && (milestones.length > 0 || meetings.length > 0) && (
+            <div className="relative mt-3 h-7">
+              {milestones.map((m) => (
+                <span key={m.id} className="absolute -translate-x-1/2" style={{ left: `${scale.at(m.due_date, "mid")}%` }} title={`Jalon : ${m.title} · ${formatDate(m.due_date)}`}>
+                  <Diamond size={14} className={m.done ? "fill-success text-success" : "fill-white text-ink"} aria-hidden />
+                </span>
+              ))}
+              {meetings.filter((m) => m.status !== "cancelled").map((m) => {
+                const dot = <span className={cn("block size-3 rounded-full border-2 border-white shadow", m.status === "upcoming" ? "bg-violet-strong" : "bg-muted")} />;
+                return (
+                  <span key={m.id} className="absolute top-3.5 -translate-x-1/2" style={{ left: `${scale.at(m.starts_at.slice(0, 10), "mid")}%` }} title={`Point : ${m.title} · ${formatDate(m.starts_at)}`}>
+                    {linkBase ? <Link href={`${linkBase}/points/${m.id}`} aria-label={`Point : ${m.title}`}>{dot}</Link> : dot}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          {/* aujourd'hui : trait sombre et date du jour, distinct du repère de la phase en cours */}
+          {showToday && (
+            <div className="pointer-events-none absolute -top-1 bottom-0 z-10" style={{ left: `${todayPos}%` }} data-today={todayPos!.toFixed(2)}>
+              <div className="h-full w-0.5 -translate-x-1/2 rounded bg-ink" />
+              <span className={cn("absolute bottom-0 translate-y-full rounded-full bg-ink px-2 py-0.5 font-label text-[10px] font-semibold whitespace-nowrap text-white", edgeAlign(todayPos!))}>
+                Aujourd&apos;hui · {shortDay(today)}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
       <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
         <span className="inline-flex items-center gap-1"><Check size={12} /> Terminée</span>
+        <span className="inline-flex items-center gap-1"><span className="size-2.5 rounded-sm ring-2 ring-violet-strong" /> En cours</span>
+        <span className="inline-flex items-center gap-1"><span className="h-3 w-0.5 rounded bg-ink" /> Aujourd&apos;hui</span>
         <span className="inline-flex items-center gap-1"><Diamond size={12} /> Jalon</span>
         <span className="inline-flex items-center gap-1"><span className="size-2.5 rounded-full bg-violet-strong" /> Point de suivi</span>
-        {current && <span className="ml-auto"><Mascot phase={current.name} /></span>}
       </div>
     </div>
   );

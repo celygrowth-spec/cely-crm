@@ -120,8 +120,8 @@ describe("dépôt client", () => {
 
   test("ses dépôts seulement : renommer, déplacer, supprimer ; transfert abandonné sans trace", async () => {
     await db.as("owner");
-    const folder = (await db.one<{ id: string }>(`insert into project_folders (project_id, name) values ($1, 'Contenus') returning id`, [pid])).id;
-    const sub = (await db.one<{ id: string }>(`insert into project_folders (project_id, parent_id, name) values ($1, $2, 'Textes') returning id`, [pid, folder])).id;
+    const folder = (await db.one<{ id: string }>(`insert into project_folders (project_id, name, visible_to_client, client_can_upload) values ($1, 'Contenus', true, true) returning id`, [pid])).id;
+    const sub = (await db.one<{ id: string }>(`insert into project_folders (project_id, parent_id, name, visible_to_client, client_can_upload) values ($1, $2, 'Textes', true, true) returning id`, [pid, folder])).id;
     await expect(db.query(`insert into project_folders (project_id, parent_id, name) values ($1, $2, 'Trop profond')`, [pid, sub])).rejects.toThrow(/Deux niveaux/);
     const s = await upload(alice);
     await asAnonStorage(() => db.query(`insert into storage.objects (bucket_id, name) values ('company-files', $1)`, [s.path]));

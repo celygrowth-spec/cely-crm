@@ -14,13 +14,15 @@ const body = z.discriminatedUnion("op", [
   z.object({ op: z.literal("abort"), file: id }),
   z.object({ op: z.literal("url"), id, download: z.boolean() }),
   z.object({ op: z.literal("rename"), id, name: z.string().trim().min(1).max(200) }),
-  z.object({ op: z.literal("move"), id, folder: id.nullable() }),
+  z.object({ op: z.literal("move"), project: id, ids: z.array(id).min(1).max(100), folder: id.nullable(), confirm: z.boolean().default(false) }),
   z.object({ op: z.literal("unshare"), id }),
   z.object({ op: z.literal("delete"), id }),
   z.object({ op: z.literal("share"), project: id, files: z.array(id).max(50), folder: id.nullable() }),
-  z.object({ op: z.literal("folder"), project: id, name: z.string().trim().min(1).max(80), parent: id.nullable() }),
-  z.object({ op: z.literal("folder-rename"), id, name: z.string().trim().min(1).max(80) }),
-  z.object({ op: z.literal("folder-delete"), id }),
+  z.object({
+    op: z.literal("folder-save"), project: id, id: id.nullable(), name: z.string().trim().min(1).max(80), parent: id.nullable(),
+    visible: z.boolean(), upload: z.boolean(), confirm: z.boolean().default(false),
+  }),
+  z.object({ op: z.literal("folder-delete"), id, target: id.nullable(), confirm: z.boolean().default(false) }),
 ]);
 
 export async function POST(req: NextRequest) {
@@ -61,8 +63,8 @@ export async function POST(req: NextRequest) {
         return reply({ ok: true });
       }
       case "move":
-        await q(sb.from("project_files").update({ folder_id: b.folder }).eq("id", b.id));
-        return reply({ ok: true });
+        // la base refuse (et signale) un déplacement qui rendrait visible un document interne sans confirmation
+        return reply(await q(sb.rpc("project_files_move", { p_project: b.project, p_ids: b.ids, p_folder: b.folder, p_confirm: b.confirm })));
       case "unshare":
         // retrait du projet uniquement : le document reste dans la fiche CRM
         await q(sb.from("project_files").delete().eq("id", b.id));
@@ -75,15 +77,13 @@ export async function POST(req: NextRequest) {
       case "share":
         await q(sb.from("project_files").insert(b.files.map((f) => ({ project_id: b.project, file_id: f, folder_id: b.folder }))));
         return reply({ ok: true });
-      case "folder":
-        return reply(await q(sb.from("project_folders").insert({ project_id: b.project, name: b.name, parent_id: b.parent }).select("id").single()));
-      case "folder-rename":
-        await q(sb.from("project_folders").update({ name: b.name }).eq("id", b.id));
-        return reply({ ok: true });
+      case "folder-save":
+        return reply(await q(sb.rpc("project_folder_save", {
+          p_project: b.project, p_folder: b.id, p_name: b.name, p_parent: b.parent, p_visible: b.visible, p_upload: b.upload, p_confirm: b.confirm,
+        })));
       case "folder-delete":
-        // les fichiers du dossier remontent à la racine (rien n'est supprimé)
-        await q(sb.from("project_folders").delete().eq("id", b.id));
-        return reply({ ok: true });
+        // les fichiers sont d'abord déplacés vers la destination choisie (racine ou autre dossier), rien n'est supprimé
+        return reply(await q(sb.rpc("project_folder_delete", { p_folder: b.id, p_target: b.target, p_confirm: b.confirm })));
     }
   } catch (e) {
     if (e instanceof CrmError) return reply({ error: e.message }, 400);

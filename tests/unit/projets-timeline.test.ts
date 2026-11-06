@@ -18,11 +18,12 @@ const render = (today: string, ph = phases) =>
 
 describe("timeline", () => {
   test("avant, pendant, après : le repère n'apparaît que dans la période", () => {
-    expect(render("2025-12-01")).not.toContain("Aujourd&#x27;hui");
+    expect(render("2025-12-01")).not.toContain("data-today=");
     const during = render("2026-02-14");
     expect(during).toContain("Aujourd&#x27;hui");
-    expect(during).toMatch(/left:(4[0-9]|5[0-9])(\.\d+)?%/); // mi-février ≈ 60 % de la période
-    expect(render("2026-06-01")).not.toContain("Aujourd&#x27;hui");
+    // 14 février, milieu de journée : (44 + 0,5) / 74 jours ≈ 60,1 % de la période
+    expect(during).toContain('data-today="60.14"');
+    expect(render("2026-06-01")).not.toContain("data-today=");
   });
 
   test("planning ≠ avancement : une date passée ne termine rien ; décalage signalé sans dramatiser", () => {
@@ -43,7 +44,7 @@ describe("timeline", () => {
     const undated = renderToStaticMarkup(createElement(TimelineVisual, {
       phases: phases.map((p) => ({ ...p, start_date: null, end_date: null })), milestones: [], meetings: [], today: "2026-02-14", start: null, end: null, projectId: "p",
     }));
-    expect(undated).not.toContain("Aujourd&#x27;hui");
+    expect(undated).not.toContain("data-today=");
     expect(undated.match(/flex:1/g)?.length).toBe(3);
   });
 });

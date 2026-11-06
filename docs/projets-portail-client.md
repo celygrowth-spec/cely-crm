@@ -13,7 +13,7 @@ ni à la prospection, ni aux finances, ni aux notes internes.
 | Points de suivi | points non visibles, note interne du rendez-vous | points rattachés et visibles : date, fuseau, lien, ordre du jour | — |
 | Récapitulatifs | brouillons, note interne | récapitulatifs **publiés** | — |
 | Tâches | tâches internes (par défaut) | tâches marquées visibles, et toutes celles attribuées au client | statut et explication d'un blocage de **ses** tâches (ou de l'équipe client) ; commentaires |
-| Fichiers | documents de la fiche non partagés | documents partagés avec le projet | dépôt ; renommer, déplacer, supprimer **ses** dépôts |
+| Fichiers | documents de la fiche non partagés ; dossiers **internes** et leur contenu | racine du projet et dossiers **partagés** | dépôt dans les dossiers où il est ouvert ; renommer, déplacer, supprimer **ses** dépôts |
 | Idées | — | toutes les idées du projet et les décisions | proposer, commenter ; modifier **son** idée tant qu'elle est « à explorer » |
 
 Chaque écran d'administration indique « Visible du client » ou « Interne ». Toutes ces règles sont
@@ -54,9 +54,28 @@ Aucun email n'est envoyé automatiquement (voir « Intégrations »).
 - **Récapitulatif** : *Points › Récapitulatif* — résumé, décisions, actions, prochaine étape, liens ;
   *Aperçu client* ; *Enregistrer et publier*. La note interne n'est jamais publiée. Chaque action peut
   devenir une **tâche** liée au point (une seule).
-- **Fichier** : *Fichiers* — déposer directement (partagé avec le projet), ou *Partager avec le projet*
-  un document existant de la fiche (référence, pas de copie). *Retirer du projet* ne supprime pas le
-  document ; *Supprimer* le supprime partout (fiche et projets), après confirmation.
+- **Fichier** : *Fichiers* — déposer directement (à la racine ou dans le dossier ouvert), ou *Partager avec
+  le projet* un document existant de la fiche (référence, pas de copie). *Retirer du projet* ne supprime pas
+  le document ; *Supprimer* le supprime partout (fiche et projets), après confirmation.
+- **Dossiers** : *Nouveau dossier* (Factures, Contrats, Briefs, Livrables…), un niveau de sous-dossier.
+  Chaque dossier est **visible du client** ou **interne**, et peut **accepter les dépôts du client**
+  (sinon consultation seule). Le chemin s'affiche en haut (*Fichiers › Factures*). Renommer et régler :
+  crayon du dossier. Supprimer un dossier non vide : choisir d'abord où déplacer ses fichiers (racine ou
+  autre dossier) ; rien n'est supprimé.
+  **Aucune exposition implicite** : déplacer un document d'un dossier interne vers la racine ou un dossier
+  partagé, partager un dossier qui contient des documents, ou supprimer un dossier interne vers un
+  emplacement visible demande une confirmation explicite. La base refuse ces changements sans elle
+  (déclencheurs), même hors de l'interface. Un dossier « Factures » n'est qu'un dossier : il ne donne
+  aucun accès au module Finance.
+- **Mes prochains points** (accueil du portail, au-dessus de la timeline ; sur la page d'accueil quand le
+  contact a plusieurs projets, avec le nom du projet) : le prochain point mis en avant, puis deux suivants.
+  Titre (ouvre le détail du point et ses tâches), date, heure, fuseau ; *Rejoindre sur Google Meet* dès
+  que le lien existe, sinon « Lien à venir ». Un report réordonne la liste, une annulation retire le point
+  (il reste barré dans le déroulé). Les points passés et leurs récapitulatifs restent dans le déroulé.
+- **Timeline** : mois et repères 10 · 20 · 30 (seulement les dates qui existent dans la période), adaptés
+  à la largeur d'écran ; phases et points à leurs dates réelles ; trait « Aujourd'hui · date » distinct du
+  repère « En cours · phase » (une phase peut se poursuivre après sa fin prévue : dépassement hachuré).
+  La liste chronologique reste affichée sous la frise.
 - **Aperçu** : *Prévisualiser le portail* montre la vue d'ensemble telle qu'un contact la voit (mêmes
   fonctions de visibilité). Cela ne remplace pas un essai avec un vrai code.
 
@@ -88,6 +107,7 @@ Aucun email n'est envoyé automatiquement (voir « Intégrations »).
 | `20261107000300_projets_taches.sql` | tâches, commentaires, droits client |
 | `20261107000400_projets_fichiers.sql` | dossiers, partages, dépôts client, politiques Storage |
 | `20261107000500_projets_idees.sql` | idées, commentaires, idée → tâche |
+| `20261107000600_projets_dossiers_points.sql` | dossiers partagés / internes, dépôt par dossier, déplacements confirmés, « Mes prochains points » |
 
 Toutes sont additives. Elles ajoutent des colonnes à des tables existantes : `company_files`
 (`uploaded_by_*`), `appt_bookings` (`google_drift*`), `appt_google_connection` (jeton de synchronisation).
@@ -115,8 +135,11 @@ répond « service indisponible ».
 - **Mail** : non utilisé. Le portail fonctionne sans email ; aucun envoi parallèle n'a été créé.
   Raccordement possible plus tard (à faire avec `sendMail`, session du propriétaire) : envoi du lien
   d'accès depuis *Accès client* ; notifications (nouveau récapitulatif, tâche attribuée). En attente.
-- **Mascotte** : aucun visuel dans le dépôt. Emplacement prêt : `src/components/portal/mascot.tsx`
-  (`MASCOT_SRC`).
+- **Mascotte** : aucun visuel dans le dépôt (et le site celygrowth.com n'est pas joignable depuis
+  l'environnement de développement). Tout est prêt : position près de la phase en cours, arrivée animée,
+  petit saut quand une étape vient d'être terminée, animations coupées si l'utilisateur réduit les
+  mouvements. Pour l'activer : déposer le fichier d'origine dans `public/brand/` et renseigner `MASCOT_SRC`
+  dans `src/components/portal/mascot.tsx`.
 
 ## Limites connues
 
