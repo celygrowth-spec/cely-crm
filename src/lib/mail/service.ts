@@ -84,6 +84,23 @@ export async function updateSignature(sb: SupabaseClient, id: string, signature:
 
 class AuthLost extends Error {}
 
+/**
+ * Vérification à la demande (espace Connecteurs) : redemande un accès à Google avec le jeton de
+ * renouvellement. Succès = autorisation active confirmée. Refus = compte marqué « à reconnecter ».
+ */
+export async function verifyAccount(sb: SupabaseClient, id: string): Promise<{ ok: boolean; message: string }> {
+  z.uuid().parse(id);
+  const c = mailConfig();
+  if (!c) return { ok: false, message: "Identifiants Google du module Mail absents du serveur." };
+  try {
+    await accessToken(sb, id, c, true);
+    return { ok: true, message: "Google a confirmé l'autorisation d'envoi." };
+  } catch (e) {
+    if (e instanceof AuthLost) return { ok: false, message: "Google a refusé l'accès : reconnectez le compte." };
+    return { ok: false, message: e instanceof Error && /injoignable|timeout|fetch/i.test(e.message) ? "Google n'a pas répondu. Réessayez plus tard." : "Vérification impossible pour le moment." };
+  }
+}
+
 async function accessToken(sb: SupabaseClient, accountId: string, c: MailConfig, force = false) {
   const s = await rpc<{ refresh_token_enc: string; access_token_enc: string | null; access_token_expires_at: string | null } | null>(sb, "mail_account_secret", { p_id: accountId });
   if (!s) throw new AuthLost("Compte Gmail non connecté.");
