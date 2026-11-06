@@ -34,7 +34,8 @@ export function ChargesView({ data, initial }: { data: FinanceData; initial: Fil
     .filter((u) => u.paid_on && (!f.from || u.paid_on >= f.from) && (!f.to || u.paid_on <= f.to))
     .filter(() => !f.status || f.status === "paye")
     .filter(() => !f.category);
-  const totalPaid = sumKnown(rows.filter((e) => e.status === "paye").map((e) => e.amount));
+  // payé = charges payées + cotisations URSSAF payées listées ci-dessous (même total que l'accueil)
+  const totalPaid = sumKnown([...rows.filter((e) => e.status === "paye").map((e) => e.amount), ...urssafPaid.map((u) => u.paid_amount)]);
   const totalDue = sumKnown(rows.filter((e) => e.status === "a_payer").map((e) => e.amount));
   const act = (fn: () => Promise<{ ok: boolean; error?: string }>, msg: string) =>
     start(async () => {
