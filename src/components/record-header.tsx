@@ -217,7 +217,7 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
         )}
       </div>
 
-      <div className="mt-1 flex items-center justify-between gap-2">
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2">
         <nav role="tablist" aria-label="Sections de la fiche" className="flex gap-0.5">
           {TABS.map((t) => (
             <button
@@ -234,7 +234,7 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
             </button>
           ))}
         </nav>
-        <div className="flex shrink-0 items-center gap-1 pb-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1 pb-1 max-sm:pt-1">
           <QuickAction icon={Sparkles} label="Générer un diagnostic" onClick={ctx.generateDiagnostic} />
           <QuickAction icon={StickyNote} label="Ajouter une note" onClick={() => ctx.logExchange("note")} />
           <QuickAction icon={CheckSquare} label="Créer une tâche" onClick={ctx.newTask} />
