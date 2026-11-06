@@ -79,6 +79,28 @@ Aucun email n'est envoyé automatiquement (voir « Intégrations »).
 - **Aperçu** : *Prévisualiser le portail* montre la vue d'ensemble telle qu'un contact la voit (mêmes
   fonctions de visibilité). Cela ne remplace pas un essai avec un vrai code.
 
+## Depuis Claude (connecteur MCP)
+
+Claude gère les espaces client avec les mêmes opérations et les mêmes règles que l'application
+(`src/lib/projects/service.ts`, migration `20261110000200_mcp_espaces_client.sql`). Chaque écriture est
+journalisée dans `activity_log`, rattachée à la fiche.
+
+| Sans accord | Après votre accord (`confirmed_by_user`) | Dans l'application uniquement |
+| --- | --- | --- |
+| Lire : `list_projects`, `get_project`, `get_project_task`, `preview_client_portal`, `list_linkable_bookings`, `get_project_file_url` | Publier, dépublier, archiver ; modifier ce que le client voit d'un projet publié (`update_project`) | Générer ou régénérer un code d'accès : il apparaîtrait dans la conversation |
+| `create_project` (non publié) ; note interne et blocage (`update_project`) | Contacts d'un projet publié ; retirer un contact ; expiration et révocation d'un accès | Effacer définitivement un fichier |
+| Tâches, jalons, points, dossiers, fichiers **internes** ; planning et idées d'un projet **non publié** ; brouillon de récapitulatif (`save_meeting_recap`) ; envoi d'un fichier dans un dossier interne | Rendre visible : tâche, jalon, point, dossier, fichier ; publier un récapitulatif ; `task_from_recap` ; idées, commentaires et planning d'un projet publié | Créer, reporter, annuler un rendez-vous, réconcilier Google (Claude ne fait que rattacher un rendez-vous existant) |
+| | Supprimer : tâche, phase, jalon, dossier (documents déplacés) ; détacher un point (récapitulatif effacé) ; retirer un fichier du projet | Supprimer un projet (n'existe pas : archivage) |
+
+- `confirmed_by_user` est une consigne suivie par Claude, pas un verrou : la base ne peut pas savoir si vous
+  avez répondu. Pour un second garde-fou, réglez ces outils sur « demander à chaque fois » dans les réglages du
+  connecteur, côté Claude. Le refus des actions de la dernière colonne, lui, est appliqué en base.
+- La protection contre l'exposition implicite (documents internes, voir plus haut) s'applique aussi à Claude.
+- Un commentaire ou une idée écrit par Claude apparaît au client signé de votre nom. Le journal du projet affiche
+  « owner » ; c'est `activity_log` qui indique Claude.
+- Un code déposé avant la migration échoue proprement (« action réservée à l'application », « rien n'a été
+  modifié ») : appliquer la migration **avant** de déployer.
+
 ## Sécurité
 
 - **Pas de compte Supabase pour les clients**, pas de clé `service_role`. Le serveur Next appelle les
@@ -108,6 +130,7 @@ Aucun email n'est envoyé automatiquement (voir « Intégrations »).
 | `20261107000400_projets_fichiers.sql` | dossiers, partages, dépôts client, politiques Storage |
 | `20261107000500_projets_idees.sql` | idées, commentaires, idée → tâche |
 | `20261107000600_projets_dossiers_points.sql` | dossiers partagés / internes, dépôt par dossier, déplacements confirmés, « Mes prochains points » |
+| `20261110000200_mcp_espaces_client.sql` | ouverture des espaces client au connecteur Claude, journal de ses écritures |
 
 Toutes sont additives. Elles ajoutent des colonnes à des tables existantes : `company_files`
 (`uploaded_by_*`), `appt_bookings` (`google_drift*`), `appt_google_connection` (jeton de synchronisation).

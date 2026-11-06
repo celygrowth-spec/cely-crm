@@ -18,7 +18,7 @@ export default async function ConsentPage({ searchParams }: { searchParams: Prom
       <h1 className="font-display text-xl font-extrabold">Autoriser {data.client.name ?? "cette application"} ?</h1>
       <p className="mt-2 text-sm text-muted">
         {data.client.name ?? "L'application"} pourra lire et modifier votre CRM avec votre compte ({user.email}) : rechercher des fiches, ajouter des
-        notes, des personnes et des tâches, déplacer des fiches. Elle ne pourra ni fusionner, ni supprimer, ni envoyer de messages. Chaque écriture est journalisée.
+        notes, des personnes et des tâches, déplacer des fiches, gérer les espaces client (y compris publier et y supprimer des éléments). Elle ne pourra ni fusionner des fiches, ni effacer une fiche ou un fichier, ni générer de code d&apos;accès, ni envoyer de messages. Chaque écriture est journalisée.
       </p>
       <dl className="mt-4 space-y-1 text-xs text-muted">
         <div><dt className="inline font-semibold">Redirection : </dt><dd className="inline break-all">{data.redirect_uri}</dd></div>
