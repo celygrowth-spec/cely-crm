@@ -189,3 +189,22 @@ describe("bibliothèque", () => {
     expect((await db.query(`update diagnostic_library_files set display_name = 'y' returning id`)).rows).toEqual([]);
   });
 });
+
+describe("déclenchement", () => {
+  test("une étape ne se réserve qu'une fois, un échec la rend relançable", async () => {
+    expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "start" })).toBe(true);
+    expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "start" })).toBe(false);
+    await db.rpc("diagnostic_trigger_result", { p_id: dossier, p_session_url: null, p_error: "refusé" });
+    expect(await db.one(`select trigger_stage, trigger_error from diagnostics`)).toEqual({ trigger_stage: null, trigger_error: "refusé" });
+    expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "start" })).toBe(true);
+    await db.rpc("diagnostic_trigger_result", { p_id: dossier, p_session_url: "https://claude.ai/code/session_1", p_error: null });
+    expect(await db.one(`select chat_url from diagnostics`)).toEqual({ chat_url: "https://claude.ai/code/session_1" });
+  });
+
+  test("pas de lancement des slides avant l'envoi des réponses, ni par Claude", async () => {
+    expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "answers" })).toBe(false);
+    await db.as("claude");
+    await expect(db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "start" })).rejects.toThrow(/Claude/);
+  });
+});
+

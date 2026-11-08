@@ -50,6 +50,9 @@ export type Diagnostic = {
   sources: DiagnosticSource[];
   answers_sent_at: string | null;
   last_error: string | null;
+  trigger_stage: "start" | "answers" | null;
+  triggered_at: string | null;
+  trigger_error: string | null;
   created_at: string;
   questions: DiagnosticQuestion[];
   versions: DiagnosticVersion[];
@@ -62,8 +65,8 @@ export const startPrompt = (id: string) =>
 export const answersPrompt = (id: string) =>
   `Diagnostic Cely, dossier ${id} : les réponses sont envoyées. Avec le connecteur du CRM, appelle open_diagnostic avec cet identifiant, lis les réponses, puis génère les slides et dépose la version dans le CRM.`;
 
-/** Dans le chat associé s'il est connu, sinon dans une nouvelle conversation. Un lien de chat n'accepte que claude.ai. */
+/** Dans le chat associé s'il est connu, sinon dans une nouvelle conversation. Une session de tâche Claude Code ne se reprend pas par lien. */
 export function claudeLink(prompt: string, chatUrl?: string | null) {
-  const base = chatUrl && /^https:\/\/claude\.ai\//.test(chatUrl) ? chatUrl.split(/[?#]/)[0] : CLAUDE_NEW_CHAT;
+  const base = chatUrl && /^https:\/\/claude\.ai\/chat\//.test(chatUrl) ? chatUrl.split(/[?#]/)[0] : CLAUDE_NEW_CHAT;
   return `${base}?q=${encodeURIComponent(prompt)}`;
 }

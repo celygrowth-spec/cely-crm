@@ -9,7 +9,7 @@ import { LIBRARY_BUCKET, LIBRARY_CATEGORIES, MAX_LIBRARY_BYTES, PPTX_TYPE, libra
 const uuid = z.uuid("Identifiant invalide");
 const COMPANY_BUCKET = "company-files";
 const LIBRARY_COLUMNS = "id, category, display_name, mime_type, size_bytes, created_at";
-const COLUMNS = "id, company_id, status, chat_url, summary, sources, answers_sent_at, last_error, created_at";
+const COLUMNS = "id, company_id, status, chat_url, summary, sources, answers_sent_at, last_error, trigger_stage, triggered_at, trigger_error, created_at";
 const CHILDREN = "questions:diagnostic_questions(id, position, question, why, answer, dont_know), versions:diagnostic_versions(id, version, file_id, status, created_at, ready_at)";
 
 function check<T>(res: { data: unknown; error: { message: string; code?: string } | null }): T {

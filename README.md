@@ -253,7 +253,11 @@ synthèse, questions et versions sur le dossier.
 - **Fichiers** : Claude doit pouvoir joindre le domaine Supabase (réglage d'exécution de code de son compte). L'adresse de
   dépôt passe par le connecteur : collée dans un chat, elle est arrivée masquée. Les fichiers de version vont dans les
   fichiers privés de la fiche.
-- **Migration** : `20261109000100_diagnostic.sql`, à lancer dans le SQL Editor.
+- **Lancement automatique** : avec `DIAGNOSTIC_ROUTINE_URL` et `DIAGNOSTIC_ROUTINE_TOKEN` (déclencheur API d'une tâche
+  Claude Code, inclus dans l'abonnement Claude), le CRM lance la tâche à la création du dossier puis à l'envoi des
+  réponses, une seule fois par étape. Chaque lancement ouvre une nouvelle session : le dossier porte la continuité.
+  Sans ces variables, ou en cas d'échec, l'onglet propose le lien vers Claude et une relance.
+- **Migrations** : `20261109000100_diagnostic.sql` et `20261111000100_diagnostic_declenchement.sql`, à lancer dans le SQL Editor.
 
 ## Tests
 
