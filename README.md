@@ -256,8 +256,9 @@ synthèse, questions et versions sur le dossier.
 - **Lancement automatique** : avec `DIAGNOSTIC_ROUTINE_URL` et `DIAGNOSTIC_ROUTINE_TOKEN` (déclencheur API d'une tâche
   Claude Code, inclus dans l'abonnement Claude), le CRM lance la tâche à la création du dossier puis à l'envoi des
   réponses, une seule fois par étape. Chaque lancement ouvre une nouvelle session : le dossier porte la continuité.
-  Sans ces variables, ou en cas d'échec, l'onglet propose le lien vers Claude et une relance.
-- **Migrations** : `20261109000100_diagnostic.sql` et `20261111000100_diagnostic_declenchement.sql`, à lancer dans le SQL Editor.
+  Sans ces variables, ou en cas d'échec, l'onglet propose le lien vers Claude et une relance. La tâche doit pouvoir
+  joindre le domaine Supabase : environnement cloud › Network access › Custom › Allowed domains.
+- **Migrations** : `20261109000100_diagnostic.sql` `20261111000100_diagnostic_declenchement.sql` et `20261111000200_diagnostic_relance.sql`, à lancer dans le SQL Editor.
 
 ## Tests
 

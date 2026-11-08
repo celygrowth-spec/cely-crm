@@ -64,10 +64,10 @@ function Launch({ dossier, stage, reload }: { dossier: Diagnostic; stage: "start
   }
   return (
     <div className="grid gap-2">
-      {dossier.trigger_error && (
-        <div className="flex flex-wrap items-center gap-2 text-sm text-danger">
-          <span>Lancement automatique impossible : {dossier.trigger_error}</span>
-          <Button size="sm" disabled={busy} onClick={retry}><RotateCcw size={13} /> Relancer</Button>
+      {(dossier.trigger_error || dossier.status === "failed") && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {dossier.trigger_error && <span className="text-danger">Lancement automatique impossible : {dossier.trigger_error}</span>}
+          <Button size="sm" disabled={busy} onClick={retry}><RotateCcw size={13} /> Relancer Claude</Button>
         </div>
       )}
       <ClaudeActions prompt={stage === "start" ? startPrompt(dossier.id) : answersPrompt(dossier.id)} chatUrl={dossier.chat_url} label={stage === "start" ? "Lancer dans Claude" : "Générer les slides dans Claude"} />
@@ -172,6 +172,7 @@ function Dossier({ dossier, reload }: { dossier: Diagnostic; reload: () => void 
         {dossier.status === "failed" && dossier.last_error && <p className="text-sm text-danger">{dossier.last_error}</p>}
         {dossier.status === "waiting_claude" && <Launch dossier={dossier} stage="start" reload={reload} />}
         {dossier.status === "answers_sent" && <Launch dossier={dossier} stage="answers" reload={reload} />}
+        {dossier.status === "failed" && <Launch dossier={dossier} stage={dossier.answers_sent_at ? "answers" : "start"} reload={reload} />}
         <ChatLink key={dossier.chat_url ?? ""} dossier={dossier} reload={reload} />
       </section>
 

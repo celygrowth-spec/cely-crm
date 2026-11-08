@@ -206,5 +206,18 @@ describe("déclenchement", () => {
     await db.as("claude");
     await expect(db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "start" })).rejects.toThrow(/Claude/);
   });
-});
 
+  test("un échec après l'envoi des réponses se relance à l'étape des slides", async () => {
+    await db.as("claude");
+    await db.rpc("diagnostic_save_questions", { p_id: dossier, p_questions: questions(10) });
+    await db.as("owner");
+    for (const r of (await db.query<{ id: string }>(`select id from diagnostic_questions`)).rows) await db.rpc("diagnostic_save_answer", { p_question: r.id, p_answer: "", p_dont_know: true });
+    await db.rpc("diagnostic_submit_answers", { p_id: dossier });
+    expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "answers" })).toBe(true);
+    await db.as("claude");
+    await db.rpc("diagnostic_report_failure", { p_id: dossier, p_message: "dépôt refusé" });
+    await db.as("owner");
+    expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "start" })).toBe(false);
+    expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "answers" })).toBe(true);
+  });
+});
