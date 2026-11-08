@@ -6,13 +6,17 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { AlertTriangle, Eye, Maximize2, Minimize2, Paperclip, PencilLine, Send, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, BookmarkPlus, Eye, FileText, Maximize2, Minimize2, Paperclip, PencilLine, Send, Trash2, Upload, X } from "lucide-react";
 import { mailOp, type MailOverview } from "@/lib/client/mail";
 import { apiGet, attempt, useSync } from "@/lib/client/query";
 import type { CompanyFile } from "@/lib/crm/files";
 import { ACCEPT_ATTR, formatBytes } from "@/lib/crm/file-rules";
 import { MAX_ATTACHMENTS_BYTES, MAX_ATTACHMENTS_LABEL, isEmail, withSignature, type MailMessage } from "@/lib/mail/types";
 import { renderEmailHtml, textToHtml } from "@/lib/mail/render";
+import { labelOf, replaceVariable, resolveVariables, tokensToSpans, usedVariables, type VarContext, type VariableKey } from "@/lib/mail/variables";
+import { PersonalizationBar } from "./mail/personalize";
+import { ApplyChoice, SaveAsTemplate, TemplatePicker } from "./mail/template-picker";
+import type { MailTemplate } from "./mail/templates";
 import { MailEditor, type MailEditorHandle } from "./mail/editor";
 import { addFiles } from "./record-files";
 import { Button, Input, SaveIndicator, cn } from "./ui";
@@ -23,24 +27,27 @@ export type ComposeTarget = { message?: MailMessage; personId?: string | null; t
 
 const timeFmt = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
-export function MailCompose({ companyId, target, contacts = [], onClose }: { companyId: string; target: ComposeTarget; contacts?: Contact[]; onClose: () => void }) {
+type Company = { name: string; website: string | null };
+
+export function MailCompose({ companyId, target, contacts = [], company = { name: "", website: null }, onClose }: { companyId: string; target: ComposeTarget; contacts?: Contact[]; company?: Company; onClose: () => void }) {
   // une reprise de version distante remonte le composeur avec le contenu choisi
   const [rev, setRev] = useState<{ n: number; message: MailMessage | null }>({ n: 0, message: target.message ?? null });
   // rendu au niveau du document : un parent animé (transform) confinerait la position fixe
   if (typeof document === "undefined") return null;
   return createPortal(
-    <Composer key={rev.n} companyId={companyId} target={{ ...target, message: rev.message ?? undefined }} contacts={contacts} onClose={onClose} onReload={(m) => setRev((r) => ({ n: r.n + 1, message: m }))} />,
+    <Composer key={rev.n} companyId={companyId} company={company} target={{ ...target, message: rev.message ?? undefined }} contacts={contacts} onClose={onClose} onReload={(m) => setRev((r) => ({ n: r.n + 1, message: m }))} />,
     document.body,
   );
 }
 
-function Composer({ companyId, target, contacts, onClose, onReload }: { companyId: string; target: ComposeTarget; contacts: Contact[]; onClose: () => void; onReload: (m: MailMessage) => void }) {
+function Composer({ companyId, company, target, contacts, onClose, onReload }: { companyId: string; company: Company; target: ComposeTarget; contacts: Contact[]; onClose: () => void; onReload: (m: MailMessage) => void }) {
   const qc = useQueryClient();
   const sync = useSync();
   const m = target.message;
   const [id] = useState(() => m?.id ?? crypto.randomUUID());
   const initial: DraftData = m ? fromMessage(m) : {
     to: target.to ? [target.to] : [], cc: [], bcc: [], subject: "", text: "", html: null, fileIds: [], personId: target.personId ?? null, signature: "",
+    templateId: null, collective: false,
   };
   // saisie retrouvée sur cet appareil, plus récente que la version enregistrée
   const [recovered, setRecovered] = useState(() => {
@@ -60,6 +67,9 @@ function Composer({ companyId, target, contacts, onClose, onReload }: { companyI
   const [preview, setPreview] = useState(false);
   const [sending, setSending] = useState(false);
   const [uploads, setUploads] = useState<{ name: string; size: number; error?: string }[]>([]);
+  const [picking, setPicking] = useState(false);
+  const [choosing, setChoosing] = useState<MailTemplate | null>(null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const overview = useQuery({ queryKey: ["mail-overview"], queryFn: ({ signal }) => apiGet<MailOverview>("/api/mail/accounts", signal) });
@@ -81,6 +91,47 @@ function Composer({ companyId, target, contacts, onClose, onReload }: { companyI
     inReplyTo: m?.in_reply_to ?? null, references: m?.references_hdr ?? null, threadId: m?.provider_thread_id ?? null,
   }, m ? (m.draft_version ?? 0) : null, d, empty);
 
+  // --- personnalisation : contact de référence explicite, jamais deviné parmi plusieurs destinataires ---
+  const contactOf = useMemo(() => new Map(contacts.map((c) => [c.email.toLowerCase(), c])), [contacts]);
+  // un seul destinataire de la fiche : c'est lui, sans ambiguïté ; plusieurs : seulement le choix explicite
+  const soleContact = d.to.length === 1 ? contactOf.get(d.to[0].toLowerCase()) ?? null : null;
+  const reference = d.collective ? null : contacts.find((c) => c.id === d.personId) ?? soleContact;
+  const ctx: VarContext = { first_name: reference?.first_name, last_name: reference?.last_name, title: reference?.title, company: company.name, website: company.website };
+  const used = usedVariables(d.html ?? "", d.subject);
+  const resolved = resolveVariables(d.html ?? textToHtml(d.text), d.subject, ctx, d.collective);
+  const needReference = used.length > 0 && !d.collective && !reference;
+  const setTo = (to: string[]) => {
+    // un seul destinataire de la fiche : il devient la référence ; plusieurs : on garde le choix fait s'il est encore valable
+    const contactsIn = to.map((a) => contactOf.get(a.toLowerCase())).filter(Boolean) as Contact[];
+    const personId = to.length === 1 ? contactsIn[0]?.id ?? null : contactsIn.some((c) => c.id === d.personId) ? d.personId : null;
+    set({ to, personId, collective: to.length > 1 ? d.collective : false });
+  };
+  const replaceVar = (key: VariableKey, text: string) => {
+    const r = replaceVariable(d.html ?? "", d.subject, key, text);
+    editorRef.current?.setHtml(r.html);
+    set({ subject: r.subject });
+    toast.success(text ? `« ${labelOf(key)} » remplacé par « ${text} »` : `« ${labelOf(key)} » retiré`);
+  };
+
+  // --- modèles : appliquer sans perdre la saisie, avec retour en arrière ---
+  const applyTemplate = (t: MailTemplate, mode: "replace" | "append") => {
+    const before = { html: d.html ?? "", subject: d.subject, templateId: d.templateId };
+    const body = tokensToSpans(t.body_html);
+    editorRef.current?.setHtml(mode === "replace" ? body : `${before.html}${body}`);
+    set({ subject: mode === "replace" ? t.subject || d.subject : d.subject || t.subject, templateId: t.id });
+    setChoosing(null);
+    setPicking(false);
+    toast.success(`Modèle « ${t.name} » appliqué`, {
+      action: { label: "Revenir en arrière", onClick: () => { editorRef.current?.setHtml(before.html); set({ subject: before.subject, templateId: before.templateId }); } },
+      duration: 10_000,
+    });
+  };
+  const pickTemplate = (t: MailTemplate) => {
+    setPicking(false);
+    if (d.text.trim() || d.subject.trim()) setChoosing(t);
+    else applyTemplate(t, "replace");
+  };
+
   const recipients = [...d.to, ...d.cc, ...d.bcc];
   const invalid = recipients.filter((a) => !isEmail(a));
   const uploading = uploads.some((u) => !u.error);
@@ -90,6 +141,8 @@ function Composer({ companyId, target, contacts, onClose, onReload }: { companyI
     invalid.length > 0 && `Adresse invalide : ${invalid.join(", ")}`,
     !d.subject.trim() && "Ajoutez un objet",
     !d.text.trim() && "Le message est vide",
+    needReference && "Choisissez le contact de référence des variables",
+    !needReference && resolved.missing.length > 0 && `Variable sans valeur : ${resolved.missing.map(labelOf).join(", ")}`,
     uploading && "Un fichier est en cours de transfert",
     totalBytes > MAX_ATTACHMENTS_BYTES && `Pièces jointes au-delà de ${MAX_ATTACHMENTS_LABEL} (limite de Gmail)`,
   ].filter(Boolean) as string[];
@@ -128,7 +181,12 @@ function Composer({ companyId, target, contacts, onClose, onReload }: { companyI
   const closeRef = useRef(close);
   useEffect(() => { closeRef.current = close; });
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !e.defaultPrevented) { e.preventDefault(); void closeRef.current(); } };
+    const onKey = (e: KeyboardEvent) => {
+      // une fenêtre ouverte par-dessus (modèles, lien…) consomme Échap : seule elle se ferme
+      if (e.key !== "Escape" || e.defaultPrevented || document.querySelector("dialog[open]")) return;
+      e.preventDefault();
+      void closeRef.current();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -196,8 +254,6 @@ function Composer({ companyId, target, contacts, onClose, onReload }: { companyI
     }
   }
 
-  const contactOf = useMemo(() => new Map(contacts.map((c) => [c.email.toLowerCase(), c])), [contacts]);
-
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/30 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label="Composer un email" data-composer>
       <button type="button" className="absolute inset-0 cursor-default" aria-label="Fermer le composeur (le brouillon est gardé)" tabIndex={-1} onClick={() => void close()} />
@@ -253,11 +309,11 @@ function Composer({ companyId, target, contacts, onClose, onReload }: { companyI
             </p>
           )}
 
-          {preview && <Preview d={d} attached={attached.map((f) => `${f.display_name} (${formatBytes(f.size_bytes)})`)} contactOf={contactOf} />}
+          {preview && <Preview d={{ ...d, subject: resolved.subject, html: resolved.html }} attached={attached.map((f) => `${f.display_name} (${formatBytes(f.size_bytes)})`)} contactOf={contactOf} />}
           {/* l'éditeur reste monté pendant l'aperçu : sa saisie, son historique et le curseur sont gardés */}
           <div className={cn("flex min-h-0 flex-1 flex-col gap-2", preview && "hidden")}>
               <div className="flex items-start gap-2">
-                <div className="min-w-0 flex-1"><RecipientsInput label="À" value={d.to} onChange={(to) => set({ to })} contacts={contacts} /></div>
+                <div className="min-w-0 flex-1"><RecipientsInput label="À" value={d.to} onChange={setTo} contacts={contacts} /></div>
                 {!showCopies && <button type="button" className="mt-2 shrink-0 text-xs font-semibold text-muted hover:text-ink" onClick={() => setShowCopies(true)}>Cc / Cci</button>}
               </div>
               {showCopies && (
@@ -271,7 +327,17 @@ function Composer({ companyId, target, contacts, onClose, onReload }: { companyI
                   {d.to.length} destinataires : ils reçoivent le même message et voient les adresses des autres. Pour écrire à chacun, faites un brouillon par personne.
                 </p>
               )}
-              <Input value={d.subject} onChange={(e) => set({ subject: e.target.value })} maxLength={500} placeholder="Objet" aria-label="Objet" className="font-semibold" />
+              <div className="flex gap-2">
+                <Input value={d.subject} onChange={(e) => set({ subject: e.target.value })} maxLength={500} placeholder="Objet" aria-label="Objet" className="min-w-0 flex-1 font-semibold" />
+                <Button onClick={() => setPicking(true)} aria-label="Choisir un modèle"><FileText size={14} /> <span className="max-sm:hidden">Modèle</span></Button>
+              </div>
+              {/\{\{/.test(d.subject) && (
+                <p className="-mt-1 truncate px-1 text-xs text-muted" data-subject-preview>
+                  Objet envoyé : <span className="text-ink">{resolved.subject.replace(/\{\{\s*([a-zA-Z_]+)\s*\}\}/g, (_, k: string) => `[${labelOf(k.toLowerCase())}]`)}</span>
+                </p>
+              )}
+              <PersonalizationBar used={used} contacts={contacts} recipients={d.to} personId={reference?.id ?? null} collective={d.collective} missing={needReference ? [] : resolved.missing}
+                onReference={(personId, collective) => set({ personId, collective })} onReplace={replaceVar} />
               <MailEditor handle={editorRef} initialHtml={initialHtml} onChange={(html, text) => set({ html, text })} />
               {d.signature && (
                 <div className="rounded-lg border border-dashed border-line px-3 py-2 text-sm text-muted" data-signature>
@@ -327,6 +393,7 @@ function Composer({ companyId, target, contacts, onClose, onReload }: { companyI
         {/* pied */}
         <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-2.5">
           <Button variant="ghost" size="sm" onClick={discard} disabled={sending} className="text-muted"><Trash2 size={14} /> <span className="max-sm:sr-only">Supprimer le brouillon</span></Button>
+          <Button variant="ghost" size="sm" onClick={() => setSavingTemplate(true)} disabled={!d.text.trim()} className="text-muted"><BookmarkPlus size={14} /> <span className="max-md:sr-only">Enregistrer comme modèle</span></Button>
           {!canSend && blockers[0] && !sending && <span className="text-xs text-muted" data-blocker>{blockers[0]}</span>}
           <div className="ml-auto flex gap-2">
             <Button onClick={() => setPreview((p) => !p)}>{preview ? <><PencilLine size={14} /> Modifier</> : <><Eye size={14} /> Aperçu</>}</Button>
@@ -334,6 +401,10 @@ function Composer({ companyId, target, contacts, onClose, onReload }: { companyI
           </div>
         </div>
       </div>
+      <TemplatePicker open={picking} onClose={() => setPicking(false)} ctx={ctx} collective={d.collective} onPick={pickTemplate} />
+      <ApplyChoice template={choosing} onChoose={(mode) => choosing && applyTemplate(choosing, mode)} onCancel={() => setChoosing(null)} />
+      <SaveAsTemplate open={savingTemplate} onClose={() => setSavingTemplate(false)} html={d.html ?? textToHtml(d.text)} subject={d.subject}
+        ctx={reference ? ctx : (() => { const c = contactOf.get((d.to[0] ?? "").toLowerCase()); return { ...ctx, first_name: c?.first_name, last_name: c?.last_name, title: c?.title }; })()} />
     </div>
   );
 }

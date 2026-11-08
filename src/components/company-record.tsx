@@ -242,8 +242,8 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
         {visited.has("diagnostic") && <div role="tabpanel" aria-label="Diagnostic" hidden={tab !== "diagnostic"}><RecordDiagnostic companyId={c.id} startSignal={diagnosticStart} /></div>}
       </div>
       {compose && (
-        <MailCompose companyId={c.id} target={compose} onClose={() => setCompose(null)}
-          contacts={detail.people.filter((p) => p.email && isEmail(p.email)).map((p) => ({ id: p.id, name: personName(p), email: p.email!, title: p.title, primary: p.is_primary }))} />
+        <MailCompose companyId={c.id} target={compose} onClose={() => setCompose(null)} company={{ name: c.name, website: c.website ?? null }}
+          contacts={detail.people.filter((p) => p.email && isEmail(p.email)).map((p) => ({ id: p.id, name: personName(p), email: p.email!, title: p.title, primary: p.is_primary, first_name: p.first_name, last_name: p.last_name }))} />
       )}
       {entry && <EntryDetail key={entry.key} entry={entry} ctx={ctx} onClose={() => setEntry(null)} />}
       <Modal open={!!log} onClose={() => setLog(null)} title={log === "note" ? "Ajouter une note" : "Enregistrer un échange"} wide>

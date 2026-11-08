@@ -21,6 +21,8 @@ export type DraftData = {
   fileIds: string[];
   personId: string | null;
   signature: string;
+  templateId: string | null;
+  collective: boolean;
 };
 export type SaveState = "idle" | "saving" | "saved" | "error";
 type Ctx = { companyId: string; accountId: string | null; inReplyTo: string | null; references: string | null; threadId: string | null };
@@ -49,6 +51,7 @@ export const sameContent = (a: DraftData, b: DraftData) => JSON.stringify(a) ===
 export const fromMessage = (m: MailMessage): DraftData => ({
   to: m.to_addrs, cc: m.cc_addrs, bcc: m.bcc_addrs, subject: m.subject, text: m.body_text, html: m.body_html ?? null,
   fileIds: m.attachments.flatMap((a) => (a.file_id ? [a.file_id] : [])), personId: m.person_id, signature: m.signature,
+  templateId: m.template_id ?? null, collective: m.collective ?? false,
 });
 
 export function useDraft(id: string, ctx: Ctx, initialVersion: number | null, data: DraftData, empty: boolean) {
@@ -82,6 +85,7 @@ export function useDraft(id: string, ctx: Ctx, initialVersion: number | null, da
           account_id: c.accountId, company_id: c.companyId, person_id: d.personId,
           to: d.to, cc: d.cc, bcc: d.bcc, subject: d.subject, body: d.text, html: d.html, signature: d.signature,
           file_ids: d.fileIds, in_reply_to: c.inReplyTo, references: c.references, thread_id: c.threadId,
+          template_id: d.templateId, collective: d.collective,
           expected_version: opts.force ? null : version.current,
         });
       } catch {
@@ -149,7 +153,7 @@ export function useDraft(id: string, ctx: Ctx, initialVersion: number | null, da
     const r = await mailCall<SaveResponse>(`/api/mail/messages/${copyId}`, "PUT", {
       account_id: c.accountId, company_id: c.companyId, person_id: mine.personId, to: mine.to, cc: mine.cc, bcc: mine.bcc,
       subject: mine.subject ? `${mine.subject} (copie)` : "(copie)", body: mine.text, html: mine.html, signature: mine.signature,
-      file_ids: mine.fileIds, expected_version: null,
+      file_ids: mine.fileIds, template_id: mine.templateId, collective: mine.collective, expected_version: null,
     }).catch(() => ({ ok: false as const, error: "Connexion impossible" }));
     const theirs = conflict;
     if (theirs) {

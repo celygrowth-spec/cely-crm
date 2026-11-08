@@ -134,7 +134,7 @@ async function accessToken(sb: SupabaseClient, accountId: string, c: MailConfig,
 export function safeHtml(html: string) {
   return sanitizeHtml(html, {
     allowedTags: ["p", "br", "strong", "b", "em", "i", "u", "a", "ul", "ol", "li", "h1", "h2", "h3", "blockquote", "hr", "span", "div", "table", "tbody", "tr", "td", "th"],
-    allowedAttributes: { a: ["href"] },
+    allowedAttributes: { a: ["href"], span: ["data-variable"] },
     allowedSchemes: ["http", "https", "mailto", "tel"],
   });
 }
@@ -157,6 +157,9 @@ export type DraftInput = {
   in_reply_to?: string | null;
   references?: string | null;
   thread_id?: string | null;
+  /** modèle d'origine (trace) et personnalisation collective */
+  template_id?: string | null;
+  collective?: boolean;
   /** version lue par le composeur : un enregistrement fait ailleurs entre-temps n'est jamais écrasé */
   expected_version?: number | null;
 };
@@ -177,6 +180,8 @@ const draftSchema = z.object({
   in_reply_to: z.string().max(1000).nullish(),
   references: z.string().max(5000).nullish(),
   thread_id: z.string().max(200).nullish(),
+  template_id: z.uuid().nullish(),
+  collective: z.boolean().optional(),
   expected_version: z.number().int().min(0).nullish(),
 });
 

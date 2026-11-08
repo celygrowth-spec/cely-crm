@@ -33,6 +33,8 @@ export type MailMessage = {
   body_text: string;
   body_html?: string | null;
   draft_version?: number;
+  template_id?: string | null;
+  collective?: boolean;
   signature: string;
   in_reply_to: string | null;
   references_hdr: string | null;

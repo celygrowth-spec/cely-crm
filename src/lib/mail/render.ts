@@ -29,6 +29,8 @@ export function inlineStyles(html: string): string {
     .replace(/<li>\s*<p>/g, "<li>").replace(/<\/p>\s*<\/li>/g, "</li>")
     .replace(/<(p|ul|ol|li|blockquote)(\s[^>]*)?>/g, (_m, tag: string, attrs = "") => `<${tag}${String(attrs).replace(/\sstyle="[^"]*"/g, "")} style="${STYLES[tag]}">`)
     .replace(/<a\s([^>]*?)>/g, (_m, attrs: string) => `<a ${attrs.replace(/\s?style="[^"]*"/g, "").replace(/\s?(target|rel)="[^"]*"/g, "")} style="${STYLES.a}" target="_blank" rel="noopener">`)
+    // variable restée sans valeur (aperçu seulement : l'envoi est bloqué tant qu'il en reste)
+    .replace(/<span([^>]*data-variable="[^"]*"[^>]*)>/g, '<span$1 style="background:#fef3c7;color:#92400e;border-radius:4px;padding:0 3px">')
     // paragraphe vide de l'éditeur → ligne vide visible partout
     .replace(/<p style="[^"]*"><\/p>/g, `<p style="${STYLES.p}">&nbsp;</p>`);
 }

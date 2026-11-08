@@ -3,16 +3,42 @@
 // Éditeur d'email (Tiptap / ProseMirror). Non contrôlé : le composeur reçoit le HTML à chaque frappe
 // mais ne réinjecte jamais de contenu pendant la saisie, donc l'enregistrement automatique ne déplace
 // ni le curseur ni la sélection. Le contenu n'est remplacé que sur demande explicite (modèle, reprise).
-import { EditorContent, useEditor, useEditorState, type Editor } from "@tiptap/react";
+import { EditorContent, Node, mergeAttributes, useEditor, useEditorState, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
-import { Bold, ClipboardPaste, Eraser, Italic, Link2, List, ListOrdered, MoreHorizontal, Quote, Redo2, Underline, Undo2, Unlink } from "lucide-react";
+import { Bold, Braces, ClipboardPaste, Eraser, Italic, Link2, List, ListOrdered, MoreHorizontal, Quote, Redo2, Underline, Undo2, Unlink } from "lucide-react";
 import { cn } from "@/components/ui";
 import { htmlToText } from "@/lib/mail/render";
+import { VARIABLES, isKnown, labelOf } from "@/lib/mail/variables";
+
+/**
+ * Variable : pastille insécable (« Prénom »). Copiée-collée dans l'éditeur, elle reste une variable ;
+ * en texte brut, elle devient son libellé. Le curseur la saute d'un bloc, sans jamais la couper.
+ */
+const Variable = Node.create({
+  name: "variable",
+  group: "inline",
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return { key: { default: "prenom", parseHTML: (el) => el.getAttribute("data-variable"), renderHTML: (a) => ({ "data-variable": a.key }) } };
+  },
+  parseHTML() {
+    return [{ tag: "span[data-variable]", getAttrs: (el) => (isKnown((el as HTMLElement).getAttribute("data-variable") ?? "") ? null : false) }];
+  },
+  renderHTML({ node, HTMLAttributes }) {
+    return ["span", mergeAttributes(HTMLAttributes, { class: "mail-var", contenteditable: "false" }), labelOf(node.attrs.key as string)];
+  },
+  renderText({ node }) {
+    return labelOf(node.attrs.key as string);
+  },
+});
 
 export type MailEditorHandle = {
   setHtml: (html: string) => void;
+  insertVariable: (key: string) => void;
   insertHtml: (html: string) => void;
   focus: () => void;
   editor: () => Editor | null;
@@ -56,6 +82,7 @@ export function MailEditor({ initialHtml, onChange, handle, placeholder = "Votre
         link: { openOnClick: false, autolink: false, linkOnPaste: true, defaultProtocol: "https", isAllowedUri: (url) => allowed(url) },
       }),
       Placeholder.configure({ placeholder }),
+      Variable,
     ],
     content: initialHtml,
     editorProps: {
@@ -81,6 +108,7 @@ export function MailEditor({ initialHtml, onChange, handle, placeholder = "Votre
       editor.chain().setContent(html, { emitUpdate: true }).focus("end").run();
     },
     insertHtml: (html) => editor?.chain().focus().insertContent(html).run(),
+    insertVariable: (key) => editor?.chain().focus().insertContent({ type: "variable", attrs: { key } }).run(),
     focus: () => editor?.commands.focus(),
     editor: () => editor,
   }), [editor]);
@@ -104,6 +132,7 @@ function Toolbar({ editor }: { editor: Editor }) {
   });
   const [linkOpen, setLinkOpen] = useState(false);
   const [more, setMore] = useState(false);
+  const [vars, setVars] = useState(false);
   const chain = () => editor.chain().focus();
   const b = (label: string, icon: React.ReactNode, active: boolean, run: () => void, shortcut?: string, disabled = false) => (
     <button type="button" aria-label={label} title={shortcut ? `${label} (${shortcut})` : label} aria-pressed={active} disabled={disabled}
@@ -143,6 +172,19 @@ function Toolbar({ editor }: { editor: Editor }) {
         {b("Liste à puces", <List size={15} />, s.bullet, () => chain().toggleBulletList().run(), "Ctrl+Maj+8")}
         {b("Liste numérotée", <ListOrdered size={15} />, s.ordered, () => chain().toggleOrderedList().run(), "Ctrl+Maj+7")}
         {b(s.link ? "Modifier le lien" : "Ajouter un lien", <Link2 size={15} />, s.link, () => setLinkOpen((o) => !o), "Ctrl+K")}
+        <div className="relative">
+          <button type="button" aria-label="Insérer une variable" aria-expanded={vars} onMouseDown={(e) => e.preventDefault()} onClick={() => setVars((v) => !v)}
+            className={cn("inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-semibold text-muted hover:bg-surface hover:text-ink", vars && "bg-violet-soft text-violet-strong")}>
+            <Braces size={14} /> Variable
+          </button>
+          {vars && (
+            <div className="absolute left-0 z-20 mt-1 w-48 rounded-xl border border-line bg-white p-1 shadow-lg" role="menu" data-variable-menu>
+              {VARIABLES.map((v) => (
+                <MenuItem key={v.key} icon={<Braces size={13} />} onClick={() => { setVars(false); chain().insertContent({ type: "variable", attrs: { key: v.key } }).run(); }}>{v.label}</MenuItem>
+              ))}
+            </div>
+          )}
+        </div>
         <span className="mx-1 h-5 w-px bg-line" aria-hidden />
         {b("Annuler", <Undo2 size={15} />, false, () => chain().undo().run(), "Ctrl+Z", !s.canUndo)}
         {b("Rétablir", <Redo2 size={15} />, false, () => chain().redo().run(), "Ctrl+Maj+Z", !s.canRedo)}

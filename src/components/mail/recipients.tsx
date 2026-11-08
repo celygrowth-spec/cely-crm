@@ -7,7 +7,7 @@ import { X } from "lucide-react";
 import { cn } from "@/components/ui";
 import { isEmail, splitAddresses } from "@/lib/mail/types";
 
-export type Contact = { id: string; name: string; email: string; title?: string | null; primary?: boolean };
+export type Contact = { id: string; name: string; email: string; title?: string | null; primary?: boolean; first_name?: string | null; last_name?: string | null };
 
 export function RecipientsInput({ label, value, onChange, contacts, autoFocus }: {
   label: string; value: string[]; onChange: (v: string[]) => void; contacts: Contact[]; autoFocus?: boolean;
