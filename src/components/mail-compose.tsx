@@ -155,6 +155,7 @@ function Composer({ companyId, company, target, contacts, onClose, onReload }: {
     needReference && "Choisissez le contact de référence des variables",
     !needReference && resolved.missing.length > 0 && `Variable sans valeur : ${resolved.missing.map(labelOf).join(", ")}`,
     uploading && "Un fichier est en cours de transfert",
+    uploads.some((u) => u.error) && `Pièce jointe non transférée : ${uploads.filter((u) => u.error).map((u) => u.name).join(", ")}. Joignez-la de nouveau ou retirez-la`,
     company.doNotContact && !allowDnc && "Fiche « Ne plus contacter » : confirmez avant d'envoyer",
     totalBytes > MAX_ATTACHMENTS_BYTES && `Pièces jointes au-delà de ${MAX_ATTACHMENTS_LABEL} (limite de Gmail)`,
   ].filter(Boolean) as string[];
