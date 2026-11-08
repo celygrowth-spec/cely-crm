@@ -288,6 +288,24 @@ export function registerTools(server: McpServer, client: GetClient) {
   const dossier = { diagnostic_id: uuid };
   const page = { before: z.iso.datetime({ offset: true }).optional().describe("Date du dernier élément de la page précédente."), limit: z.number().int().min(1).max(100).default(50) };
 
+  // Ce que l'utilisateur attend de ce passage : le dossier seul ne suffit pas à le deviner.
+  const nextStep = (d: { status: string; questions: unknown[] }) => {
+    switch (d.status) {
+      case "waiting_claude":
+      case "researching":
+        return "Faites la recherche, enregistrez-la avec save_diagnostic_research, puis enregistrez 10 à 20 questions avec save_diagnostic_questions. Arrêtez-vous ensuite.";
+      case "questions_ready":
+        return "Les questions attendent les réponses de l'utilisateur dans le CRM : n'enregistrez rien et arrêtez-vous.";
+      case "answers_sent":
+      case "generating":
+        return "Les réponses sont envoyées : générez maintenant le PowerPoint et déposez-le (start_diagnostic_version, envoi, confirm_diagnostic_version), même si les données sont limitées ; signalez alors les hypothèses dans les slides. En cas de blocage, signalez-le avec report_diagnostic_failure.";
+      case "version_ready":
+        return "La dernière version est reçue : rien à faire sans nouvelle demande de l'utilisateur.";
+      default:
+        return "Le dossier est en échec : rien à faire tant que l'utilisateur ne l'a pas relancé depuis le CRM.";
+    }
+  };
+
   tool(
     "open_diagnostic",
     {
@@ -300,6 +318,7 @@ export function registerTools(server: McpServer, client: GetClient) {
       const d = await crm.getCompanyDetail(sb, o.dossier.company_id);
       return text(
         {
+          etape_suivante: nextStep(o.dossier),
           consignes: o.instructions,
           dossier: o.dossier,
           fiche: d && {

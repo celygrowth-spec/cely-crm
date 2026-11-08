@@ -220,4 +220,12 @@ describe("déclenchement", () => {
     expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "start" })).toBe(false);
     expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "answers" })).toBe(true);
   });
+
+  test("relancer un dossier en échec le remet à l'étape et efface l'erreur", async () => {
+    await db.as("claude");
+    await db.rpc("diagnostic_report_failure", { p_id: dossier, p_message: "bloqué" });
+    await db.as("owner");
+    expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "start" })).toBe(true);
+    expect(await db.one(`select status, last_error from diagnostics`)).toEqual({ status: "waiting_claude", last_error: null });
+  });
 });
