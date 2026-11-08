@@ -28,6 +28,8 @@ export type MailMessage = {
   bcc_addrs: string[];
   subject: string;
   body_text: string;
+  body_html?: string | null;
+  draft_version?: number;
   signature: string;
   in_reply_to: string | null;
   references_hdr: string | null;

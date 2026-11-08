@@ -15,6 +15,8 @@ import type { CompanyCore, CompanyDetail, CompanyTimeline } from "@/lib/crm/type
 import type { CompanyPatch } from "@/lib/crm/schemas";
 import { useCrm, type CompanySeed } from "./app-shell";
 import type { ComposeTarget } from "./mail-compose";
+import { isEmail } from "@/lib/mail/types";
+import { personName } from "@/lib/format";
 import type { LogKind } from "./record-log-form";
 import { RecordHeader } from "./record-header";
 import { RecordOverview } from "./record-overview";
@@ -205,7 +207,7 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
   const openCompose = (t: ComposeTarget) => {
     // le blocage existant porte sur la prospection : un email manuel reste possible, mais jamais par mégarde
     if (!t.message && c.do_not_contact && !confirm(`Cette fiche est marquée « Ne plus contacter »${c.do_not_contact_reason ? ` (${c.do_not_contact_reason})` : ""}.\n\nÉcrire quand même ?`)) return;
-    const primary = detail.people.find((p) => p.is_primary && p.email) ?? detail.people.find((p) => p.email);
+    const primary = detail.people.find((p) => p.is_primary && p.email && isEmail(p.email)) ?? detail.people.find((p) => p.email && isEmail(p.email));
     setCompose(t.message || t.to ? t : { personId: primary?.id ?? null, to: primary?.email ?? null });
   };
   const ctx: RecordCtx = {
@@ -239,7 +241,10 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
         {visited.has("details") && <div role="tabpanel" aria-label="Détails" hidden={tab !== "details"}><RecordDetails ctx={ctx} /></div>}
         {visited.has("diagnostic") && <div role="tabpanel" aria-label="Diagnostic" hidden={tab !== "diagnostic"}><RecordDiagnostic companyId={c.id} startSignal={diagnosticStart} /></div>}
       </div>
-      {compose && <MailCompose companyId={c.id} target={compose} onClose={() => setCompose(null)} />}
+      {compose && (
+        <MailCompose companyId={c.id} target={compose} onClose={() => setCompose(null)}
+          contacts={detail.people.filter((p) => p.email && isEmail(p.email)).map((p) => ({ id: p.id, name: personName(p), email: p.email!, title: p.title, primary: p.is_primary }))} />
+      )}
       {entry && <EntryDetail key={entry.key} entry={entry} ctx={ctx} onClose={() => setEntry(null)} />}
       <Modal open={!!log} onClose={() => setLog(null)} title={log === "note" ? "Ajouter une note" : "Enregistrer un échange"} wide>
         {log && <LogForm ctx={ctx} initial={log} onDone={() => setLog(null)} />}

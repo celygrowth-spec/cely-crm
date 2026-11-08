@@ -149,11 +149,15 @@ export type DraftInput = {
   bcc?: string[];
   subject: string;
   body: string;
+  /** contenu mis en forme (éditeur) ; nettoyé ici avant d'être enregistré */
+  html?: string | null;
   signature?: string;
   file_ids?: string[];
   in_reply_to?: string | null;
   references?: string | null;
   thread_id?: string | null;
+  /** version lue par le composeur : un enregistrement fait ailleurs entre-temps n'est jamais écrasé */
+  expected_version?: number | null;
 };
 
 // Un brouillon peut être incomplet : les adresses saisies ne sont validées qu'à l'envoi.
@@ -166,16 +170,21 @@ const draftSchema = z.object({
   bcc: z.array(z.string().max(320)).max(50).optional(),
   subject: z.string().max(500),
   body: z.string().max(200000),
+  html: z.string().max(500000).nullish(),
   signature: z.string().max(5000).optional(),
   file_ids: z.array(z.uuid()).max(20).optional(),
   in_reply_to: z.string().max(1000).nullish(),
   references: z.string().max(5000).nullish(),
   thread_id: z.string().max(200).nullish(),
+  expected_version: z.number().int().min(0).nullish(),
 });
 
-export async function saveDraft(sb: SupabaseClient, id: string, input: DraftInput) {
+export type DraftSave = (MailMessage & { conflict: false }) | { conflict: true; current: MailMessage };
+
+export async function saveDraft(sb: SupabaseClient, id: string, input: DraftInput): Promise<DraftSave> {
   z.uuid().parse(id);
-  return rpc<MailMessage>(sb, "mail_save_draft", { p_id: id, p: draftSchema.parse(input) });
+  const { expected_version, ...p } = draftSchema.parse(input);
+  return rpc<DraftSave>(sb, "mail_save_draft", { p_id: id, p: { ...p, html: p.html ? safeHtml(p.html) : null }, p_expected_version: expected_version ?? null });
 }
 
 export async function listCompanyMail(sb: SupabaseClient, companyId: string) {

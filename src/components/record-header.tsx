@@ -6,6 +6,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Archive, ArchiveRestore, Ban, CheckSquare, ChevronDown, ExternalLink, FileUp, Mail, Maximize2, MessageSquarePlus, MoreHorizontal, Pencil, Phone, Plus, Sparkles, StickyNote, Timer, UserRound, X } from "lucide-react";
 import { useTimer } from "./time/timer";
+import { useCompanyMails } from "./record-entry";
+import { formatDateTime } from "@/lib/format";
 import { setArchivedAction } from "@/app/actions";
 import { attempt } from "@/lib/client/query";
 import type { ProspectStatus } from "@/lib/crm/types";
@@ -242,7 +244,8 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
           <QuickAction icon={Sparkles} label="Générer un diagnostic" onClick={ctx.generateDiagnostic} />
           <QuickAction icon={StickyNote} label="Ajouter une note" onClick={() => ctx.logExchange("note")} />
           <QuickAction icon={CheckSquare} label="Créer une tâche" onClick={ctx.newTask} />
-          <QuickAction icon={Mail} label="Écrire un email" onClick={() => ctx.compose({})} warn={c.do_not_contact} />
+          <QuickAction icon={Mail} label="Envoyer un mail" onClick={() => ctx.compose({})} warn={c.do_not_contact} />
+          <DraftsAccess ctx={ctx} />
         </div>
       </div>
     </header>
@@ -255,5 +258,29 @@ function QuickAction({ icon: Icon, label, onClick, warn }: { icon: typeof Mail; 
       {warn ? <Ban size={13} /> : <Icon size={13} />}
       <span className="hidden md:inline">{label}</span>
     </Button>
+  );
+}
+
+/** Brouillons de la fiche : accès compact (objet, destinataire, dernière modification). */
+function DraftsAccess({ ctx }: { ctx: RecordCtx }) {
+  const mails = useCompanyMails(ctx.detail.company.id);
+  const drafts = (mails.data ?? []).filter((m) => m.status === "draft").sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  if (!drafts.length) return null;
+  return (
+    <Popover label={`Brouillons (${drafts.length})`} align="right" triggerClass="inline-flex h-8 items-center gap-1 rounded-lg border border-line bg-white px-2.5 text-xs font-semibold hover:bg-surface"
+      trigger={<><Pencil size={12} /> {drafts.length} <span className="max-md:hidden">brouillon{drafts.length > 1 ? "s" : ""}</span></>}>
+      {(close) => (
+        <ul className="max-h-72 overflow-y-auto" data-drafts>
+          {drafts.map((m) => (
+            <li key={m.id}>
+              <button type="button" onClick={() => { close(); ctx.compose({ message: m }); }} className="block w-full rounded-lg px-2.5 py-2 text-left hover:bg-surface">
+                <span className="block truncate text-sm font-semibold">{m.subject || "(sans objet)"}</span>
+                <span className="block truncate text-xs text-muted">{m.to_addrs.join(", ") || "Sans destinataire"} · {formatDateTime(m.updated_at)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Popover>
   );
 }
