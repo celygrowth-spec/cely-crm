@@ -228,4 +228,18 @@ describe("déclenchement", () => {
     expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "start" })).toBe(true);
     expect(await db.one(`select status, last_error from diagnostics`)).toEqual({ status: "waiting_claude", last_error: null });
   });
+
+  test("une session arrêtée sans signaler l'échec n'empêche pas la relance, et le double clic reste protégé", async () => {
+    await db.as("claude");
+    await db.rpc("diagnostic_save_questions", { p_id: dossier, p_questions: questions(10) });
+    await db.as("owner");
+    for (const r of (await db.query<{ id: string }>(`select id from diagnostic_questions`)).rows) await db.rpc("diagnostic_save_answer", { p_question: r.id, p_answer: "", p_dont_know: true });
+    await db.rpc("diagnostic_submit_answers", { p_id: dossier });
+    expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "answers" })).toBe(true);
+    await db.exec(`reset role; update diagnostics set status = 'failed' where id = '${dossier}';`);
+    await db.as("owner");
+    expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "answers" })).toBe(true);
+    expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "answers" })).toBe(false);
+  });
 });
+
