@@ -45,7 +45,7 @@ function ClaudeActions({ prompt, chatUrl, label }: { prompt: string; chatUrl: st
 /** Lancement automatique s'il a eu lieu ; sinon, relance et lien vers Claude en secours. */
 function Launch({ dossier, stage, reload }: { dossier: Diagnostic; stage: "start" | "answers"; reload: () => void }) {
   const [busy, setBusy] = useState(false);
-  const auto = dossier.trigger_stage === stage && dossier.triggered_at && !dossier.trigger_error;
+  const auto = dossier.status !== "failed" && dossier.trigger_stage === stage && dossier.triggered_at && !dossier.trigger_error;
   async function retry() {
     setBusy(true);
     const r = await post<{ triggered: boolean }>(`/api/diagnostics/${dossier.id}`, { op: "trigger", stage });
