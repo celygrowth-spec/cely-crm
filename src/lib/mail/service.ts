@@ -8,7 +8,8 @@ import { CrmError } from "@/lib/crm/service";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { GoogleError, GMAIL_SEND_SCOPE, gmailSend, refreshAccess, revokeToken, type GoogleClient, type TokenSet } from "./google";
 import { buildMime } from "./mime";
-import { MAX_ATTACHMENTS_BYTES, isEmail, withSignature, type MailAccount, type MailMessage, type MailOrigin } from "./types";
+import { MAX_ATTACHMENTS_BYTES, MAX_ATTACHMENTS_LABEL, isEmail, withSignature, type MailAccount, type MailMessage, type MailOrigin } from "./types";
+import { htmlToText, renderEmailHtml } from "./render";
 
 const BUCKET = "company-files";
 
@@ -134,7 +135,7 @@ export function safeHtml(html: string) {
   return sanitizeHtml(html, {
     allowedTags: ["p", "br", "strong", "b", "em", "i", "u", "a", "ul", "ol", "li", "h1", "h2", "h3", "blockquote", "hr", "span", "div", "table", "tbody", "tr", "td", "th"],
     allowedAttributes: { a: ["href"] },
-    allowedSchemes: ["https", "mailto", "tel"],
+    allowedSchemes: ["http", "https", "mailto", "tel"],
   });
 }
 
@@ -184,7 +185,9 @@ export type DraftSave = (MailMessage & { conflict: false }) | { conflict: true; 
 export async function saveDraft(sb: SupabaseClient, id: string, input: DraftInput): Promise<DraftSave> {
   z.uuid().parse(id);
   const { expected_version, ...p } = draftSchema.parse(input);
-  return rpc<DraftSave>(sb, "mail_save_draft", { p_id: id, p: { ...p, html: p.html ? safeHtml(p.html) : null }, p_expected_version: expected_version ?? null });
+  // avec un contenu mis en forme, la version texte est recalculée ici : texte et HTML disent la même chose
+  const html = p.html ? safeHtml(p.html) : null;
+  return rpc<DraftSave>(sb, "mail_save_draft", { p_id: id, p: { ...p, html, body: html ? htmlToText(html) : p.body }, p_expected_version: expected_version ?? null });
 }
 
 export async function listCompanyMail(sb: SupabaseClient, companyId: string) {
@@ -237,7 +240,7 @@ export async function sendStored(sb: SupabaseClient, id: string): Promise<MailMe
     const files = claim.files ?? [];
     if (files.length !== claim.attachment_count) throw new CrmError("Une pièce jointe n'est plus disponible.");
     const total = files.reduce((n, f) => n + Number(f.size_bytes), 0);
-    if (total > MAX_ATTACHMENTS_BYTES) throw new CrmError("Pièces jointes trop lourdes : 25 Mo maximum au total.");
+    if (total > MAX_ATTACHMENTS_BYTES) throw new CrmError(`Pièces jointes trop lourdes : ${MAX_ATTACHMENTS_LABEL} maximum au total (limite de Gmail).`);
     const attachments = await Promise.all(files.map(async (f) => {
       const { data, error } = await sb.storage.from(BUCKET).download(f.storage_path);
       if (error || !data) throw new CrmError(`Pièce jointe illisible : ${f.name}`);
@@ -250,7 +253,8 @@ export async function sendStored(sb: SupabaseClient, id: string): Promise<MailMe
       bcc: m.bcc_addrs,
       subject: m.subject,
       text: withSignature(m.body_text, m.signature),
-      html: m.body_html ? safeHtml(m.body_html) : null,
+      // même rendu que l'aperçu du composeur : styles en ligne, signature une seule fois
+      html: m.body_html ? renderEmailHtml(safeHtml(m.body_html), m.signature) : null,
       inReplyTo: m.in_reply_to,
       references: m.references_hdr,
       attachments,

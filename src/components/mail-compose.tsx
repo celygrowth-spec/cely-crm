@@ -11,9 +11,11 @@ import { mailOp, type MailOverview } from "@/lib/client/mail";
 import { apiGet, attempt, useSync } from "@/lib/client/query";
 import type { CompanyFile } from "@/lib/crm/files";
 import { ACCEPT_ATTR, formatBytes } from "@/lib/crm/file-rules";
-import { MAX_ATTACHMENTS_BYTES, isEmail, withSignature, type MailMessage } from "@/lib/mail/types";
+import { MAX_ATTACHMENTS_BYTES, MAX_ATTACHMENTS_LABEL, isEmail, withSignature, type MailMessage } from "@/lib/mail/types";
+import { renderEmailHtml, textToHtml } from "@/lib/mail/render";
+import { MailEditor, type MailEditorHandle } from "./mail/editor";
 import { addFiles } from "./record-files";
-import { Button, Input, SaveIndicator, Textarea, cn } from "./ui";
+import { Button, Input, SaveIndicator, cn } from "./ui";
 import { RecipientsInput, type Contact } from "./mail/recipients";
 import { fromMessage, readBackup, sameContent, useDraft, type DraftData } from "./mail/use-draft";
 
@@ -48,6 +50,9 @@ function Composer({ companyId, target, contacts, onClose, onReload }: { companyI
     return b;
   });
   const [d0, setD] = useState<DraftData>(initial);
+  // contenu de départ de l'éditeur (un ancien brouillon en texte brut est converti en paragraphes)
+  const [initialHtml] = useState(() => initial.html ?? textToHtml(initial.text));
+  const editorRef = useRef<MailEditorHandle>(null);
   const set = (patch: Partial<DraftData>) => setD((x) => ({ ...x, ...patch }));
   const [showCopies, setShowCopies] = useState(!!(initial.cc.length || initial.bcc.length));
   const [expanded, setExpanded] = useState(false);
@@ -86,7 +91,7 @@ function Composer({ companyId, target, contacts, onClose, onReload }: { companyI
     !d.subject.trim() && "Ajoutez un objet",
     !d.text.trim() && "Le message est vide",
     uploading && "Un fichier est en cours de transfert",
-    totalBytes > MAX_ATTACHMENTS_BYTES && "Pièces jointes au-delà de 25 Mo",
+    totalBytes > MAX_ATTACHMENTS_BYTES && `Pièces jointes au-delà de ${MAX_ATTACHMENTS_LABEL} (limite de Gmail)`,
   ].filter(Boolean) as string[];
   const canSend = !sending && !blockers.length && !draft.conflict;
 
@@ -248,10 +253,9 @@ function Composer({ companyId, target, contacts, onClose, onReload }: { companyI
             </p>
           )}
 
-          {preview ? (
-            <Preview d={d} attached={attached.map((f) => f.display_name)} contactOf={contactOf} />
-          ) : (
-            <>
+          {preview && <Preview d={d} attached={attached.map((f) => `${f.display_name} (${formatBytes(f.size_bytes)})`)} contactOf={contactOf} />}
+          {/* l'éditeur reste monté pendant l'aperçu : sa saisie, son historique et le curseur sont gardés */}
+          <div className={cn("flex min-h-0 flex-1 flex-col gap-2", preview && "hidden")}>
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1"><RecipientsInput label="À" value={d.to} onChange={(to) => set({ to })} contacts={contacts} /></div>
                 {!showCopies && <button type="button" className="mt-2 shrink-0 text-xs font-semibold text-muted hover:text-ink" onClick={() => setShowCopies(true)}>Cc / Cci</button>}
@@ -268,10 +272,10 @@ function Composer({ companyId, target, contacts, onClose, onReload }: { companyI
                 </p>
               )}
               <Input value={d.subject} onChange={(e) => set({ subject: e.target.value })} maxLength={500} placeholder="Objet" aria-label="Objet" className="font-semibold" />
-              <Textarea value={d.text} onChange={(e) => set({ text: e.target.value })} aria-label="Message" placeholder="Votre message…" spellCheck className="min-h-48 flex-1 resize-none" />
+              <MailEditor handle={editorRef} initialHtml={initialHtml} onChange={(html, text) => set({ html, text })} />
               {d.signature && (
                 <div className="rounded-lg border border-dashed border-line px-3 py-2 text-sm text-muted" data-signature>
-                  <p className="mb-1 font-label text-[10px] font-bold tracking-wide uppercase">Signature</p>
+                  <p className="mb-1 font-label text-[10px] font-bold tracking-wide uppercase">Signature · ajoutée une seule fois sous le message</p>
                   <p className="whitespace-pre-wrap">{d.signature}</p>
                 </div>
               )}
@@ -281,7 +285,7 @@ function Composer({ companyId, target, contacts, onClose, onReload }: { companyI
                 <div className="flex flex-wrap items-center gap-2">
                   <Button size="sm" onClick={() => setPicker((p) => !p)}><Paperclip size={13} /> Documents de la fiche</Button>
                   <Button size="sm" onClick={() => input.current?.click()}><Upload size={13} /> Depuis l&apos;ordinateur</Button>
-                  <span className="text-xs text-muted">{attached.length ? `${formatBytes(totalBytes)} sur 25 Mo` : "25 Mo maximum au total"}</span>
+                  <span className="text-xs text-muted">{attached.length ? `${formatBytes(totalBytes)} sur ${MAX_ATTACHMENTS_LABEL}` : `${MAX_ATTACHMENTS_LABEL} maximum au total (limite de Gmail)`}</span>
                   <input ref={input} type="file" multiple accept={ACCEPT_ATTR} className="sr-only" onChange={(e) => { void upload([...(e.target.files ?? [])]); e.target.value = ""; }} />
                 </div>
                 {(attached.length > 0 || uploads.length > 0) && (
@@ -315,8 +319,7 @@ function Composer({ companyId, target, contacts, onClose, onReload }: { companyI
                   </ul>
                 )}
               </div>
-            </>
-          )}
+          </div>
 
           {error && <p role="alert" className="rounded-lg bg-danger/5 px-3 py-2 text-sm text-danger">{error} Votre brouillon et ses pièces jointes sont conservés.</p>}
         </div>
@@ -336,15 +339,33 @@ function Composer({ companyId, target, contacts, onClose, onReload }: { companyI
 }
 
 function Preview({ d, attached, contactOf }: { d: DraftData; attached: string[]; contactOf: Map<string, Contact> }) {
+  const [mode, setMode] = useState<"desktop" | "mobile" | "text">("desktop");
   const who = (list: string[]) => list.map((a) => contactOf.get(a.toLowerCase())?.name ? `${contactOf.get(a.toLowerCase())!.name} <${a}>` : a).join(", ");
+  const doc = renderEmailHtml(d.html ?? textToHtml(d.text), d.signature);
   return (
-    <div className="space-y-2 rounded-xl border border-line p-4 text-sm" data-preview>
-      <p><span className="text-muted">À :</span> {who(d.to) || "—"}</p>
-      {!!d.cc.length && <p><span className="text-muted">Cc :</span> {who(d.cc)}</p>}
-      {!!d.bcc.length && <p><span className="text-muted">Cci :</span> {who(d.bcc)}</p>}
-      <p className="font-semibold">{d.subject || "(sans objet)"}</p>
-      <p className="whitespace-pre-wrap">{withSignature(d.text, d.signature)}</p>
-      {!!attached.length && <p className="text-xs text-muted">{attached.length} pièce(s) jointe(s) : {attached.join(", ")}</p>}
+    <div className="flex min-h-0 flex-1 flex-col gap-2" data-preview>
+      <div className="space-y-0.5 rounded-xl border border-line p-3 text-sm">
+        <p><span className="text-muted">À :</span> {who(d.to) || "—"}</p>
+        {!!d.cc.length && <p><span className="text-muted">Cc :</span> {who(d.cc)}</p>}
+        {!!d.bcc.length && <p><span className="text-muted">Cci :</span> {who(d.bcc)}</p>}
+        <p className="font-semibold">{d.subject || "(sans objet)"}</p>
+        {!!attached.length && <p className="text-xs text-muted">Pièces jointes : {attached.join(", ")}</p>}
+      </div>
+      <div role="group" aria-label="Rendu" className="inline-flex self-start rounded-lg border border-line p-0.5">
+        {(["desktop", "mobile", "text"] as const).map((k) => (
+          <button key={k} type="button" aria-pressed={mode === k} onClick={() => setMode(k)} className={cn("rounded-md px-2.5 py-1 text-xs font-semibold", mode === k ? "bg-ink text-white" : "text-muted")}>
+            {k === "desktop" ? "Ordinateur" : k === "mobile" ? "Mobile" : "Version texte"}
+          </button>
+        ))}
+      </div>
+      {mode === "text" ? (
+        <pre className="min-h-60 flex-1 overflow-auto rounded-xl border border-line bg-surface p-3 font-sans text-sm whitespace-pre-wrap" data-preview-text>{withSignature(d.text, d.signature)}</pre>
+      ) : (
+        <div className="flex min-h-60 flex-1 justify-center rounded-xl border border-line bg-surface p-2">
+          {/* cadre isolé, sans script : rendu identique au HTML envoyé */}
+          <iframe title="Aperçu de l'email" sandbox="" srcDoc={doc} className={cn("h-full min-h-60 rounded-lg bg-white", mode === "mobile" ? "w-[375px] max-w-full border border-line" : "w-full")} data-preview-frame />
+        </div>
+      )}
     </div>
   );
 }
