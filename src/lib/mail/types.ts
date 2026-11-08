@@ -40,6 +40,7 @@ export type MailMessage = {
   references_hdr: string | null;
   provider_thread_id: string | null;
   provider_message_id: string | null;
+  rfc_message_id?: string | null;
   business_type: string | null;
   business_id: string | null;
   scheduled_at: string | null;

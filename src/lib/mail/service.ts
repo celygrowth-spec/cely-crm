@@ -9,7 +9,8 @@ import { decryptSecret, encryptSecret } from "./crypto";
 import { GoogleError, GMAIL_SEND_SCOPE, gmailSend, refreshAccess, revokeToken, type GoogleClient, type TokenSet } from "./google";
 import { buildMime } from "./mime";
 import { MAX_ATTACHMENTS_BYTES, MAX_ATTACHMENTS_LABEL, isEmail, withSignature, type MailAccount, type MailMessage, type MailOrigin } from "./types";
-import { htmlToText, renderEmailHtml } from "./render";
+import { htmlToText, renderEmailHtml, textToHtml } from "./render";
+import { labelOf, resolveVariables, usedVariables, type VarContext } from "./variables";
 
 const BUCKET = "company-files";
 
@@ -228,10 +229,42 @@ type Claim = {
  * `claimed: false` : un autre appel s'en occupe ou s'en est occupé ; Gmail n'est pas appelé.
  * Le résultat renvoyé dit la vérité sur l'état : il ne faut jamais en déduire « livré » ni « lu ».
  */
-export async function sendStored(sb: SupabaseClient, id: string): Promise<MailMessage> {
+type Final = { subject: string; html: string | null; text: string; version: number; allow_dnc?: boolean };
+
+/**
+ * Brouillon écrit dans le composeur : contenu définitif calculé ici, côté serveur, avec les vraies données
+ * du contact de référence et de la fiche. Une variable sans valeur, ou plusieurs destinataires sans
+ * contact de référence, refusent l'envoi : on n'envoie jamais « Bonjour Prénom » ni un prénom deviné.
+ */
+async function finalDraft(sb: SupabaseClient, id: string): Promise<Final | null> {
+  type Ctx = { message: MailMessage | null; company: { name: string; website: string | null } | null; person: { first_name: string | null; last_name: string | null; title: string | null } | null };
+  const c = await rpc<Ctx | null>(sb, "mail_send_context", { p_id: id });
+  const m = c?.message;
+  if (!m || m.status !== "draft" || m.origin !== "manual") return null;
+  const html = safeHtml(m.body_html ?? textToHtml(m.body_text ?? ""));
+  const used = usedVariables(html, m.subject);
+  const needPerson = used.some((k) => k === "prenom" || k === "nom" || k === "poste");
+  if (needPerson && !c.person && !m.collective) {
+    throw new CrmError(m.to_addrs.length > 1
+      ? "Plusieurs destinataires : choisissez le contact de référence des variables, ou une formule collective."
+      : "Choisissez le contact de référence des variables.");
+  }
+  const ctx: VarContext = { first_name: c.person?.first_name, last_name: c.person?.last_name, title: c.person?.title, company: c.company?.name, website: c.company?.website };
+  const r = resolveVariables(html, m.subject, ctx, !!m.collective);
+  if (r.missing.length) throw new CrmError(`Variable sans valeur : ${r.missing.map(labelOf).join(", ")}. Remplacez-la ou retirez-la avant d'envoyer.`);
+  // un ancien brouillon en texte brut part en texte brut, comme avant
+  const text = m.body_html ? htmlToText(r.html) : m.body_text;
+  if (!r.subject.trim()) throw new CrmError("Indiquez un objet.");
+  if (!text.trim()) throw new CrmError("Le message est vide.");
+  return { subject: r.subject, html: m.body_html ? r.html : null, text, version: Number(m.draft_version ?? 0) };
+}
+
+export async function sendStored(sb: SupabaseClient, id: string, opts: { allowDoNotContact?: boolean } = {}): Promise<MailMessage> {
   const c = requireConfig();
   z.uuid().parse(id);
-  const claim = await rpc<Claim>(sb, "mail_claim", { p_id: id });
+  const final = await finalDraft(sb, id);
+  if (final && opts.allowDoNotContact) final.allow_dnc = true;
+  const claim = await rpc<Claim>(sb, "mail_claim", { p_id: id, p_final: final });
   if (!claim.claimed) return claim.message;
   const fail = (code: string, message: string, uncertain = false) => rpc<MailMessage>(sb, "mail_mark_failed", { p_id: id, p_code: code, p_error: message, p_uncertain: uncertain });
   const m = claim.message;
@@ -262,6 +295,7 @@ export async function sendStored(sb: SupabaseClient, id: string): Promise<MailMe
       html: m.body_html ? renderEmailHtml(safeHtml(m.body_html), m.signature) : null,
       inReplyTo: m.in_reply_to,
       references: m.references_hdr,
+      messageId: m.rfc_message_id,
       attachments,
     });
     token = await accessToken(sb, accountId, c);

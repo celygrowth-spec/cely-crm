@@ -208,7 +208,7 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
     // le blocage existant porte sur la prospection : un email manuel reste possible, mais jamais par mégarde
     if (!t.message && c.do_not_contact && !confirm(`Cette fiche est marquée « Ne plus contacter »${c.do_not_contact_reason ? ` (${c.do_not_contact_reason})` : ""}.\n\nÉcrire quand même ?`)) return;
     const primary = detail.people.find((p) => p.is_primary && p.email && isEmail(p.email)) ?? detail.people.find((p) => p.email && isEmail(p.email));
-    setCompose(t.message || t.to ? t : { personId: primary?.id ?? null, to: primary?.email ?? null });
+    setCompose(t.message || t.replyTo || t.to ? t : { personId: primary?.id ?? null, to: primary?.email ?? null });
   };
   const ctx: RecordCtx = {
     detail,
@@ -242,7 +242,7 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
         {visited.has("diagnostic") && <div role="tabpanel" aria-label="Diagnostic" hidden={tab !== "diagnostic"}><RecordDiagnostic companyId={c.id} startSignal={diagnosticStart} /></div>}
       </div>
       {compose && (
-        <MailCompose companyId={c.id} target={compose} onClose={() => setCompose(null)} company={{ name: c.name, website: c.website ?? null }}
+        <MailCompose companyId={c.id} target={compose} onClose={() => setCompose(null)} company={{ name: c.name, website: c.website ?? null, doNotContact: c.do_not_contact ? { reason: c.do_not_contact_reason ?? null } : null }}
           contacts={detail.people.filter((p) => p.email && isEmail(p.email)).map((p) => ({ id: p.id, name: personName(p), email: p.email!, title: p.title, primary: p.is_primary, first_name: p.first_name, last_name: p.last_name }))} />
       )}
       {entry && <EntryDetail key={entry.key} entry={entry} ctx={ctx} onClose={() => setEntry(null)} />}

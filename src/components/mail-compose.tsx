@@ -23,11 +23,12 @@ import { Button, Input, SaveIndicator, cn } from "./ui";
 import { RecipientsInput, type Contact } from "./mail/recipients";
 import { fromMessage, readBackup, sameContent, useDraft, type DraftData } from "./mail/use-draft";
 
-export type ComposeTarget = { message?: MailMessage; personId?: string | null; to?: string | null };
+/** `replyTo` : un email envoyé auquel on donne suite, dans le même fil (Gmail et en-têtes de réponse). */
+export type ComposeTarget = { message?: MailMessage; replyTo?: MailMessage; personId?: string | null; to?: string | null };
 
 const timeFmt = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
-type Company = { name: string; website: string | null };
+type Company = { name: string; website: string | null; doNotContact?: { reason: string | null } | null };
 
 export function MailCompose({ companyId, target, contacts = [], company = { name: "", website: null }, onClose }: { companyId: string; target: ComposeTarget; contacts?: Contact[]; company?: Company; onClose: () => void }) {
   // une reprise de version distante remonte le composeur avec le contenu choisi
@@ -45,10 +46,20 @@ function Composer({ companyId, company, target, contacts, onClose, onReload }: {
   const sync = useSync();
   const m = target.message;
   const [id] = useState(() => m?.id ?? crypto.randomUUID());
-  const initial: DraftData = m ? fromMessage(m) : {
+  const re = target.replyTo;
+  const initial: DraftData = m ? fromMessage(m) : re ? {
+    to: re.to_addrs, cc: re.cc_addrs, bcc: [], subject: /^re\s*:/i.test(re.subject) ? re.subject : `Re: ${re.subject}`, text: "", html: null, fileIds: [],
+    personId: re.person_id, signature: "", templateId: null, collective: !!re.collective,
+  } : {
     to: target.to ? [target.to] : [], cc: [], bcc: [], subject: "", text: "", html: null, fileIds: [], personId: target.personId ?? null, signature: "",
     templateId: null, collective: false,
   };
+  // réponse : mêmes fil Gmail et en-têtes (In-Reply-To / References) que le message d'origine
+  const [thread] = useState(() => m
+    ? { inReplyTo: m.in_reply_to ?? null, references: m.references_hdr ?? null, threadId: m.provider_thread_id ?? null }
+    : re ? { inReplyTo: re.rfc_message_id ?? null, references: [re.references_hdr, re.rfc_message_id].filter(Boolean).join(" ") || null, threadId: re.provider_thread_id ?? null }
+    : { inReplyTo: null, references: null, threadId: null });
+  const [allowDnc, setAllowDnc] = useState(false);
   // saisie retrouvée sur cet appareil, plus récente que la version enregistrée
   const [recovered, setRecovered] = useState(() => {
     const b = readBackup(id);
@@ -88,7 +99,7 @@ function Composer({ companyId, company, target, contacts, onClose, onReload }: {
   const empty = !d.subject.trim() && !d.text.trim() && !d.fileIds.length;
   const draft = useDraft(id, {
     companyId, accountId: account?.id ?? m?.account_id ?? null,
-    inReplyTo: m?.in_reply_to ?? null, references: m?.references_hdr ?? null, threadId: m?.provider_thread_id ?? null,
+    ...thread,
   }, m ? (m.draft_version ?? 0) : null, d, empty);
 
   // --- personnalisation : contact de référence explicite, jamais deviné parmi plusieurs destinataires ---
@@ -144,6 +155,7 @@ function Composer({ companyId, company, target, contacts, onClose, onReload }: {
     needReference && "Choisissez le contact de référence des variables",
     !needReference && resolved.missing.length > 0 && `Variable sans valeur : ${resolved.missing.map(labelOf).join(", ")}`,
     uploading && "Un fichier est en cours de transfert",
+    company.doNotContact && !allowDnc && "Fiche « Ne plus contacter » : confirmez avant d'envoyer",
     totalBytes > MAX_ATTACHMENTS_BYTES && `Pièces jointes au-delà de ${MAX_ATTACHMENTS_LABEL} (limite de Gmail)`,
   ].filter(Boolean) as string[];
   const canSend = !sending && !blockers.length && !draft.conflict;
@@ -216,7 +228,7 @@ function Composer({ companyId, company, target, contacts, onClose, onReload }: {
     }
     let r;
     try {
-      r = await mailOp(id, { op: "send" });
+      r = await mailOp(id, { op: "send", allow_dnc: allowDnc });
     } catch {
       toast.error("Connexion perdue pendant l'envoi. Vérifiez l'état du message dans la fiche avant de renvoyer.");
       sync(["company-mail", companyId], ["company-timeline", companyId]);
@@ -261,7 +273,7 @@ function Composer({ companyId, company, target, contacts, onClose, onReload }: {
         expanded ? "h-dvh sm:h-[calc(100dvh-2rem)] sm:max-w-none sm:rounded-2xl" : "h-dvh sm:h-[min(88dvh,820px)] sm:max-w-3xl sm:rounded-2xl")}>
         {/* en-tête */}
         <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
-          <h2 className="font-display text-base font-bold">{m ? "Brouillon" : "Nouveau message"}</h2>
+          <h2 className="font-display text-base font-bold">{thread.inReplyTo || thread.threadId ? "Réponse" : m ? "Brouillon" : "Nouveau message"}</h2>
           <span className="text-xs text-muted" data-save-state={draft.state}>
             {draft.state === "saving" ? "Enregistrement…" : draft.state === "saved" ? `Enregistré${draft.savedAt ? ` à ${timeFmt.format(new Date(draft.savedAt))}` : ""}` : draft.state === "error" ? <span className="text-danger">Échec de sauvegarde</span> : ""}
           </span>
@@ -321,6 +333,16 @@ function Composer({ companyId, company, target, contacts, onClose, onReload }: {
                   <RecipientsInput label="Cc" value={d.cc} onChange={(cc) => set({ cc })} contacts={contacts} />
                   <RecipientsInput label="Cci" value={d.bcc} onChange={(bcc) => set({ bcc })} contacts={contacts} />
                 </>
+              )}
+              {company.doNotContact && (
+                <label className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-sm" data-dnc>
+                  <input type="checkbox" className="mt-0.5 accent-red-600" checked={allowDnc} onChange={(e) => setAllowDnc(e.target.checked)} />
+                  <span>
+                    <span className="font-semibold text-danger">Fiche marquée « Ne plus contacter »</span>
+                    {company.doNotContact.reason && <span className="text-muted"> ({company.doNotContact.reason})</span>}
+                    . Je confirme vouloir écrire à cette personne quand même.
+                  </span>
+                </label>
               )}
               {d.to.length > 1 && (
                 <p className="rounded-lg bg-surface px-3 py-1.5 text-xs text-muted" data-multi>

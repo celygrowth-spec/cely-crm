@@ -83,6 +83,9 @@ export function EntryRow({ entry: e, ctx }: { entry: ActivityEntry; ctx: RecordC
             <span>{e.at ? formatDateTime(e.at) : "Date inconnue"}</span>
             {i?.channel && !e.call && <span>· {CHANNEL_LABELS[i.channel]}</span>}
             {person && <span>· {person}</span>}
+            {e.type === "email" && e.mail && e.mail.status === "accepted" && (
+              <span className="min-w-0 truncate">· À {e.mail.to_addrs.join(", ")}{e.mail.attachments.length ? ` · ${e.mail.attachments.length} pièce${e.mail.attachments.length > 1 ? "s" : ""} jointe${e.mail.attachments.length > 1 ? "s" : ""}` : ""}</span>
+            )}
             {meta?.campaign_name && <span>· {meta.campaign_name}{meta.step_name ? ` › ${meta.step_name}` : ""}</span>}
             {i && <Provenance source={i.source} origin={i.content_origin} />}
           </span>
