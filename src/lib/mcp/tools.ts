@@ -289,8 +289,14 @@ export function registerTools(server: McpServer, client: GetClient) {
   const page = { before: z.iso.datetime({ offset: true }).optional().describe("Date du dernier élément de la page précédente."), limit: z.number().int().min(1).max(100).default(50) };
 
   // Ce que l'utilisateur attend de ce passage : le dossier seul ne suffit pas à le deviner.
-  const nextStep = (d: { status: string; questions: unknown[] }) => {
+  const nextStep = (d: { status: string; versions: { version: number; file_id: string | null; status: string; feedback: string | null }[] }) => {
     switch (d.status) {
+      case "revision_requested": {
+        const v = d.versions.filter((x) => x.status === "ready").sort((a, b) => b.version - a.version)[0];
+        return v
+          ? `Une nouvelle version est demandée à partir de la V${v.version} (fichier ${v.file_id ?? "supprimé de la fiche"}). Téléchargez ce fichier avec get_diagnostic_file_url, appliquez le retour de l'utilisateur (champ feedback de la V${v.version}) sans perdre le reste, puis déposez la version suivante (start_diagnostic_version, envoi, confirm_diagnostic_version). En cas de blocage, signalez-le avec report_diagnostic_failure.`
+          : "Aucune version à réviser : signalez-le avec report_diagnostic_failure.";
+      }
       case "waiting_claude":
       case "researching":
         return "Faites la recherche, enregistrez-la avec save_diagnostic_research, puis enregistrez 10 à 20 questions avec save_diagnostic_questions. Arrêtez-vous ensuite.";
@@ -300,7 +306,7 @@ export function registerTools(server: McpServer, client: GetClient) {
       case "generating":
         return "Les réponses sont envoyées : générez maintenant le PowerPoint et déposez-le (start_diagnostic_version, envoi, confirm_diagnostic_version), même si les données sont limitées ; signalez alors les hypothèses dans les slides. En cas de blocage, signalez-le avec report_diagnostic_failure.";
       case "version_ready":
-        return "La dernière version est reçue : rien à faire sans nouvelle demande de l'utilisateur.";
+        return "La dernière version est reçue : rien à faire tant que l'utilisateur ne demande pas de nouvelle version depuis le CRM.";
       default:
         return "Le dossier est en échec : rien à faire tant que l'utilisateur ne l'a pas relancé depuis le CRM.";
     }
@@ -478,7 +484,7 @@ export function registerTools(server: McpServer, client: GetClient) {
     "start_diagnostic_version",
     {
       title: "Préparer le dépôt d'une version",
-      description: "Refusé tant que les réponses ne sont pas envoyées. Ouvre la version suivante ou reprend le dépôt en cours, et renvoie une adresse de dépôt. Envoyez-y le .pptx depuis votre environnement d'exécution : curl -X PUT --data-binary @fichier.pptx avec l'en-tête Content-Type indiqué. Appelez ensuite confirm_diagnostic_version.",
+      description: "Refusé tant que les réponses ne sont pas envoyées. Pour une révision, partez du fichier de la dernière version et du retour de l'utilisateur. Ouvre la version suivante ou reprend le dépôt en cours, et renvoie une adresse de dépôt. Envoyez-y le .pptx depuis votre environnement d'exécution : curl -X PUT --data-binary @fichier.pptx avec l'en-tête Content-Type indiqué. Appelez ensuite confirm_diagnostic_version.",
       inputSchema: z.object({ ...dossier, size_bytes: z.number().int().positive().max(25 * 1024 * 1024) }),
     },
     async ({ diagnostic_id, size_bytes }, sb) => {

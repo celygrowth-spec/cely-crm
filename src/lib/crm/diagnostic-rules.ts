@@ -26,7 +26,8 @@ const LIBRARY_TYPES: Record<string, string> = {
 export const LIBRARY_ACCEPT = Object.keys(LIBRARY_TYPES).map((e) => `.${e}`).join(",");
 export const libraryType = (name: string): string | null => LIBRARY_TYPES[name.split(".").pop()?.toLowerCase() ?? ""] ?? null;
 
-export type DiagnosticStatus = "waiting_claude" | "researching" | "questions_ready" | "answers_sent" | "generating" | "version_ready" | "failed";
+export type DiagnosticStatus = "waiting_claude" | "researching" | "questions_ready" | "answers_sent" | "generating" | "version_ready" | "revision_requested" | "failed";
+export type TriggerStage = "start" | "answers" | "revision";
 
 export const DIAGNOSTIC_STATUS_LABELS: Record<DiagnosticStatus, string> = {
   waiting_claude: "En attente de Claude",
@@ -35,11 +36,12 @@ export const DIAGNOSTIC_STATUS_LABELS: Record<DiagnosticStatus, string> = {
   answers_sent: "Réponses envoyées, slides à générer",
   generating: "Génération en cours",
   version_ready: "Fichier reçu",
+  revision_requested: "Nouvelle version demandée",
   failed: "Échec",
 };
 
 export type DiagnosticQuestion = { id: string; position: number; question: string; why: string | null; answer: string | null; dont_know: boolean };
-export type DiagnosticVersion = { id: string; version: number; file_id: string | null; status: "uploading" | "ready"; created_at: string; ready_at: string | null };
+export type DiagnosticVersion = { id: string; version: number; file_id: string | null; status: "uploading" | "ready"; created_at: string; ready_at: string | null; feedback: string | null; feedback_at: string | null };
 export type DiagnosticSource = { titre: string; url?: string; date?: string; marche?: string; nature: "fait" | "hypothese" | "prospect" };
 export type Diagnostic = {
   id: string;
@@ -50,7 +52,7 @@ export type Diagnostic = {
   sources: DiagnosticSource[];
   answers_sent_at: string | null;
   last_error: string | null;
-  trigger_stage: "start" | "answers" | null;
+  trigger_stage: TriggerStage | null;
   triggered_at: string | null;
   trigger_error: string | null;
   created_at: string;
@@ -64,6 +66,16 @@ export const startPrompt = (id: string) =>
   `Diagnostic Cely, dossier ${id}. Avec le connecteur du CRM, appelle open_diagnostic avec cet identifiant, puis suis les consignes qu'il renvoie.`;
 export const answersPrompt = (id: string) =>
   `Diagnostic Cely, dossier ${id} : les réponses sont envoyées. Avec le connecteur du CRM, appelle open_diagnostic avec cet identifiant, lis les réponses, puis génère les slides et dépose la version dans le CRM.`;
+
+export const revisionPrompt = (id: string) =>
+  `Diagnostic Cely, dossier ${id} : une nouvelle version est demandée. Avec le connecteur du CRM, appelle open_diagnostic avec cet identifiant, applique le retour à la dernière version, puis dépose la version suivante dans le CRM.`;
+
+/** Étape à relancer : révision si la dernière version porte un retour, slides après les réponses, sinon lancement. */
+export function stageOf(d: Pick<Diagnostic, "answers_sent_at" | "versions">): TriggerStage {
+  const latest = d.versions.filter((v) => v.status === "ready").sort((a, b) => b.version - a.version)[0];
+  if (latest?.feedback) return "revision";
+  return d.answers_sent_at ? "answers" : "start";
+}
 
 /** Dans le chat associé s'il est connu, sinon dans une nouvelle conversation. Une session de tâche Claude Code ne se reprend pas par lien. */
 export function claudeLink(prompt: string, chatUrl?: string | null) {

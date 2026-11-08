@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Copy, Download, ExternalLink, RotateCcw, Sparkles } from "lucide-react";
 import { apiGet, attempt } from "@/lib/client/query";
-import { DIAGNOSTIC_STATUS_LABELS, answersPrompt, claudeLink, startPrompt, type Diagnostic, type DiagnosticQuestion, type DiagnosticStatus } from "@/lib/crm/diagnostic-rules";
+import { DIAGNOSTIC_STATUS_LABELS, answersPrompt, claudeLink, revisionPrompt, stageOf, startPrompt, type Diagnostic, type DiagnosticQuestion, type DiagnosticStatus, type DiagnosticVersion, type TriggerStage } from "@/lib/crm/diagnostic-rules";
 import { formatDateTime } from "@/lib/format";
 import { Badge, Button, Input, SaveIndicator, Skeleton, Textarea } from "./ui";
 
@@ -18,10 +18,11 @@ const TONES: Record<DiagnosticStatus, "neutral" | "warning" | "success" | "dange
   answers_sent: "neutral",
   generating: "neutral",
   version_ready: "success",
+  revision_requested: "neutral",
   failed: "danger",
 };
 // Claude travaille : l'écran se met à jour seul
-const WORKING: DiagnosticStatus[] = ["waiting_claude", "researching", "answers_sent", "generating"];
+const WORKING: DiagnosticStatus[] = ["waiting_claude", "researching", "answers_sent", "generating", "revision_requested"];
 
 const post = <T,>(url: string, body: Record<string, unknown>) =>
   attempt(async () => {
@@ -43,7 +44,13 @@ function ClaudeActions({ prompt, chatUrl, label }: { prompt: string; chatUrl: st
 }
 
 /** Lancement automatique s'il a eu lieu ; sinon, relance et lien vers Claude en secours. */
-function Launch({ dossier, stage, reload }: { dossier: Diagnostic; stage: "start" | "answers"; reload: () => void }) {
+const PROMPTS: Record<TriggerStage, { prompt: (id: string) => string; label: string; waiting: string }> = {
+  start: { prompt: startPrompt, label: "Lancer dans Claude", waiting: "Ses questions arriveront ici." },
+  answers: { prompt: answersPrompt, label: "Générer les slides dans Claude", waiting: "La version arrivera ici." },
+  revision: { prompt: revisionPrompt, label: "Demander la version dans Claude", waiting: "La nouvelle version arrivera ici." },
+};
+
+function Launch({ dossier, stage, reload }: { dossier: Diagnostic; stage: TriggerStage; reload: () => void }) {
   const [busy, setBusy] = useState(false);
   const auto = dossier.status !== "failed" && dossier.trigger_stage === stage && dossier.triggered_at && !dossier.trigger_error;
   async function retry() {
@@ -57,7 +64,7 @@ function Launch({ dossier, stage, reload }: { dossier: Diagnostic; stage: "start
   if (auto) {
     return (
       <p className="text-sm">
-        Claude a été lancé automatiquement le {formatDateTime(dossier.triggered_at!)}. {stage === "start" ? "Ses questions arriveront ici." : "La version arrivera ici."}
+        Claude a été lancé automatiquement le {formatDateTime(dossier.triggered_at!)}. {PROMPTS[stage].waiting}
         {dossier.chat_url && <> <a className="font-semibold text-violet-strong underline" href={dossier.chat_url} target="_blank" rel="noreferrer noopener">Suivre la session</a></>}
       </p>
     );
@@ -70,7 +77,7 @@ function Launch({ dossier, stage, reload }: { dossier: Diagnostic; stage: "start
           <Button size="sm" disabled={busy} onClick={retry}><RotateCcw size={13} /> Relancer Claude</Button>
         </div>
       )}
-      <ClaudeActions prompt={stage === "start" ? startPrompt(dossier.id) : answersPrompt(dossier.id)} chatUrl={dossier.chat_url} label={stage === "start" ? "Lancer dans Claude" : "Générer les slides dans Claude"} />
+      <ClaudeActions prompt={PROMPTS[stage].prompt(dossier.id)} chatUrl={dossier.chat_url} label={PROMPTS[stage].label} />
     </div>
   );
 }
@@ -141,10 +148,38 @@ function Question({ dossierId, q, locked, onSaved }: { dossierId: string; q: Dia
   );
 }
 
+/** Retour sur la dernière version reçue : la suivante est produite à partir de ce fichier et de ce texte. */
+function Revision({ dossierId, version, reload }: { dossierId: string; version: DiagnosticVersion; reload: () => void }) {
+  const [feedback, setFeedback] = useState("");
+  const [sending, setSending] = useState(false);
+  async function send() {
+    setSending(true);
+    const r = await post<{ status: string; triggered: boolean; error?: string }>(`/api/diagnostics/${dossierId}`, { op: "revise", version: version.version, feedback });
+    setSending(false);
+    if (!r.ok) return toast.error(r.error);
+    if (r.data.error) toast.error(`Demande enregistrée, mais Claude n'a pas été lancé : ${r.data.error}`);
+    else if (r.data.triggered) toast.success(`Claude prépare la V${version.version + 1}`);
+    reload();
+  }
+  return (
+    <div className="mt-2 grid gap-2 border-t border-line pt-2">
+      <Textarea
+        rows={3}
+        value={feedback}
+        onChange={(e) => setFeedback(e.target.value)}
+        aria-label={`Retour sur la V${version.version}`}
+        placeholder="Ex. : sur la slide concurrents, distingue les concurrents commerciaux des concurrents SEO. Développe les mots-clés pour la cible PME."
+      />
+      <Button className="justify-self-start" variant="primary" disabled={sending || !feedback.trim()} onClick={send}>{sending ? "Envoi…" : "Demander une nouvelle version"}</Button>
+    </div>
+  );
+}
+
 function Dossier({ dossier, reload }: { dossier: Diagnostic; reload: () => void }) {
   const [sending, setSending] = useState(false);
   const locked = dossier.status !== "questions_ready";
   const missing = dossier.questions.filter((q) => !q.answer && !q.dont_know).length;
+  const latestReady = dossier.versions.find((v) => v.status === "ready");
 
   async function submit() {
     setSending(true);
@@ -172,7 +207,8 @@ function Dossier({ dossier, reload }: { dossier: Diagnostic; reload: () => void 
         {dossier.status === "failed" && dossier.last_error && <p className="text-sm text-danger">{dossier.last_error}</p>}
         {dossier.status === "waiting_claude" && <Launch dossier={dossier} stage="start" reload={reload} />}
         {dossier.status === "answers_sent" && <Launch dossier={dossier} stage="answers" reload={reload} />}
-        {dossier.status === "failed" && <Launch dossier={dossier} stage={dossier.answers_sent_at ? "answers" : "start"} reload={reload} />}
+        {dossier.status === "revision_requested" && <Launch dossier={dossier} stage="revision" reload={reload} />}
+        {dossier.status === "failed" && <Launch dossier={dossier} stage={stageOf(dossier)} reload={reload} />}
         <ChatLink key={dossier.chat_url ?? ""} dossier={dossier} reload={reload} />
       </section>
 
@@ -214,13 +250,17 @@ function Dossier({ dossier, reload }: { dossier: Diagnostic; reload: () => void 
           <h3 className="font-display text-base font-bold">Versions</h3>
           <ul className="mt-2 space-y-1">
             {dossier.versions.map((v) => (
-              <li key={v.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm">
-                <span className="font-semibold">V{v.version}</span>
-                <Badge tone={v.status === "ready" ? "success" : "neutral"}>{v.status === "ready" ? "Fichier reçu" : "Dépôt en cours"}</Badge>
-                <span className="text-xs text-muted">{formatDateTime(v.ready_at ?? v.created_at)}</span>
-                {v.status === "ready" && (v.file_id
-                  ? <Button size="sm" className="ml-auto" onClick={() => download(v.file_id!)}><Download size={13} /> Télécharger</Button>
-                  : <span className="ml-auto text-xs text-muted">Fichier supprimé de la fiche</span>)}
+              <li key={v.id} className="rounded-lg border border-line px-3 py-2 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold">V{v.version}</span>
+                  <Badge tone={v.status === "ready" ? "success" : "neutral"}>{v.status === "ready" ? "Fichier reçu" : "Dépôt en cours"}</Badge>
+                  <span className="text-xs text-muted">{formatDateTime(v.ready_at ?? v.created_at)}</span>
+                  {v.status === "ready" && (v.file_id
+                    ? <Button size="sm" className="ml-auto" onClick={() => download(v.file_id!)}><Download size={13} /> Télécharger</Button>
+                    : <span className="ml-auto text-xs text-muted">Fichier supprimé de la fiche</span>)}
+                </div>
+                {v.feedback && <p className="mt-1.5 text-xs whitespace-pre-wrap text-muted"><span className="font-semibold">Retour du {formatDateTime(v.feedback_at!)} :</span> {v.feedback}</p>}
+                {dossier.status === "version_ready" && v.id === latestReady?.id && <Revision dossierId={dossier.id} version={v} reload={reload} />}
               </li>
             ))}
           </ul>

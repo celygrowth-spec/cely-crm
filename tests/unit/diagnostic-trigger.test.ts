@@ -88,3 +88,15 @@ describe("triggerDiagnostic", () => {
     expect(s.calls.at(-1)).toEqual(["diagnostic_trigger_result", { p_id: ID, p_session_url: "https://claude.ai/code/session_01Y", p_error: null }]);
   });
 });
+
+describe("stageOf", () => {
+  test("révision si la dernière version reçue porte un retour, sinon slides ou lancement", async () => {
+    const { stageOf } = await import("@/lib/crm/diagnostic-rules");
+    const v = (version: number, feedback: string | null) => ({ id: String(version), version, file_id: null, status: "ready" as const, created_at: "", ready_at: "", feedback, feedback_at: null });
+    expect(stageOf({ answers_sent_at: null, versions: [] })).toBe("start");
+    expect(stageOf({ answers_sent_at: "x", versions: [] })).toBe("answers");
+    expect(stageOf({ answers_sent_at: "x", versions: [v(1, "retour")] })).toBe("revision");
+    expect(stageOf({ answers_sent_at: "x", versions: [v(1, "retour"), v(2, null)] })).toBe("answers");
+  });
+});
+

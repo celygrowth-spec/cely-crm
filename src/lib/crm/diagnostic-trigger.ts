@@ -4,6 +4,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { CrmError, friendlyError } from "./service";
+import type { TriggerStage } from "./diagnostic-rules";
 
 const FIRE_URL = /^https:\/\/api\.anthropic\.com\/v1\/claude_code\/routines\/trig_[A-Za-z0-9]+\/fire$/;
 
@@ -39,7 +40,7 @@ export async function fireRoutine(dossierId: string, fetcher: typeof fetch = fet
 export type TriggerOutcome = { triggered: boolean; error?: string };
 
 /** Une étape d'un dossier ne lance qu'une session ; un échec la rend relançable. */
-export async function triggerDiagnostic(sb: SupabaseClient, id: string, stage: "start" | "answers", fetcher?: typeof fetch): Promise<TriggerOutcome> {
+export async function triggerDiagnostic(sb: SupabaseClient, id: string, stage: TriggerStage, fetcher?: typeof fetch): Promise<TriggerOutcome> {
   if (!routineConfig()) return { triggered: false };
   const claim = await sb.rpc("diagnostic_claim_trigger", { p_id: z.uuid().parse(id), p_stage: stage });
   if (claim.error) throw new CrmError(friendlyError(claim.error));

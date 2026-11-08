@@ -243,3 +243,69 @@ describe("déclenchement", () => {
   });
 });
 
+describe("nouvelles versions", () => {
+  async function versionReady(n: number) {
+    await db.as("claude");
+    const v = await db.rpc<{ id: string; version: number }>("diagnostic_version_open", { p_id: dossier });
+    await db.exec("reset role;");
+    const f = await db.one<{ id: string }>(`insert into company_files (company_id, storage_path, display_name, mime_type, size_bytes, status) values ($1, $2, 'v', 'text/plain', 1, 'ready') returning id`, [acme, `a/v${n}.pptx`]);
+    await db.as("claude");
+    await db.rpc("diagnostic_version_attach", { p_version: v.id, p_file: f.id });
+    await db.rpc("diagnostic_version_ready", { p_id: dossier, p_version: v.version });
+    await db.as("owner");
+    return v.version;
+  }
+
+  beforeEach(async () => {
+    await db.as("claude");
+    await db.rpc("diagnostic_save_questions", { p_id: dossier, p_questions: questions(10) });
+    await db.as("owner");
+    for (const r of (await db.query<{ id: string }>(`select id from diagnostic_questions`)).rows) await db.rpc("diagnostic_save_answer", { p_question: r.id, p_answer: "", p_dont_know: true });
+    await db.rpc("diagnostic_submit_answers", { p_id: dossier });
+  });
+
+  test("V1 puis retour puis V2, puis un second retour : chaque version garde son fichier et son retour", async () => {
+    expect(await versionReady(1)).toBe(1);
+    expect(await db.rpc("diagnostic_request_revision", { p_id: dossier, p_version: 1, p_feedback: "Distingue les concurrents SEO" })).toBe("revision_requested");
+    // double clic : aucune seconde demande, le retour n'est pas écrasé
+    expect(await db.rpc("diagnostic_request_revision", { p_id: dossier, p_version: 1, p_feedback: "autre texte" })).toBe("revision_requested");
+    expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "revision" })).toBe(true);
+    expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "revision" })).toBe(false);
+    expect(await versionReady(2)).toBe(2);
+    expect(await db.rpc("diagnostic_request_revision", { p_id: dossier, p_version: 2, p_feedback: "Développe la cible PME" })).toBe("revision_requested");
+    expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "revision" })).toBe(true);
+    const rows = await db.query(`select version, feedback, file_id is not null as fichier from diagnostic_versions order by version`);
+    expect(rows.rows).toEqual([
+      { version: 1, feedback: "Distingue les concurrents SEO", fichier: true },
+      { version: 2, feedback: "Développe la cible PME", fichier: true },
+    ]);
+  });
+
+  test("seule la dernière version reçue se révise, avec un retour non vide", async () => {
+    await versionReady(1);
+    await db.rpc("diagnostic_request_revision", { p_id: dossier, p_version: 1, p_feedback: "x" });
+    await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "revision" });
+    await versionReady(2);
+    await expect(db.rpc("diagnostic_request_revision", { p_id: dossier, p_version: 1, p_feedback: "ancienne" })).rejects.toThrow(/dernière version/);
+    await expect(db.rpc("diagnostic_request_revision", { p_id: dossier, p_version: 2, p_feedback: "  " })).rejects.toThrow(/Décrivez/);
+  });
+
+  test("pas de révision sans version reçue, ni par Claude", async () => {
+    await expect(db.rpc("diagnostic_request_revision", { p_id: dossier, p_version: 1, p_feedback: "x" })).rejects.toThrow(/Aucune version/);
+    await versionReady(1);
+    await db.as("claude");
+    await expect(db.rpc("diagnostic_request_revision", { p_id: dossier, p_version: 1, p_feedback: "x" })).rejects.toThrow(/Claude/);
+  });
+
+  test("une révision en échec se relance comme révision", async () => {
+    await versionReady(1);
+    await db.rpc("diagnostic_request_revision", { p_id: dossier, p_version: 1, p_feedback: "x" });
+    await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "revision" });
+    await db.as("claude");
+    await db.rpc("diagnostic_report_failure", { p_id: dossier, p_message: "bloqué" });
+    await db.as("owner");
+    expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "revision" })).toBe(true);
+    expect(await db.one(`select status, last_error from diagnostics`)).toEqual({ status: "revision_requested", last_error: null });
+  });
+});
+
