@@ -12,6 +12,8 @@ export type MimeInput = {
   html?: string | null;
   inReplyTo?: string | null;
   references?: string | null;
+  /** Notre Message-ID (« <…@domaine> »), repris par les réponses dans In-Reply-To / References. */
+  messageId?: string | null;
   attachments?: { name: string; mimeType: string; data: Buffer }[];
 };
 
@@ -52,6 +54,11 @@ function attachmentName(name: string) {
   return `filename*=UTF-8''${encodeURIComponent(clean).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`;
 }
 
+const msgId = (v: string) => {
+  if (!/^<[^<>\s@]+@[^<>\s@]+>$/.test(v)) throw new Error("Identifiant de message invalide");
+  return v;
+};
+
 export function buildMime(m: MimeInput): Buffer {
   const boundary = (p: string) => `=_cely_${p}_${randomBytes(12).toString("hex")}`;
   if (!m.to.length) throw new Error("Indiquez au moins un destinataire.");
@@ -62,6 +69,7 @@ export function buildMime(m: MimeInput): Buffer {
     m.cc?.length ? `Cc: ${address(m.cc, "la copie")}` : "",
     m.bcc?.length ? `Bcc: ${address(m.bcc, "la copie cachée")}` : "",
     `Subject: ${encodeWord(headerSafe(m.subject, "l'objet"))}`,
+    m.messageId ? `Message-ID: ${msgId(m.messageId)}` : "",
     m.inReplyTo ? `In-Reply-To: ${headerSafe(m.inReplyTo, "la référence")}` : "",
     m.references ? `References: ${headerSafe(m.references, "la référence")}` : "",
     "MIME-Version: 1.0",
