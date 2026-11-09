@@ -12,7 +12,7 @@ export async function PUT(req: NextRequest, { params }: Ctx) {
 }
 
 const body = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("send") }),
+  z.object({ op: z.literal("send"), allow_dnc: z.boolean().optional() }),
   z.object({ op: z.literal("reopen") }),
   z.object({ op: z.literal("discard") }),
   z.object({ op: z.literal("resolve"), sent: z.boolean() }),
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   const { id } = await params;
   return apiWrite(req, async (sb) => {
     const b = body.parse(await req.json());
-    if (b.op === "send") return sendStored(sb, id);
+    if (b.op === "send") return sendStored(sb, id, { allowDoNotContact: b.allow_dnc === true });
     if (b.op === "reopen") return reopenMail(sb, id);
     if (b.op === "discard") return discardMail(sb, id);
     return resolveUncertain(sb, id, b.sent);

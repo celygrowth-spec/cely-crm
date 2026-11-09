@@ -227,7 +227,7 @@ describe("pièces jointes", () => {
     expect(sends()).toHaveLength(0);
     await db.rpc("mail_reopen", { p_id: ID });
     await draft({ file_ids: [await file("a.pdf", 15 * 1024 * 1024, Buffer.from("x")), await file("b.pdf", 15 * 1024 * 1024, Buffer.from("x"))] });
-    expect(await sendStored(sb, ID)).toMatchObject({ status: "failed", last_error: expect.stringContaining("25 Mo") });
+    expect(await sendStored(sb, ID)).toMatchObject({ status: "failed", last_error: expect.stringContaining("18 Mo") });
     expect(sends()).toHaveLength(0);
   });
 });

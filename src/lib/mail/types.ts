@@ -12,7 +12,10 @@ export const MAIL_STATUS_LABELS: Record<MailStatus, string> = {
   cancelled: "Annulé",
 };
 
-export const MAX_ATTACHMENTS_BYTES = 25 * 1024 * 1024;
+// Gmail refuse un message de plus de 25 Mo une fois encodé ; l'encodage des pièces jointes (base64) ajoute
+// environ un tiers. Limite réelle des fichiers joints : 18 Mo au total.
+export const MAX_ATTACHMENTS_BYTES = 18 * 1024 * 1024;
+export const MAX_ATTACHMENTS_LABEL = "18 Mo";
 
 export type MailAttachment = { id: string; file_id: string | null; name: string; mime_type: string; size_bytes: number };
 
@@ -28,11 +31,16 @@ export type MailMessage = {
   bcc_addrs: string[];
   subject: string;
   body_text: string;
+  body_html?: string | null;
+  draft_version?: number;
+  template_id?: string | null;
+  collective?: boolean;
   signature: string;
   in_reply_to: string | null;
   references_hdr: string | null;
   provider_thread_id: string | null;
   provider_message_id: string | null;
+  rfc_message_id?: string | null;
   business_type: string | null;
   business_id: string | null;
   scheduled_at: string | null;

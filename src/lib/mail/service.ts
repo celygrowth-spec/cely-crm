@@ -8,7 +8,9 @@ import { CrmError } from "@/lib/crm/service";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { GoogleError, GMAIL_SEND_SCOPE, gmailSend, refreshAccess, revokeToken, type GoogleClient, type TokenSet } from "./google";
 import { buildMime } from "./mime";
-import { MAX_ATTACHMENTS_BYTES, isEmail, withSignature, type MailAccount, type MailMessage, type MailOrigin } from "./types";
+import { MAX_ATTACHMENTS_BYTES, MAX_ATTACHMENTS_LABEL, isEmail, withSignature, type MailAccount, type MailMessage, type MailOrigin } from "./types";
+import { htmlToText, renderEmailHtml, textToHtml } from "./render";
+import { labelOf, resolveVariables, usedVariables, type VarContext } from "./variables";
 
 const BUCKET = "company-files";
 
@@ -133,8 +135,8 @@ async function accessToken(sb: SupabaseClient, accountId: string, c: MailConfig,
 export function safeHtml(html: string) {
   return sanitizeHtml(html, {
     allowedTags: ["p", "br", "strong", "b", "em", "i", "u", "a", "ul", "ol", "li", "h1", "h2", "h3", "blockquote", "hr", "span", "div", "table", "tbody", "tr", "td", "th"],
-    allowedAttributes: { a: ["href"] },
-    allowedSchemes: ["https", "mailto", "tel"],
+    allowedAttributes: { a: ["href"], span: ["data-variable"] },
+    allowedSchemes: ["http", "https", "mailto", "tel"],
   });
 }
 
@@ -149,11 +151,18 @@ export type DraftInput = {
   bcc?: string[];
   subject: string;
   body: string;
+  /** contenu mis en forme (éditeur) ; nettoyé ici avant d'être enregistré */
+  html?: string | null;
   signature?: string;
   file_ids?: string[];
   in_reply_to?: string | null;
   references?: string | null;
   thread_id?: string | null;
+  /** modèle d'origine (trace) et personnalisation collective */
+  template_id?: string | null;
+  collective?: boolean;
+  /** version lue par le composeur : un enregistrement fait ailleurs entre-temps n'est jamais écrasé */
+  expected_version?: number | null;
 };
 
 // Un brouillon peut être incomplet : les adresses saisies ne sont validées qu'à l'envoi.
@@ -166,16 +175,25 @@ const draftSchema = z.object({
   bcc: z.array(z.string().max(320)).max(50).optional(),
   subject: z.string().max(500),
   body: z.string().max(200000),
+  html: z.string().max(500000).nullish(),
   signature: z.string().max(5000).optional(),
   file_ids: z.array(z.uuid()).max(20).optional(),
   in_reply_to: z.string().max(1000).nullish(),
   references: z.string().max(5000).nullish(),
   thread_id: z.string().max(200).nullish(),
+  template_id: z.uuid().nullish(),
+  collective: z.boolean().optional(),
+  expected_version: z.number().int().min(0).nullish(),
 });
 
-export async function saveDraft(sb: SupabaseClient, id: string, input: DraftInput) {
+export type DraftSave = (MailMessage & { conflict: false }) | { conflict: true; current: MailMessage };
+
+export async function saveDraft(sb: SupabaseClient, id: string, input: DraftInput): Promise<DraftSave> {
   z.uuid().parse(id);
-  return rpc<MailMessage>(sb, "mail_save_draft", { p_id: id, p: draftSchema.parse(input) });
+  const { expected_version, ...p } = draftSchema.parse(input);
+  // avec un contenu mis en forme, la version texte est recalculée ici : texte et HTML disent la même chose
+  const html = p.html ? safeHtml(p.html) : null;
+  return rpc<DraftSave>(sb, "mail_save_draft", { p_id: id, p: { ...p, html, body: html ? htmlToText(html) : p.body }, p_expected_version: expected_version ?? null });
 }
 
 export async function listCompanyMail(sb: SupabaseClient, companyId: string) {
@@ -211,10 +229,42 @@ type Claim = {
  * `claimed: false` : un autre appel s'en occupe ou s'en est occupé ; Gmail n'est pas appelé.
  * Le résultat renvoyé dit la vérité sur l'état : il ne faut jamais en déduire « livré » ni « lu ».
  */
-export async function sendStored(sb: SupabaseClient, id: string): Promise<MailMessage> {
+type Final = { subject: string; html: string | null; text: string; version: number; allow_dnc?: boolean };
+
+/**
+ * Brouillon écrit dans le composeur : contenu définitif calculé ici, côté serveur, avec les vraies données
+ * du contact de référence et de la fiche. Une variable sans valeur, ou plusieurs destinataires sans
+ * contact de référence, refusent l'envoi : on n'envoie jamais « Bonjour Prénom » ni un prénom deviné.
+ */
+async function finalDraft(sb: SupabaseClient, id: string): Promise<Final | null> {
+  type Ctx = { message: MailMessage | null; company: { name: string; website: string | null } | null; person: { first_name: string | null; last_name: string | null; title: string | null } | null };
+  const c = await rpc<Ctx | null>(sb, "mail_send_context", { p_id: id });
+  const m = c?.message;
+  if (!m || m.status !== "draft" || m.origin !== "manual") return null;
+  const html = safeHtml(m.body_html ?? textToHtml(m.body_text ?? ""));
+  const used = usedVariables(html, m.subject);
+  const needPerson = used.some((k) => k === "prenom" || k === "nom" || k === "poste");
+  if (needPerson && !c.person && !m.collective) {
+    throw new CrmError(m.to_addrs.length > 1
+      ? "Plusieurs destinataires : choisissez le contact de référence des variables, ou une formule collective."
+      : "Choisissez le contact de référence des variables.");
+  }
+  const ctx: VarContext = { first_name: c.person?.first_name, last_name: c.person?.last_name, title: c.person?.title, company: c.company?.name, website: c.company?.website };
+  const r = resolveVariables(html, m.subject, ctx, !!m.collective);
+  if (r.missing.length) throw new CrmError(`Variable sans valeur : ${r.missing.map(labelOf).join(", ")}. Remplacez-la ou retirez-la avant d'envoyer.`);
+  // un ancien brouillon en texte brut part en texte brut, comme avant
+  const text = m.body_html ? htmlToText(r.html) : m.body_text;
+  if (!r.subject.trim()) throw new CrmError("Indiquez un objet.");
+  if (!text.trim()) throw new CrmError("Le message est vide.");
+  return { subject: r.subject, html: m.body_html ? r.html : null, text, version: Number(m.draft_version ?? 0) };
+}
+
+export async function sendStored(sb: SupabaseClient, id: string, opts: { allowDoNotContact?: boolean } = {}): Promise<MailMessage> {
   const c = requireConfig();
   z.uuid().parse(id);
-  const claim = await rpc<Claim>(sb, "mail_claim", { p_id: id });
+  const final = await finalDraft(sb, id);
+  if (final && opts.allowDoNotContact) final.allow_dnc = true;
+  const claim = await rpc<Claim>(sb, "mail_claim", { p_id: id, p_final: final });
   if (!claim.claimed) return claim.message;
   const fail = (code: string, message: string, uncertain = false) => rpc<MailMessage>(sb, "mail_mark_failed", { p_id: id, p_code: code, p_error: message, p_uncertain: uncertain });
   const m = claim.message;
@@ -228,7 +278,7 @@ export async function sendStored(sb: SupabaseClient, id: string): Promise<MailMe
     const files = claim.files ?? [];
     if (files.length !== claim.attachment_count) throw new CrmError("Une pièce jointe n'est plus disponible.");
     const total = files.reduce((n, f) => n + Number(f.size_bytes), 0);
-    if (total > MAX_ATTACHMENTS_BYTES) throw new CrmError("Pièces jointes trop lourdes : 25 Mo maximum au total.");
+    if (total > MAX_ATTACHMENTS_BYTES) throw new CrmError(`Pièces jointes trop lourdes : ${MAX_ATTACHMENTS_LABEL} maximum au total (limite de Gmail).`);
     const attachments = await Promise.all(files.map(async (f) => {
       const { data, error } = await sb.storage.from(BUCKET).download(f.storage_path);
       if (error || !data) throw new CrmError(`Pièce jointe illisible : ${f.name}`);
@@ -241,9 +291,11 @@ export async function sendStored(sb: SupabaseClient, id: string): Promise<MailMe
       bcc: m.bcc_addrs,
       subject: m.subject,
       text: withSignature(m.body_text, m.signature),
-      html: m.body_html ? safeHtml(m.body_html) : null,
+      // même rendu que l'aperçu du composeur : styles en ligne, signature une seule fois
+      html: m.body_html ? renderEmailHtml(safeHtml(m.body_html), m.signature) : null,
       inReplyTo: m.in_reply_to,
       references: m.references_hdr,
+      messageId: m.rfc_message_id,
       attachments,
     });
     token = await accessToken(sb, accountId, c);
