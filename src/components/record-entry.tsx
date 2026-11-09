@@ -4,7 +4,7 @@
 // ce qu'une section a déjà chargé sert aussitôt à l'autre.
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { Bot, Calendar, CheckCircle2, ExternalLink, Inbox, Mail, Phone, Send, StickyNote } from "lucide-react";
+import { Bot, Calendar, CheckCircle2, ExternalLink, Inbox, Mail, Phone, RotateCcw, Send, StickyNote, Trophy, XCircle } from "lucide-react";
 import { apiGet } from "@/lib/client/query";
 import type { Booking } from "@/lib/appointments/types";
 import { buildActivity, linkedCallId, type ActivityEntry } from "@/lib/crm/record-activity";
@@ -47,6 +47,7 @@ export function useActivityEntries(ctx: RecordCtx, full: boolean) {
 function EntryIcon({ e }: { e: ActivityEntry }) {
   if (e.type === "note") return <StickyNote size={13} />;
   if (e.type === "task") return <CheckCircle2 size={13} />;
+  if (e.type === "deal") return e.interaction?.meta?.to === "won" ? <Trophy size={13} /> : e.interaction?.meta?.to === "lost" ? <XCircle size={13} /> : <RotateCcw size={13} />;
   if (e.call || e.type === "call") return <Phone size={13} />;
   if (e.type === "meeting") return <Calendar size={13} />;
   if (e.interaction?.kind === "message_in") return <Inbox size={13} />;

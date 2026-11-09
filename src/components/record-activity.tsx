@@ -20,6 +20,7 @@ const EMPTY: Record<ActivityFilter, string> = {
   call: "Aucun appel.",
   meeting: "Aucun rendez-vous.",
   task: "Aucune tâche.",
+  deal: "Aucune clôture.",
 };
 
 export function RecordActivity({ ctx }: { ctx: RecordCtx }) {

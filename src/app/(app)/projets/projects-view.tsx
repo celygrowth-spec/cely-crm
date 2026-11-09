@@ -9,7 +9,7 @@ import { formatDate } from "@/lib/format";
 import { PROJECT_STATUS_LABELS, PROJECT_STATUS_TONES, type Project } from "@/lib/projects/types";
 import { CreateProjectModal } from "@/components/projects/create-project";
 
-export function ProjectsView({ projects, archived, openCreate }: { projects: Project[]; archived: boolean; openCreate: boolean }) {
+export function ProjectsView({ projects, archived, openCreate, company }: { projects: Project[]; archived: boolean; openCreate: boolean; company?: { id: string; name: string } }) {
   const router = useRouter();
   const [creating, setCreating] = useState(openCreate);
   return (
@@ -63,7 +63,7 @@ export function ProjectsView({ projects, archived, openCreate }: { projects: Pro
           </table>
         </div>
       )}
-      <CreateProjectModal open={creating} onClose={() => setCreating(false)} />
+      <CreateProjectModal open={creating} onClose={() => setCreating(false)} company={company} />
     </div>
   );
 }

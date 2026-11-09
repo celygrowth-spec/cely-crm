@@ -137,8 +137,8 @@ export async function moveCompanyAction(companyId: string, stageId: string | nul
   return run((sb) => crm.moveCompany(sb, companyId, stageId, { stopFollowups }));
 }
 
-export async function setDealStatusAction(companyId: string, status: "open" | "won" | "lost", lostReason?: string) {
-  return run((sb) => crm.setDealStatus(sb, companyId, status, lostReason));
+export async function setDealStatusAction(companyId: string, status: crm.DealStatus, closing: crm.DealClosing = {}) {
+  return run((sb) => crm.setDealStatus(sb, companyId, status, closing));
 }
 
 export async function createPipelineAction(pipelineName: string, stageNames: string[]) {

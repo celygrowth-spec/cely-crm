@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Archive, ArchiveRestore, Ban, CheckSquare, ChevronDown, ExternalLink, FileUp, Mail, Maximize2, MessageSquarePlus, MoreHorizontal, Pencil, Phone, Plus, Sparkles, StickyNote, Timer, UserRound, X } from "lucide-react";
+import { RecordDealClosing } from "./deal-closing";
 import { useTimer } from "./time/timer";
 import { useCompanyMails } from "./record-entry";
 import { formatDateTime } from "@/lib/format";
@@ -106,8 +107,7 @@ function StageControl({ ctx }: { ctx: RecordCtx }) {
           </optgroup>
         ))}
       </select>
-      {c.deal_status === "won" && <Badge tone="success" className="h-8 px-2.5 text-xs">Gagné</Badge>}
-      {c.deal_status === "lost" && <Badge tone="danger" className="h-8 px-2.5 text-xs" title={c.lost_reason ?? undefined}>Perdu</Badge>}
+      <RecordDealClosing ctx={ctx} />
     </>
   );
 }
@@ -123,7 +123,7 @@ function ContactControl({ ctx }: { ctx: RecordCtx }) {
     <Popover
       label={`Coordonnées de ${personName(p)}`}
       align="left"
-      className="flex-1 basis-0 sm:flex-none sm:basis-auto"
+      className="min-w-40 flex-1 basis-0 sm:flex-none sm:basis-auto"
       triggerClass={cn(fieldTrigger, "w-full")}
       trigger={<><UserRound size={13} className="shrink-0 text-muted" /><span className="truncate">{personName(p)}{p.title && <span className="font-normal text-muted"> · {p.title}</span>}</span>{others > 0 && <span className="shrink-0 font-normal text-muted">+{others}</span>}<ChevronDown size={12} className="shrink-0 text-muted" /></>}
     >
@@ -192,18 +192,6 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
               <Maximize2 size={16} />
             </Link>
           )}
-          <Popover label="Autres actions" align="right" triggerClass={iconBtn} trigger={<MoreHorizontal size={18} />}>
-            {(close) => (
-              <>
-                <MenuItem icon={Phone} onClick={() => { close(); ctx.logExchange("call"); }}>Enregistrer un appel</MenuItem>
-                <MenuItem icon={MessageSquarePlus} onClick={() => { close(); ctx.logExchange("message_in"); }}>Enregistrer un autre échange</MenuItem>
-                <MenuItem icon={FileUp} onClick={() => { close(); ctx.go("details", { section: "files" }); }}>Ajouter un fichier</MenuItem>
-                <MenuItem icon={Pencil} onClick={() => { close(); ctx.go("details", { section: "company", edit: true }); }}>Modifier les informations</MenuItem>
-                <div className="my-1 border-t border-line" />
-                <MenuItem icon={c.archived_at ? ArchiveRestore : Archive} onClick={() => { close(); toggleArchive(); }}>{c.archived_at ? "Restaurer la fiche" : "Archiver la fiche"}</MenuItem>
-              </>
-            )}
-          </Popover>
           {onClose && (
             <button onClick={onClose} className={iconBtn} aria-label="Fermer">
               <X size={18} />
@@ -240,12 +228,26 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
           ))}
         </nav>
         <div className="ml-auto flex shrink-0 items-center gap-1 pb-1 max-sm:pt-1">
-          <QuickAction icon={Timer} label={timing ? "Arrêter le chrono" : "Démarrer un chrono"} onClick={() => (timing ? timer.stop() : timer.openStart({ id: c.id, name: c.name }))} />
-          <QuickAction icon={Sparkles} label="Générer un diagnostic" onClick={ctx.generateDiagnostic} />
-          <QuickAction icon={StickyNote} label="Ajouter une note" onClick={() => ctx.logExchange("note")} />
-          <QuickAction icon={CheckSquare} label="Créer une tâche" onClick={ctx.newTask} />
           <QuickAction icon={Mail} label="Envoyer un mail" onClick={() => ctx.compose({})} warn={c.do_not_contact} />
+          <QuickAction icon={CheckSquare} label="Créer une tâche" onClick={ctx.newTask} />
           <DraftsAccess ctx={ctx} />
+          <Popover label="Actions" align="right"
+            triggerClass="inline-flex h-8 items-center gap-1 rounded-lg border border-line bg-white px-2.5 text-xs font-semibold hover:bg-surface"
+            trigger={<><MoreHorizontal size={14} /> <span className="max-md:hidden">Actions</span><ChevronDown size={12} className="text-muted max-md:hidden" /></>}>
+            {(close) => (
+              <div data-actions-menu>
+                <MenuItem icon={StickyNote} onClick={() => { close(); ctx.logExchange("note"); }}>Ajouter une note</MenuItem>
+                <MenuItem icon={Phone} onClick={() => { close(); ctx.logExchange("call"); }}>Enregistrer un appel</MenuItem>
+                <MenuItem icon={MessageSquarePlus} onClick={() => { close(); ctx.logExchange("message_in"); }}>Enregistrer un autre échange</MenuItem>
+                <MenuItem icon={Timer} onClick={() => { close(); if (timing) timer.stop(); else timer.openStart({ id: c.id, name: c.name }); }}>{timing ? "Arrêter le chrono" : "Démarrer un chrono"}</MenuItem>
+                <MenuItem icon={Sparkles} onClick={() => { close(); ctx.generateDiagnostic(); }}>Générer un diagnostic</MenuItem>
+                <MenuItem icon={FileUp} onClick={() => { close(); ctx.go("details", { section: "files" }); }}>Ajouter un fichier</MenuItem>
+                <MenuItem icon={Pencil} onClick={() => { close(); ctx.go("details", { section: "company", edit: true }); }}>Modifier les informations</MenuItem>
+                <div className="my-1 border-t border-line" />
+                <MenuItem icon={c.archived_at ? ArchiveRestore : Archive} onClick={() => { close(); toggleArchive(); }}>{c.archived_at ? "Restaurer la fiche" : "Archiver la fiche"}</MenuItem>
+              </div>
+            )}
+          </Popover>
         </div>
       </div>
     </header>
