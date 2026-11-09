@@ -10593,7 +10593,218 @@ end $$;
 revoke all on function portal_private.tg_claude_log() from public, anon, authenticated;
 
 
--- ===== 20261111000100_mail_brouillons.sql =====
+-- ===== 20261111000100_diagnostic_declenchement.sql =====
+-- Diagnostic : le CRM déclenche lui-même la tâche Claude Code (abonnement Claude, pas d'API facturée).
+-- Migration additive. Une étape d'un dossier ne déclenche qu'une seule session, même en cas de double clic.
+
+alter table public.diagnostics
+  add column trigger_stage text check (trigger_stage in ('start', 'answers')),
+  add column triggered_at timestamptz,
+  add column trigger_error text check (trigger_error is null or char_length(trigger_error) <= 500);
+
+-- Réserve le déclenchement d'une étape : vrai pour un seul appelant tant que l'étape n'a pas échoué.
+create or replace function public.diagnostic_claim_trigger(p_id uuid, p_stage text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Déclenchement d''un diagnostic');
+  update public.diagnostics
+     set trigger_stage = p_stage, triggered_at = now(), trigger_error = null
+   where id = p_id
+     and trigger_stage is distinct from p_stage
+     and ((p_stage = 'start' and status = 'waiting_claude') or (p_stage = 'answers' and status = 'answers_sent'));
+  return found;
+end;
+$$;
+
+-- Résultat du déclenchement : l'adresse de la session, ou l'erreur, qui rend l'étape relançable.
+create or replace function public.diagnostic_trigger_result(p_id uuid, p_session_url text, p_error text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Déclenchement d''un diagnostic');
+  if p_error is not null then
+    update public.diagnostics set trigger_stage = null, trigger_error = left(p_error, 500) where id = p_id;
+  else
+    update public.diagnostics set chat_url = coalesce(p_session_url, chat_url), trigger_error = null where id = p_id;
+  end if;
+end;
+$$;
+
+revoke all on function public.diagnostic_claim_trigger(uuid, text), public.diagnostic_trigger_result(uuid, text, text) from public, anon;
+
+
+-- ===== 20261111000200_diagnostic_relance.sql =====
+-- Diagnostic : un dossier en échec se relance depuis l'application, à l'étape où il s'est arrêté.
+-- Migration additive (remplace deux fonctions). Un échec libère l'étape réservée par le déclenchement.
+
+create or replace function public.diagnostic_report_failure(p_id uuid, p_message text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform public.assert_owner();
+  update public.diagnostics set status = 'failed', last_error = left(p_message, 2000), trigger_stage = null where id = p_id;
+  if not found then raise exception 'Dossier introuvable' using errcode = 'P0002'; end if;
+end;
+$$;
+
+-- Lancement initial avant les réponses, génération après : un échec repart de la même étape.
+create or replace function public.diagnostic_claim_trigger(p_id uuid, p_stage text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Déclenchement d''un diagnostic');
+  update public.diagnostics
+     set trigger_stage = p_stage, triggered_at = now(), trigger_error = null
+   where id = p_id
+     and trigger_stage is distinct from p_stage
+     and ((p_stage = 'start' and answers_sent_at is null and status in ('waiting_claude', 'failed'))
+       or (p_stage = 'answers' and answers_sent_at is not null and status in ('answers_sent', 'failed')));
+  return found;
+end;
+$$;
+
+-- Dossiers déjà en échec : l'étape redevient relançable
+update public.diagnostics set trigger_stage = null where status = 'failed';
+
+
+-- ===== 20261111000300_diagnostic_relance_etat.sql =====
+-- Diagnostic : relancer un dossier en échec le remet à l'étape relancée et efface l'ancienne erreur,
+-- pour que Claude reprenne le travail au lieu de constater l'échec. Migration additive (remplace une fonction).
+create or replace function public.diagnostic_claim_trigger(p_id uuid, p_stage text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Déclenchement d''un diagnostic');
+  update public.diagnostics
+     set trigger_stage = p_stage, triggered_at = now(), trigger_error = null,
+         status = case when p_stage = 'start' then 'waiting_claude' else 'answers_sent' end,
+         last_error = case when status = 'failed' then null else last_error end
+   where id = p_id
+     and trigger_stage is distinct from p_stage
+     and ((p_stage = 'start' and answers_sent_at is null and status in ('waiting_claude', 'failed'))
+       or (p_stage = 'answers' and answers_sent_at is not null and status in ('answers_sent', 'failed')));
+  return found;
+end;
+$$;
+
+
+-- ===== 20261111000400_diagnostic_relance_toujours.sql =====
+-- Diagnostic : un dossier en échec se relance toujours, même si la session précédente s'est arrêtée sans le signaler.
+-- La relance le fait sortir de l'échec : un double clic ne lance donc qu'une session. Migration additive (remplace une fonction).
+create or replace function public.diagnostic_claim_trigger(p_id uuid, p_stage text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Déclenchement d''un diagnostic');
+  update public.diagnostics
+     set trigger_stage = p_stage, triggered_at = now(), trigger_error = null,
+         status = case when p_stage = 'start' then 'waiting_claude' else 'answers_sent' end,
+         last_error = case when status = 'failed' then null else last_error end
+   where id = p_id
+     and (trigger_stage is distinct from p_stage or status = 'failed')
+     and ((p_stage = 'start' and answers_sent_at is null and status in ('waiting_claude', 'failed'))
+       or (p_stage = 'answers' and answers_sent_at is not null and status in ('answers_sent', 'failed')));
+  return found;
+end;
+$$;
+
+
+-- ===== 20261111000500_diagnostic_revisions.sql =====
+-- Diagnostic, phase 4 : retour sur une version et demande de la version suivante, dans le même dossier.
+-- Migration additive. Versions, fichiers et retours précédents restent conservés.
+
+alter table public.diagnostics drop constraint diagnostics_status_check;
+alter table public.diagnostics add constraint diagnostics_status_check check (status in (
+  'waiting_claude', 'researching', 'questions_ready', 'answers_sent', 'generating', 'version_ready', 'revision_requested', 'failed'
+));
+alter table public.diagnostics drop constraint diagnostics_trigger_stage_check;
+alter table public.diagnostics add constraint diagnostics_trigger_stage_check check (trigger_stage in ('start', 'answers', 'revision'));
+
+-- Le retour porte sur la version à réviser : la suivante est produite à partir de ce fichier et de ce texte.
+alter table public.diagnostic_versions
+  add column feedback text check (feedback is null or char_length(feedback) between 1 and 10000),
+  add column feedback_at timestamptz;
+
+-- Seule la dernière version reçue se révise ; un double clic ne crée pas une seconde demande.
+create or replace function public.diagnostic_request_revision(p_id uuid, p_version integer, p_feedback text)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_status text;
+  v_latest integer;
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Demande de nouvelle version');
+  select status into v_status from public.diagnostics where id = p_id for update;
+  if v_status is null then raise exception 'Dossier introuvable' using errcode = 'P0002'; end if;
+  if v_status = 'revision_requested' then return v_status; end if;
+  if v_status <> 'version_ready' then raise exception 'Aucune version prête à réviser' using errcode = '22023'; end if;
+  select max(version) into v_latest from public.diagnostic_versions where diagnostic_id = p_id and status = 'ready';
+  if v_latest is distinct from p_version then raise exception 'Seule la dernière version reçue peut être révisée' using errcode = '22023'; end if;
+  if nullif(btrim(p_feedback), '') is null then raise exception 'Décrivez ce qu''il faut changer' using errcode = '22023'; end if;
+  update public.diagnostic_versions set feedback = btrim(p_feedback), feedback_at = now() where diagnostic_id = p_id and version = p_version;
+  update public.diagnostics set status = 'revision_requested', trigger_stage = null, last_error = null where id = p_id;
+  return 'revision_requested';
+end;
+$$;
+
+-- Déclenchement : la révision s'ajoute au lancement et à la génération. Un dossier en échec repart de son étape.
+create or replace function public.diagnostic_claim_trigger(p_id uuid, p_stage text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Déclenchement d''un diagnostic');
+  update public.diagnostics d
+     set trigger_stage = p_stage, triggered_at = now(), trigger_error = null,
+         status = case p_stage when 'start' then 'waiting_claude' when 'answers' then 'answers_sent' else 'revision_requested' end,
+         last_error = case when d.status = 'failed' then null else d.last_error end
+   where d.id = p_id
+     and (d.trigger_stage is distinct from p_stage or d.status = 'failed')
+     and ((p_stage = 'start' and d.answers_sent_at is null and d.status in ('waiting_claude', 'failed'))
+       or (p_stage = 'answers' and d.answers_sent_at is not null and d.status in ('answers_sent', 'failed'))
+       or (p_stage = 'revision' and d.status in ('revision_requested', 'failed') and exists (
+             select 1 from public.diagnostic_versions v
+              where v.diagnostic_id = d.id and v.feedback is not null
+                and v.version = (select max(version) from public.diagnostic_versions where diagnostic_id = d.id and status = 'ready'))));
+  return found;
+end;
+$$;
+
+revoke all on function public.diagnostic_request_revision(uuid, integer, text) from public, anon;
+
+
+-- ===== 20261111000600_mail_brouillons.sql =====
 -- Mail — brouillons fiables (phase 1 du composeur). Migration additive : une colonne, une fonction redéfinie.
 -- * draft_version : numéro incrémenté à chaque enregistrement d'un brouillon. Le composeur envoie la version
 --   qu'il a lue ; si le brouillon a été enregistré entre-temps ailleurs (autre onglet, autre appareil), rien
@@ -10651,7 +10862,7 @@ revoke execute on function public.mail_save_draft(uuid, jsonb, integer) from pub
 grant execute on function public.mail_save_draft(uuid, jsonb, integer) to authenticated;
 
 
--- ===== 20261111000200_mail_modeles.sql =====
+-- ===== 20261111000700_mail_modeles.sql =====
 -- Mail — modèles réutilisables et personnalisation (phase 3). Migration additive.
 -- * Un modèle est une base : un brouillon créé à partir d'un modèle en est une copie ; modifier l'un ne
 --   touche jamais l'autre. Archiver un modèle ne touche ni les brouillons ni les emails déjà envoyés.
@@ -10728,7 +10939,7 @@ end;
 $$;
 
 
--- ===== 20261111000300_mail_envoi.sql =====
+-- ===== 20261111000800_mail_envoi.sql =====
 -- Mail, phase 4 : envoi fiable depuis la fiche.
 --  * le contenu réellement envoyé (variables résolues) est figé au moment de l'envoi ; la version
 --    modifiable (avec ses variables) est gardée à part et rendue si l'envoi échoue ;

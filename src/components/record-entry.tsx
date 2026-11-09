@@ -90,7 +90,7 @@ export function EntryRow({ entry: e, ctx }: { entry: ActivityEntry; ctx: RecordC
             {i && <Provenance source={i.source} origin={i.content_origin} />}
           </span>
           {e.preview ? (
-            <span className="mt-0.5 line-clamp-2 text-sm whitespace-pre-line text-muted">{e.preview}</span>
+            <span className="mt-0.5 line-clamp-2 text-sm wrap-anywhere whitespace-pre-line text-muted">{e.preview}</span>
           ) : e.type === "call" && !e.call ? (
             <span className="mt-0.5 block text-xs text-muted">Sans compte rendu</span>
           ) : null}

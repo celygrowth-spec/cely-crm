@@ -5,9 +5,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Copy, Download, ExternalLink, Sparkles } from "lucide-react";
+import { Copy, Download, ExternalLink, RotateCcw, Sparkles } from "lucide-react";
 import { apiGet, attempt } from "@/lib/client/query";
-import { DIAGNOSTIC_STATUS_LABELS, answersPrompt, claudeLink, startPrompt, type Diagnostic, type DiagnosticQuestion, type DiagnosticStatus } from "@/lib/crm/diagnostic-rules";
+import { DIAGNOSTIC_STATUS_LABELS, answersPrompt, claudeLink, revisionPrompt, stageOf, startPrompt, type Diagnostic, type DiagnosticQuestion, type DiagnosticStatus, type DiagnosticVersion, type TriggerStage } from "@/lib/crm/diagnostic-rules";
 import { formatDateTime } from "@/lib/format";
 import { Badge, Button, Input, SaveIndicator, Skeleton, Textarea } from "./ui";
 
@@ -18,10 +18,11 @@ const TONES: Record<DiagnosticStatus, "neutral" | "warning" | "success" | "dange
   answers_sent: "neutral",
   generating: "neutral",
   version_ready: "success",
+  revision_requested: "neutral",
   failed: "danger",
 };
 // Claude travaille : l'écran se met à jour seul
-const WORKING: DiagnosticStatus[] = ["waiting_claude", "researching", "answers_sent", "generating"];
+const WORKING: DiagnosticStatus[] = ["waiting_claude", "researching", "answers_sent", "generating", "revision_requested"];
 
 const post = <T,>(url: string, body: Record<string, unknown>) =>
   attempt(async () => {
@@ -42,6 +43,45 @@ function ClaudeActions({ prompt, chatUrl, label }: { prompt: string; chatUrl: st
   );
 }
 
+/** Lancement automatique s'il a eu lieu ; sinon, relance et lien vers Claude en secours. */
+const PROMPTS: Record<TriggerStage, { prompt: (id: string) => string; label: string; waiting: string }> = {
+  start: { prompt: startPrompt, label: "Lancer dans Claude", waiting: "Ses questions arriveront ici." },
+  answers: { prompt: answersPrompt, label: "Générer les slides dans Claude", waiting: "La version arrivera ici." },
+  revision: { prompt: revisionPrompt, label: "Demander la version dans Claude", waiting: "La nouvelle version arrivera ici." },
+};
+
+function Launch({ dossier, stage, reload }: { dossier: Diagnostic; stage: TriggerStage; reload: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const auto = dossier.status !== "failed" && dossier.trigger_stage === stage && dossier.triggered_at && !dossier.trigger_error;
+  async function retry() {
+    setBusy(true);
+    const r = await post<{ triggered: boolean }>(`/api/diagnostics/${dossier.id}`, { op: "trigger", stage });
+    setBusy(false);
+    if (!r.ok) return toast.error(r.error);
+    toast.success("Claude est relancé");
+    reload();
+  }
+  if (auto) {
+    return (
+      <p className="text-sm">
+        Claude a été lancé automatiquement le {formatDateTime(dossier.triggered_at!)}. {PROMPTS[stage].waiting}
+        {dossier.chat_url && <> <a className="font-semibold text-violet-strong underline" href={dossier.chat_url} target="_blank" rel="noreferrer noopener">Suivre la session</a></>}
+      </p>
+    );
+  }
+  return (
+    <div className="grid gap-2">
+      {(dossier.trigger_error || dossier.status === "failed") && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {dossier.trigger_error && <span className="text-danger">Lancement automatique impossible : {dossier.trigger_error}</span>}
+          <Button size="sm" disabled={busy} onClick={retry}><RotateCcw size={13} /> Relancer Claude</Button>
+        </div>
+      )}
+      <ClaudeActions prompt={PROMPTS[stage].prompt(dossier.id)} chatUrl={dossier.chat_url} label={PROMPTS[stage].label} />
+    </div>
+  );
+}
+
 function ChatLink({ dossier, reload }: { dossier: Diagnostic; reload: () => void }) {
   const [url, setUrl] = useState(dossier.chat_url ?? "");
   async function save() {
@@ -53,7 +93,7 @@ function ChatLink({ dossier, reload }: { dossier: Diagnostic; reload: () => void
   }
   return (
     <label className="block text-sm">
-      <span className="font-label text-xs font-semibold text-muted">Adresse du chat Claude, pour y revenir</span>
+      <span className="font-label text-xs font-semibold text-muted">Adresse de la session ou du chat Claude, pour y revenir</span>
       <Input className="mt-1" placeholder="https://claude.ai/chat/…" value={url} onChange={(e) => setUrl(e.target.value)} onBlur={save} />
     </label>
   );
@@ -108,16 +148,46 @@ function Question({ dossierId, q, locked, onSaved }: { dossierId: string; q: Dia
   );
 }
 
+/** Retour sur la dernière version reçue : la suivante est produite à partir de ce fichier et de ce texte. */
+function Revision({ dossierId, version, reload }: { dossierId: string; version: DiagnosticVersion; reload: () => void }) {
+  const [feedback, setFeedback] = useState("");
+  const [sending, setSending] = useState(false);
+  async function send() {
+    setSending(true);
+    const r = await post<{ status: string; triggered: boolean; error?: string }>(`/api/diagnostics/${dossierId}`, { op: "revise", version: version.version, feedback });
+    setSending(false);
+    if (!r.ok) return toast.error(r.error);
+    if (r.data.error) toast.error(`Demande enregistrée, mais Claude n'a pas été lancé : ${r.data.error}`);
+    else if (r.data.triggered) toast.success(`Claude prépare la V${version.version + 1}`);
+    reload();
+  }
+  return (
+    <div className="mt-2 grid gap-2 border-t border-line pt-2">
+      <Textarea
+        rows={3}
+        value={feedback}
+        onChange={(e) => setFeedback(e.target.value)}
+        aria-label={`Retour sur la V${version.version}`}
+        placeholder="Ex. : sur la slide concurrents, distingue les concurrents commerciaux des concurrents SEO. Développe les mots-clés pour la cible PME."
+      />
+      <Button className="justify-self-start" variant="primary" disabled={sending || !feedback.trim()} onClick={send}>{sending ? "Envoi…" : "Demander une nouvelle version"}</Button>
+    </div>
+  );
+}
+
 function Dossier({ dossier, reload }: { dossier: Diagnostic; reload: () => void }) {
   const [sending, setSending] = useState(false);
   const locked = dossier.status !== "questions_ready";
   const missing = dossier.questions.filter((q) => !q.answer && !q.dont_know).length;
+  const latestReady = dossier.versions.find((v) => v.status === "ready");
 
   async function submit() {
     setSending(true);
-    const r = await post<string>(`/api/diagnostics/${dossier.id}`, { op: "submit" });
+    const r = await post<{ status: string; triggered: boolean; error?: string }>(`/api/diagnostics/${dossier.id}`, { op: "submit" });
     setSending(false);
     if (!r.ok) return toast.error(r.error);
+    if (r.data.error) toast.error(`Réponses envoyées, mais Claude n'a pas été lancé : ${r.data.error}`);
+    else if (r.data.triggered) toast.success("Réponses envoyées : Claude génère les slides");
     reload();
   }
 
@@ -135,8 +205,10 @@ function Dossier({ dossier, reload }: { dossier: Diagnostic; reload: () => void 
           <span className="text-xs text-muted">Dossier créé le {formatDateTime(dossier.created_at)}</span>
         </div>
         {dossier.status === "failed" && dossier.last_error && <p className="text-sm text-danger">{dossier.last_error}</p>}
-        {dossier.status === "waiting_claude" && <ClaudeActions prompt={startPrompt(dossier.id)} chatUrl={null} label="Lancer dans Claude" />}
-        {dossier.status === "answers_sent" && <ClaudeActions prompt={answersPrompt(dossier.id)} chatUrl={dossier.chat_url} label="Générer les slides dans Claude" />}
+        {dossier.status === "waiting_claude" && <Launch dossier={dossier} stage="start" reload={reload} />}
+        {dossier.status === "answers_sent" && <Launch dossier={dossier} stage="answers" reload={reload} />}
+        {dossier.status === "revision_requested" && <Launch dossier={dossier} stage="revision" reload={reload} />}
+        {dossier.status === "failed" && <Launch dossier={dossier} stage={stageOf(dossier)} reload={reload} />}
         <ChatLink key={dossier.chat_url ?? ""} dossier={dossier} reload={reload} />
       </section>
 
@@ -178,13 +250,17 @@ function Dossier({ dossier, reload }: { dossier: Diagnostic; reload: () => void 
           <h3 className="font-display text-base font-bold">Versions</h3>
           <ul className="mt-2 space-y-1">
             {dossier.versions.map((v) => (
-              <li key={v.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm">
-                <span className="font-semibold">V{v.version}</span>
-                <Badge tone={v.status === "ready" ? "success" : "neutral"}>{v.status === "ready" ? "Fichier reçu" : "Dépôt en cours"}</Badge>
-                <span className="text-xs text-muted">{formatDateTime(v.ready_at ?? v.created_at)}</span>
-                {v.status === "ready" && (v.file_id
-                  ? <Button size="sm" className="ml-auto" onClick={() => download(v.file_id!)}><Download size={13} /> Télécharger</Button>
-                  : <span className="ml-auto text-xs text-muted">Fichier supprimé de la fiche</span>)}
+              <li key={v.id} className="rounded-lg border border-line px-3 py-2 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold">V{v.version}</span>
+                  <Badge tone={v.status === "ready" ? "success" : "neutral"}>{v.status === "ready" ? "Fichier reçu" : "Dépôt en cours"}</Badge>
+                  <span className="text-xs text-muted">{formatDateTime(v.ready_at ?? v.created_at)}</span>
+                  {v.status === "ready" && (v.file_id
+                    ? <Button size="sm" className="ml-auto" onClick={() => download(v.file_id!)}><Download size={13} /> Télécharger</Button>
+                    : <span className="ml-auto text-xs text-muted">Fichier supprimé de la fiche</span>)}
+                </div>
+                {v.feedback && <p className="mt-1.5 text-xs whitespace-pre-wrap text-muted"><span className="font-semibold">Retour du {formatDateTime(v.feedback_at!)} :</span> {v.feedback}</p>}
+                {dossier.status === "version_ready" && v.id === latestReady?.id && <Revision dossierId={dossier.id} version={v} reload={reload} />}
               </li>
             ))}
           </ul>
@@ -212,11 +288,13 @@ export function RecordDiagnostic({ companyId, startSignal }: { companyId: string
     if (creating) return;
     setCreating(true);
     requestKey.current ??= crypto.randomUUID();
-    const r = await post<string>(`/api/fiches/${companyId}/diagnostics`, { request_key: requestKey.current });
+    const r = await post<{ id: string; triggered: boolean; error?: string }>(`/api/fiches/${companyId}/diagnostics`, { request_key: requestKey.current });
     setCreating(false);
     if (!r.ok) return toast.error(r.error);
     requestKey.current = null;
-    setSelected(r.data);
+    if (r.data.error) toast.error(`Dossier créé, mais Claude n'a pas été lancé : ${r.data.error}`);
+    else if (r.data.triggered) toast.success("Dossier créé : Claude a démarré");
+    setSelected(r.data.id);
     await qc.invalidateQueries({ queryKey: key });
   }
 
@@ -243,7 +321,7 @@ export function RecordDiagnostic({ companyId, startSignal }: { companyId: string
     return (
       <div className="rounded-xl border border-dashed border-line p-5 text-center">
         <p className="font-semibold">Aucun diagnostic pour cette fiche</p>
-        <p className="mt-1 text-sm text-muted">Le CRM crée un dossier et ouvre Claude, qui lit la fiche et la bibliothèque, fait ses recherches, puis vous pose ses questions ici.</p>
+        <p className="mt-1 text-sm text-muted">Le CRM crée un dossier et lance Claude, qui lit la fiche et la bibliothèque, fait ses recherches, puis vous pose ses questions ici.</p>
         <Button className="mt-3" variant="primary" disabled={creating} onClick={create}><Sparkles size={14} /> Générer un diagnostic</Button>
       </div>
     );
