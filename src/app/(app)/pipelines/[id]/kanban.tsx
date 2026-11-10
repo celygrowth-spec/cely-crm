@@ -15,6 +15,7 @@ import type { CompanyOverview, PipelineWithStages, SearchResult } from "@/lib/cr
 import { formatAmount, relativeDay, todayISO } from "@/lib/format";
 import { NewPipeline } from "../new-pipeline";
 import { StageManager } from "./stage-manager";
+import { WinDealModal } from "@/components/win-deal";
 
 type Card = Pick<CompanyOverview, "id" | "name" | "stage_id" | "amount" | "primary_person_name" | "next_action_title" | "next_action_due">;
 
@@ -34,6 +35,7 @@ export function Kanban({ pipelineId }: { pipelineId: string }) {
   });
   const [manage, setManage] = useState(false);
   const [addExisting, setAddExisting] = useState(false);
+  const [winning, setWinning] = useState<{ id: string; name: string } | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor));
 
   if (!pipeline) return <EmptyState title="Pipeline introuvable" action={<Link href="/pipelines" className="font-semibold text-violet-strong">Voir les pipelines →</Link>} />;
@@ -111,7 +113,7 @@ export function Kanban({ pipelineId }: { pipelineId: string }) {
               <Column key={s.id} id={s.id} title={s.name} count={col.length} total={total}>
                 {isLoading && [0, 1].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
                 {col.map((c) => (
-                  <KCard key={c.id} card={c} pipelines={pipelines} onOpen={() => openCompany(c.id, { name: c.name })} onHover={() => prefetchCompany(c.id)} onMove={(stageId) => move(c.id, stageId)} disabled={dealStatus !== "open"} />
+                  <KCard key={c.id} card={c} pipelines={pipelines} onOpen={() => openCompany(c.id, { name: c.name })} onHover={() => prefetchCompany(c.id)} onMove={(stageId) => move(c.id, stageId)} onWin={() => setWinning({ id: c.id, name: c.name })} disabled={dealStatus !== "open"} />
                 ))}
               </Column>
             );
@@ -124,6 +126,7 @@ export function Kanban({ pipelineId }: { pipelineId: string }) {
         <StageManager pipeline={pipeline} pipelines={pipelines} onDone={() => { setManage(false); router.refresh(); }} />
       </Modal>
       <AddExisting open={addExisting} onClose={() => setAddExisting(false)} pipeline={pipeline} />
+      <WinDealModal company={winning} onClose={() => setWinning(null)} />
     </div>
   );
 }
@@ -141,7 +144,9 @@ function Column({ id, title, count, total, children }: { id: string; title: stri
   );
 }
 
-function KCard({ card: c, pipelines, onOpen, onHover, onMove, disabled }: { card: Card; pipelines: PipelineWithStages[]; onOpen: () => void; onHover: () => void; onMove: (stageId: string) => void; disabled: boolean }) {
+const WON = "__gagne__";
+
+function KCard({ card: c, pipelines, onOpen, onHover, onMove, onWin, disabled }: { card: Card; pipelines: PipelineWithStages[]; onOpen: () => void; onHover: () => void; onMove: (stageId: string) => void; onWin: () => void; disabled: boolean }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: c.id, disabled });
   const late = c.next_action_due && c.next_action_due < todayISO();
   return (
@@ -171,13 +176,19 @@ function KCard({ card: c, pipelines, onOpen, onHover, onMove, disabled }: { card
       {!disabled && (
         <Select
           value=""
-          onChange={(e) => e.target.value && onMove(e.target.value)}
+          onChange={(e) => {
+            if (e.target.value === WON) onWin();
+            else if (e.target.value) onMove(e.target.value);
+          }}
           onPointerDown={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
           className="mt-2 h-7 text-xs text-muted"
           aria-label={`Déplacer ${c.name}`}
         >
-          <option value="">Déplacer vers…</option>
+          <option value="">Déplacer ou marquer…</option>
+          <optgroup label="Statut commercial">
+            <option value={WON}>Marquer comme gagné…</option>
+          </optgroup>
           {pipelines.map((p) => (
             <optgroup key={p.id} label={p.name}>
               {p.stages.filter((s) => s.id !== c.stage_id).map((s) => <option key={s.id} value={s.id}>{p.name} › {s.name}</option>)}

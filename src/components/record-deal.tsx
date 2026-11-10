@@ -8,6 +8,7 @@ import { useCrm } from "./app-shell";
 import { useMoveCompany } from "./use-move-company";
 import type { RecordCtx } from "./company-record";
 import { Badge, Button, Field, Input, Select } from "./ui";
+import { DealProjectLink, WinDealModal } from "./win-deal";
 
 export function RecordDeal({ ctx }: { ctx: RecordCtx }) {
   const { pipelines } = useCrm();
@@ -16,6 +17,7 @@ export function RecordDeal({ ctx }: { ctx: RecordCtx }) {
   const [closeDate, setCloseDate] = useState(c.expected_close_date ?? "");
   const [lostReason, setLostReason] = useState(c.lost_reason ?? "");
   const [askLost, setAskLost] = useState(false);
+  const [askWin, setAskWin] = useState(false);
   const move = useMoveCompany(ctx);
 
   async function saveDeal() {
@@ -24,7 +26,7 @@ export function RecordDeal({ ctx }: { ctx: RecordCtx }) {
     ctx.patch({ amount: n, expected_close_date: closeDate || null });
   }
 
-  async function setStatus(s: "open" | "won" | "lost") {
+  async function setStatus(s: "open" | "lost") {
     setAskLost(false);
     ctx.mutate({ deal_status: s, lost_reason: s === "lost" ? lostReason || null : c.lost_reason }, async () => {
       const res = await setDealStatusAction(c.id, s, s === "lost" ? lostReason : undefined);
@@ -53,15 +55,18 @@ export function RecordDeal({ ctx }: { ctx: RecordCtx }) {
         </Field>
         {c.pipeline_id && (
           <Field label="Statut commercial">
-            <div className="flex h-9 items-center gap-1.5">
+            <div className="flex min-h-9 flex-wrap items-center gap-1.5">
               <Badge tone={c.deal_status === "won" ? "success" : c.deal_status === "lost" ? "danger" : "violet"}>{DEAL_STATUS_LABELS[c.deal_status]}</Badge>
               {c.deal_status === "open" ? (
                 <>
-                  <Button size="sm" onClick={() => setStatus("won")}>Gagné</Button>
+                  <Button size="sm" onClick={() => setAskWin(true)}>Gagné</Button>
                   <Button size="sm" onClick={() => setAskLost(true)}>Perdu</Button>
                 </>
               ) : (
-                <Button size="sm" variant="ghost" onClick={() => setStatus("open")}>Rouvrir</Button>
+                <>
+                  {c.deal_status === "won" && <DealProjectLink companyId={c.id} />}
+                  <Button size="sm" variant="ghost" onClick={() => setStatus("open")}>Rouvrir</Button>
+                </>
               )}
             </div>
           </Field>
@@ -76,6 +81,7 @@ export function RecordDeal({ ctx }: { ctx: RecordCtx }) {
           <Button size="sm" variant="ghost" onClick={() => setAskLost(false)}>Annuler</Button>
         </div>
       )}
+      <WinDealModal company={askWin ? { id: c.id, name: c.name } : null} onClose={() => setAskWin(false)} />
       {c.deal_status === "lost" && c.lost_reason && <p className="text-sm text-muted">Motif de perte : {c.lost_reason}</p>}
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
         <Field label="Montant potentiel (€)">

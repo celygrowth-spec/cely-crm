@@ -761,6 +761,51 @@ begin
 end; $$;
 
 -- ---------------------------------------------------------------------------
+-- Sources du projet pour Claude : uniquement celles de la fiche de ce projet
+-- ---------------------------------------------------------------------------
+create or replace function public.onboarding_sources(p_project uuid)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare
+  o public.project_onboarding;
+  v_company uuid;
+begin
+  perform public.assert_owner();
+  select * into o from public.project_onboarding where project_id = p_project;
+  if not found then raise exception 'Préparation introuvable' using errcode = 'P0002'; end if;
+  select company_id into v_company from public.projects where id = p_project;
+  return jsonb_build_object(
+    'appels', coalesce((select jsonb_agg(jsonb_build_object('call_id', c.id, 'titre', c.title, 'date', c.occurred_at, 'resume', c.summary,
+                         'lignes', c.line_count) order by c.occurred_at desc nulls last)
+                  from public.fireflies_calls c where c.company_id = v_company and c.link_state = 'linked'), '[]'),
+    'diagnostic', (select jsonb_build_object('diagnostic_id', d.id, 'resume', d.summary,
+                     'questions', coalesce((select jsonb_agg(jsonb_build_object('question', q.question, 'reponse', q.answer, 'ne_sait_pas', q.dont_know) order by q.position)
+                                             from public.diagnostic_questions q where q.diagnostic_id = d.id), '[]'),
+                     'versions', coalesce((select jsonb_agg(jsonb_build_object('version', v.version, 'file_id', v.file_id) order by v.version)
+                                            from public.diagnostic_versions v where v.diagnostic_id = d.id and v.status = 'ready'), '[]'))
+                     from public.diagnostics d where d.id = o.diagnostic_id),
+    'interlocuteurs', coalesce((select jsonb_agg(jsonb_build_object('nom', nullif(btrim(concat_ws(' ', pe.first_name, pe.last_name)), ''), 'fonction', pe.title,
+                         'email', pe.email, 'telephone', pe.phone, 'principal', pe.is_primary) order by pe.is_primary desc, pe.created_at)
+                  from public.people pe where pe.company_id = v_company), '[]'));
+end; $$;
+
+create or replace function public.onboarding_call_transcript(p_project uuid, p_call uuid, p_offset integer, p_limit integer)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_company uuid;
+  v_lines jsonb;
+begin
+  perform public.assert_owner();
+  select company_id into v_company from public.projects p join public.project_onboarding o on o.project_id = p.id where p.id = p_project;
+  if v_company is null then raise exception 'Préparation introuvable' using errcode = 'P0002'; end if;
+  select t.lines into v_lines from public.fireflies_calls c left join public.fireflies_call_transcripts t on t.call_id = c.id
+   where c.id = p_call and c.company_id = v_company and c.link_state = 'linked';
+  if not found then raise exception 'Appel introuvable sur cette fiche' using errcode = 'P0002'; end if;
+  return jsonb_build_object('total', coalesce(jsonb_array_length(v_lines), 0),
+    'lignes', coalesce((select jsonb_agg(e order by ord) from jsonb_array_elements(coalesce(v_lines, '[]')) with ordinality as t(e, ord)
+                         where ord > greatest(p_offset, 0) and ord <= greatest(p_offset, 0) + least(greatest(p_limit, 1), 1000)), '[]'));
+end; $$;
+
+-- ---------------------------------------------------------------------------
 -- Droits : ces fonctions sont réservées au propriétaire connecté (jamais anon).
 -- ---------------------------------------------------------------------------
 do $$
@@ -772,6 +817,7 @@ begin
     'onboarding_analysis_claim(uuid)', 'onboarding_analysis_result(uuid, text, text)', 'onboarding_save_analysis(uuid, jsonb, jsonb, date)',
     'onboarding_deck_request(uuid)', 'onboarding_deck_session(uuid, text, text)', 'onboarding_deck_open(uuid)',
     'onboarding_deck_attach(uuid, uuid)', 'onboarding_deck_ready(uuid, int)', 'onboarding_deck_failed(uuid, text)',
+    'onboarding_sources(uuid)', 'onboarding_call_transcript(uuid, uuid, integer, integer)',
     'onboarding_ref(text, uuid, text)', 'onboarding_text(jsonb)', 'onboarding_put_section(jsonb, text, jsonb)', 'onboarding_section_filled(jsonb, text)']
   loop
     execute format('revoke all on function public.%s from public, anon', f);

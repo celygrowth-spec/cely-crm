@@ -462,8 +462,13 @@ describe("historique des appels", () => {
     await db.exec("reset role;");
     const { rows } = await db.query<{ proname: string }>(`
       select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-       where n.nspname = 'public' and p.prosrc ilike '%fireflies%' and p.proname not like 'fireflies\\_%'`);
+       where n.nspname = 'public' and p.prosrc ilike '%fireflies%' and p.proname not like 'fireflies\\_%' and p.proname not like 'onboarding\\_%'`);
     expect(rows).toEqual([]);
+    // la préparation des projets lit les appels, mais n'est ouverte qu'au propriétaire connecté
+    const open = await db.query(`
+      select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname like 'onboarding\\_%' and p.prosrc ilike '%fireflies%' and has_function_privilege('anon', p.oid, 'execute')`);
+    expect(open.rows).toEqual([]);
   });
 
   test("import historique : une réunion connue ne repart pas, un choix manuel reste", async () => {

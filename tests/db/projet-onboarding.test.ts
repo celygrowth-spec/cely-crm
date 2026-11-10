@@ -268,3 +268,17 @@ describe("relancer la préparation", () => {
     expect(o.sections.phases.items.map((x) => x.text)).toContain("Mission de 6 mois");
   });
 });
+
+describe("sources lues par Claude", () => {
+  test("limitées à la fiche du projet", async () => {
+    const a = await fiche("[TEST] Client Iota");
+    const b = await fiche("[TEST] Client Kappa");
+    await call(a, { short_summary: "Résumé A" });
+    const autre = await call(b, { short_summary: "Résumé B" });
+    const { project_id: p } = await win(a);
+    await db.as("claude");
+    const s = await db.rpc<{ appels: { resume: { short_summary: string } }[] }>("onboarding_sources", { p_project: p });
+    expect(s.appels.map((x) => x.resume.short_summary)).toEqual(["Résumé A"]);
+    await expect(db.rpc("onboarding_call_transcript", { p_project: p, p_call: autre, p_offset: 0, p_limit: 10 })).rejects.toThrow(/introuvable/);
+  });
+});
