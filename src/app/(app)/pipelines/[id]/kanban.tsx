@@ -13,10 +13,12 @@ import { useCrm } from "@/components/app-shell";
 import { Badge, Button, EmptyState, Input, Modal, Select, Skeleton, cn } from "@/components/ui";
 import type { CompanyOverview, PipelineWithStages, SearchResult } from "@/lib/crm/types";
 import { formatAmount, relativeDay, todayISO } from "@/lib/format";
+import { CardClosingMenu, closedOnLabel } from "@/components/deal-closing";
 import { NewPipeline } from "../new-pipeline";
 import { StageManager } from "./stage-manager";
 
-type Card = Pick<CompanyOverview, "id" | "name" | "stage_id" | "amount" | "primary_person_name" | "next_action_title" | "next_action_due">;
+type Card = Pick<CompanyOverview, "id" | "name" | "stage_id" | "amount" | "primary_person_name" | "next_action_title" | "next_action_due" | "deal_status" | "deal_closed_at" | "lost_reason">;
+type Counts = Record<"open" | "won" | "lost", number>;
 
 export function Kanban({ pipelineId }: { pipelineId: string }) {
   const router = useRouter();
@@ -30,6 +32,11 @@ export function Kanban({ pipelineId }: { pipelineId: string }) {
   const { data: cards = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: key,
     queryFn: ({ signal }) => apiGet<Card[]>(`/api/pipelines/${pipelineId}/cards?statut=${dealStatus}`, signal),
+    enabled: !!pipeline,
+  });
+  const counts = useQuery({
+    queryKey: ["pipeline-cards", pipelineId, "counts"],
+    queryFn: ({ signal }) => apiGet<Counts>(`/api/pipelines/${pipelineId}/cards?compter=1`, signal),
     enabled: !!pipeline,
   });
   const [manage, setManage] = useState(false);
@@ -58,6 +65,11 @@ export function Kanban({ pipelineId }: { pipelineId: string }) {
     qc.invalidateQueries({ queryKey: ["company", companyId] });
     qc.invalidateQueries({ queryKey: ["company-timeline", companyId] });
     qc.invalidateQueries({ queryKey: ["companies"] });
+  }
+
+  /** Clôture ou réouverture depuis une carte : elle quitte cette vue, les autres vues et compteurs se relisent. */
+  function closed(companyId: string) {
+    qc.setQueryData<Card[]>(key, (cs = []) => cs.filter((c) => c.id !== companyId));
   }
 
   function onDragEnd(e: DragEndEvent) {
@@ -90,9 +102,9 @@ export function Kanban({ pipelineId }: { pipelineId: string }) {
             className="w-auto"
             aria-label="Statut commercial"
           >
-            <option value="open">Opportunités ouvertes</option>
-            <option value="won">Gagnées</option>
-            <option value="lost">Perdues</option>
+            <option value="open">Opportunités ouvertes{counts.data ? ` (${counts.data.open})` : ""}</option>
+            <option value="won">Gagnées{counts.data ? ` (${counts.data.won})` : ""}</option>
+            <option value="lost">Perdues{counts.data ? ` (${counts.data.lost})` : ""}</option>
           </Select>
           {firstStage && <Button onClick={() => openCreate({ stageId: firstStage.id })}><Plus size={14} /> Nouvelle fiche</Button>}
           <Button onClick={() => setAddExisting(true)}><Search size={14} /> Fiche existante</Button>
@@ -111,14 +123,14 @@ export function Kanban({ pipelineId }: { pipelineId: string }) {
               <Column key={s.id} id={s.id} title={s.name} count={col.length} total={total}>
                 {isLoading && [0, 1].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
                 {col.map((c) => (
-                  <KCard key={c.id} card={c} pipelines={pipelines} onOpen={() => openCompany(c.id, { name: c.name })} onHover={() => prefetchCompany(c.id)} onMove={(stageId) => move(c.id, stageId)} disabled={dealStatus !== "open"} />
+                  <KCard key={c.id} card={c} pipelines={pipelines} onOpen={() => openCompany(c.id, { name: c.name })} onHover={() => prefetchCompany(c.id)} onMove={(stageId) => move(c.id, stageId)} disabled={dealStatus !== "open"} onClosed={() => closed(c.id)} />
                 ))}
               </Column>
             );
           })}
         </div>
       </DndContext>
-      {dealStatus !== "open" && <p className="text-xs text-muted">Les fiches gagnées ou perdues restent rattachées à leur dernière étape. Rouvrez-les depuis la fiche pour les déplacer.</p>}
+      {dealStatus !== "open" && <p className="text-xs text-muted">Les fiches gagnées ou perdues restent rattachées à leur dernière étape. Rouvrez-les (menu de la carte ou fiche) pour les déplacer : elles reprennent cette étape.</p>}
 
       <Modal open={manage} onClose={() => setManage(false)} title={`Pipeline « ${pipeline.name} »`} wide>
         <StageManager pipeline={pipeline} pipelines={pipelines} onDone={() => { setManage(false); router.refresh(); }} />
@@ -141,7 +153,7 @@ function Column({ id, title, count, total, children }: { id: string; title: stri
   );
 }
 
-function KCard({ card: c, pipelines, onOpen, onHover, onMove, disabled }: { card: Card; pipelines: PipelineWithStages[]; onOpen: () => void; onHover: () => void; onMove: (stageId: string) => void; disabled: boolean }) {
+function KCard({ card: c, pipelines, onOpen, onHover, onMove, disabled, onClosed }: { card: Card; pipelines: PipelineWithStages[]; onOpen: () => void; onHover: () => void; onMove: (stageId: string) => void; disabled: boolean; onClosed: () => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: c.id, disabled });
   const late = c.next_action_due && c.next_action_due < todayISO();
   return (
@@ -150,24 +162,29 @@ function KCard({ card: c, pipelines, onOpen, onHover, onMove, disabled }: { card
       style={transform ? { transform: `translate(${transform.x}px, ${transform.y}px)` } : undefined}
       onMouseEnter={onHover}
       className={cn("row-in rounded-lg border border-line bg-white p-2.5 shadow-xs", isDragging && "z-10 shadow-lg ring-2 ring-violet")}
-      {...attributes}
-      {...listeners}
+      {...(disabled ? {} : attributes)}
+      {...(disabled ? {} : listeners)}
     >
-      <button onClick={onOpen} className="block w-full text-left">
+      <div className="flex items-start gap-1">
+      <button onClick={onOpen} className="block min-w-0 flex-1 text-left">
         <p className="flex items-center gap-1.5 font-semibold">
-          {late && <AlertCircle size={14} className="shrink-0 text-danger" aria-label="En retard" />}
+          {late && c.deal_status === "open" && <AlertCircle size={14} className="shrink-0 text-danger" aria-label="En retard" />}
           <span className="truncate">{c.name}</span>
         </p>
         {c.primary_person_name && <p className="truncate text-xs text-muted">{c.primary_person_name}</p>}
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
           {c.amount != null && <Badge tone="ink">{formatAmount(c.amount)}</Badge>}
-          {c.next_action_title && (
+          {c.deal_status === "won" && <Badge tone="success">Gagné{c.deal_closed_at ? ` · ${closedOnLabel(c.deal_closed_at)}` : ""}</Badge>}
+          {c.deal_status === "lost" && <Badge tone="danger" title={c.lost_reason ?? undefined}>Perdu{c.lost_reason ? ` · ${c.lost_reason}` : ""}</Badge>}
+          {c.deal_status === "open" && c.next_action_title && (
             <span className={cn("truncate text-xs", late ? "font-semibold text-danger" : "text-muted")}>
               {c.next_action_title} · {relativeDay(c.next_action_due)}
             </span>
           )}
         </div>
       </button>
+      <CardClosingMenu target={{ id: c.id, name: c.name, deal_status: c.deal_status, amount: c.amount, deal_closed_at: c.deal_closed_at, lost_reason: c.lost_reason }} onChanged={onClosed} />
+      </div>
       {!disabled && (
         <Select
           value=""

@@ -305,9 +305,31 @@ export async function moveCompany(
   ) as { status: string; stopped_followups?: number };
 }
 
-export async function setDealStatus(sb: SupabaseClient, companyId: string, status: "open" | "won" | "lost", lostReason?: string | null) {
+export type DealStatus = "open" | "won" | "lost";
+export type DealClosing = { lostReason?: string | null; closedOn?: string | null; amount?: number | null };
+export type DealResult = { status: "ok" | "unchanged"; deal_status: DealStatus; deal_closed_at?: string | null; stage_id?: string | null; projects?: string | null };
+
+const closingSchema = z.object({
+  lostReason: z.string().max(500, "Motif trop long (500 caractères au plus)").nullish(),
+  closedOn: z.iso.date("Date de signature invalide").nullish(),
+  amount: z.number().nonnegative("Montant invalide").max(9_999_999_999, "Montant trop élevé").nullish(),
+});
+
+/**
+ * Gagné, perdu, rouvert : la seule porte d'entrée, partagée par la fiche et le Kanban.
+ * L'étape n'est jamais changée par une clôture ; rouvrir ramène à la dernière étape.
+ */
+export async function setDealStatus(sb: SupabaseClient, companyId: string, status: DealStatus, closing: DealClosing = {}): Promise<DealResult> {
   parse(idSchema, companyId);
-  check(await sb.rpc("set_deal_status", { p_company: companyId, p_status: status, p_lost_reason: lostReason ?? null }));
+  parse(z.enum(["open", "won", "lost"]), status);
+  const c = parse(closingSchema, closing);
+  return check(await sb.rpc("set_deal_status", {
+    p_company: companyId,
+    p_status: status,
+    p_lost_reason: status === "lost" ? c.lostReason ?? null : null,
+    p_closed_on: status === "won" ? c.closedOn ?? null : null,
+    p_amount: status === "won" ? c.amount ?? null : null,
+  })) as DealResult;
 }
 
 // ---------------------------------------------------------------------------

@@ -132,3 +132,21 @@ describe("timeline et derniers échanges", () => {
     expect(emailThread(mail("seul", "draft"), [a, b]).map((m) => m.id)).toEqual(["seul"]);
   });
 });
+
+describe("clôture de l'opportunité", () => {
+  test("gagnée, perdue, rouverte : jalons du fil, hors échanges récents et hors journal", () => {
+    const won = interaction("d1", "deal_status", "2026-11-08T10:00:00Z", { content: "Opportunité gagnée : signée le 08/11/2026 · 4500 €", meta: { from: "open", to: "won" } });
+    const reopened = interaction("d2", "deal_status", "2026-11-09T10:00:00Z", { content: "Opportunité rouverte : était gagnée · retour à l'étape Vente › Proposition", meta: { from: "won", to: "open" } });
+    const old = interaction("d3", "deal_status", "2026-11-01T10:00:00Z", { content: "Opportunité perdue", meta: { from: "open", to: "lost" } });
+    const entries = buildActivity({ interactions: [won, reopened, old] });
+    expect(entries.map((e) => [e.type, e.title, e.preview])).toEqual([
+      ["deal", "Opportunité rouverte", "était gagnée · retour à l'étape Vente › Proposition"],
+      ["deal", "Opportunité gagnée", "signée le 08/11/2026 · 4500 €"],
+      ["deal", "Opportunité perdue", null],
+    ]);
+    expect(recentExchanges(entries, 3, Date.parse("2026-12-01"))).toHaveLength(0);
+    expect(buildJournal([won, reopened, old], [])).toHaveLength(0);
+    expect(entries.filter((e) => matchesFilter(e, "all"))).toHaveLength(3);
+    expect(entries.filter((e) => matchesFilter(e, "note"))).toHaveLength(0);
+  });
+});

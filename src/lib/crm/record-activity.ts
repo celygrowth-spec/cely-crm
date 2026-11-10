@@ -6,7 +6,8 @@ import type { Call } from "@/lib/fireflies/types";
 import type { MailMessage } from "@/lib/mail/types";
 import type { ClaudeLogEntry, Interaction, Task } from "./types";
 
-export type ActivityType = "note" | "email" | "call" | "meeting" | "task";
+/** `deal` : jalon de clôture (gagnée, perdue, rouverte), visible dans « Tout » ; ce n'est pas un échange. */
+export type ActivityType = "note" | "email" | "call" | "meeting" | "task" | "deal";
 export type ActivityFilter = "all" | ActivityType;
 
 export const ACTIVITY_FILTERS: { key: ActivityFilter; label: string }[] = [
@@ -38,7 +39,10 @@ const EXCHANGE_KINDS: Partial<Record<Interaction["kind"], ActivityType>> = {
   message_in: "email",
   call: "call",
   meeting: "meeting",
+  deal_status: "deal",
 };
+
+const DEAL_TITLES: Record<string, string> = { won: "Opportunité gagnée", lost: "Opportunité perdue", open: "Opportunité rouverte" };
 
 const ms = (iso: string | null | undefined) => (iso ? Date.parse(iso) : 0);
 
@@ -66,6 +70,12 @@ function fromInteraction(i: Interaction, type: ActivityType, call?: Call, bookin
     const label = i.kind === "message_in" ? "Reçu" : "Envoyé";
     const subject = mail?.subject || mailSubject(i.content);
     return { ...base, title: isMail ? `Email · ${subject ?? label.toLowerCase()}` : MESSAGE_TITLES[i.kind] ?? label, preview: mailPreview(i.content) };
+  }
+  if (type === "deal") {
+    const title = DEAL_TITLES[metaText(i, "to") ?? ""] ?? "Opportunité";
+    // « Opportunité gagnée : signée le … » → le détail seul ; une ancienne entrée n'a que le titre
+    const rest = (i.content ?? "").replace(/^Opportunité (gagnée|perdue|rouverte)\s*(: )?/, "").replace(/^· /, "").trim();
+    return { ...base, title, preview: rest || null };
   }
   if (type === "note") return { ...base, title: "Note interne", preview: i.content };
   if (type === "meeting") return { ...base, title: booking?.event_snapshot.name ?? "Rendez-vous", preview: i.content };
@@ -135,7 +145,7 @@ const MAIL_NOT_SENT: MailMessage["status"][] = ["draft", "cancelled", "failed", 
 
 /** Ce qui s'est réellement passé : ni rendez-vous à venir ou annulé, ni email non parti. */
 export function isPastExchange(e: ActivityEntry, now = Date.now()) {
-  if (e.type === "task" || !e.at || ms(e.at) > now) return false;
+  if (e.type === "task" || e.type === "deal" || !e.at || ms(e.at) > now) return false;
   if (e.booking && !e.interaction && (e.booking.display_status === "cancelled" || e.booking.display_status === "no_show" || e.booking.display_status === "pending")) return false;
   if (e.mail && !e.interaction && MAIL_NOT_SENT.includes(e.mail.status)) return false;
   return true;
