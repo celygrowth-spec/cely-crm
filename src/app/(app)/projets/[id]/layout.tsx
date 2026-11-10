@@ -5,6 +5,7 @@ import { requireOwner } from "@/lib/auth";
 import { getProject } from "@/lib/projects/owner";
 import { Badge } from "@/components/ui";
 import { PROJECT_STATUS_LABELS, PROJECT_STATUS_TONES } from "@/lib/projects/types";
+import { ProjectSalePanel } from "@/components/sales/project-sale-panel";
 import { ProjectTabs } from "./tabs";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -31,6 +32,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
           </Link>
         </p>
       </div>
+      <ProjectSalePanel projectId={p.id} companyId={p.company_id} />
       <ProjectTabs id={p.id} />
       {children}
     </div>

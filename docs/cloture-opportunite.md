@@ -30,7 +30,12 @@ cartes du Kanban (`CardClosingMenu`).
   détails dans `meta`) et apparaît comme un jalon dans le fil « Tout ».
 - Déplacer une fiche clôturée vers une étape (`move_company`) la rouvre aussi, comme avant.
 
-## Raccordement avec Projets (onboarding)
+## Raccordement avec Ventes et Projets
+
+Depuis la version Ventes, « Gagné » ouvre « Marquer comme gagné » (voir `docs/ventes.md`) : la vente, le revenu
+et le projet sont créés ou liés en une fois. Ce qui suit reste valable pour créer un projet à la main.
+
+### Création manuelle d'un projet
 
 Marquer une fiche gagnée **ne crée rien** dans Projets : la signature et la création du projet restent deux actions.
 

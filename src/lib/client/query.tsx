@@ -39,7 +39,7 @@ export async function apiGet<T>(url: string, signal?: AbortSignal): Promise<T> {
 }
 
 // Écrans dont les données viennent du cache client : pas besoin de les recharger côté serveur.
-const CLIENT_DATA = /^\/(prospection\/base|pipelines\/[^/]+|fiches\/[^/]+)$/;
+const CLIENT_DATA = /^\/(prospection\/base|pipelines\/[^/]+|fiches\/[^/]+|ventes)$/;
 let routerDirty = false;
 
 /**

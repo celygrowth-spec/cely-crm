@@ -1,20 +1,24 @@
 "use client";
 
-// Clôturer une opportunité : Gagné (date de signature, montant facultatif), Perdu (motif facultatif), Rouvrir.
-// Une seule logique pour la fiche et le Kanban : setDealStatusAction → set_deal_status (source de vérité :
-// companies.deal_status ; l'étape reste la progression commerciale).
-import { useQuery } from "@tanstack/react-query";
+// Clôturer une opportunité depuis la fiche ou le Kanban, avec la même logique :
+//  * Gagné → « Marquer comme gagné » (sales/win-sale) : fiche Gagné, vente suivie, revenu, projet ;
+//  * Perdu → motif facultatif (set_deal_status) ;
+//  * Rouvrir → décision explicite si un projet ou un revenu est lié (liens conservés).
+// Source de vérité : companies.deal_status ; l'étape reste la progression commerciale.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Briefcase, Check, MoreHorizontal, RotateCcw, Trophy, X } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ArrowRight, MoreHorizontal, RotateCcw, Trophy, X } from "lucide-react";
 import { setDealStatusAction } from "@/app/actions";
-import { apiGet, attempt, useSync } from "@/lib/client/query";
+import { stopRevenueAction } from "@/app/finance-actions";
+import { attempt, useSync } from "@/lib/client/query";
 import type { DealClosing, DealResult, DealStatus } from "@/lib/crm/service";
-import { formatAmount, todayISO } from "@/lib/format";
-import type { Project } from "@/lib/projects/types";
+import { todayISO } from "@/lib/format";
+import { STAGE_LABELS, amountLine, needsCompletion } from "@/lib/sales/rules";
 import type { RecordCtx } from "./company-record";
-import { CreateProjectModal } from "./projects/create-project";
-import { Badge, Button, Field, Input, Modal, cn } from "./ui";
+import { WinSaleDialog, useSale } from "./sales/win-sale";
+import { Badge, Button, Field, Input, Modal, Skeleton, cn } from "./ui";
 
 export type ClosingTarget = {
   id: string;
@@ -28,13 +32,6 @@ export type ClosingTarget = {
 /** Où ouvrir la préparation de l'onboarding (point de raccordement avec le module Projets). */
 export const onboardingHref = (companyId: string) => `/projets?nouveau=1&client=${companyId}`;
 
-const parseAmount = (v: string) => {
-  const t = v.replace(/\s| |€/g, "").replace(",", ".");
-  if (!t) return null;
-  const n = Number(t);
-  return Number.isFinite(n) && n >= 0 ? n : Number.NaN;
-};
-
 export const closedOnLabel = (iso: string | null | undefined) =>
   iso ? new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Paris" }).format(new Date(iso)) : null;
 
@@ -47,42 +44,9 @@ export function useDealStatus() {
   return async (target: ClosingTarget, status: DealStatus, closing: DealClosing = {}) => {
     const r = await attempt(() => setDealStatusAction(target.id, status, closing));
     if (!r.ok) return r;
-    sync(["company", target.id], ["company-timeline", target.id], ["companies"], ["pipeline-cards"], ["company-projects", target.id]);
+    sync(["company", target.id], ["company-timeline", target.id], ["companies"], ["pipeline-cards"], ["company-projects", target.id], ["sales"]);
     return r as { ok: true; data: DealResult };
   };
-}
-
-/** Confirmation compacte « Gagné » : date de signature (aujourd'hui, modifiable) et montant facultatif. */
-export function WinForm({ target, busy, onConfirm, onCancel }: { target: ClosingTarget; busy: boolean; onConfirm: (c: DealClosing) => void; onCancel: () => void }) {
-  const today = todayISO();
-  const [date, setDate] = useState(today);
-  const [amount, setAmount] = useState(target.amount != null ? String(target.amount).replace(".", ",") : "");
-  const [error, setError] = useState<string | null>(null);
-  const submit = () => {
-    const n = parseAmount(amount);
-    if (Number.isNaN(n)) return setError("Montant invalide");
-    if (!date) return setError("Indiquez la date de signature");
-    if (date > today) return setError("La date de signature ne peut pas être dans le futur");
-    onConfirm({ closedOn: date, amount: n });
-  };
-  return (
-    <form className="space-y-2.5" onSubmit={(e) => { e.preventDefault(); submit(); }} data-win-form>
-      <p className="text-sm font-semibold">Le client a signé ?</p>
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Signé le">
-          <Input type="date" value={date} max={today} onChange={(e) => { setDate(e.target.value); setError(null); }} aria-label="Date de signature" autoFocus />
-        </Field>
-        <Field label="Montant (facultatif)">
-          <Input inputMode="decimal" value={amount} onChange={(e) => { setAmount(e.target.value); setError(null); }} placeholder="€" aria-label="Montant signé" />
-        </Field>
-      </div>
-      {error && <p className="text-xs text-danger" role="alert">{error}</p>}
-      <div className="flex justify-end gap-1.5">
-        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>Annuler</Button>
-        <Button type="submit" size="sm" variant="primary" disabled={busy}><Check size={13} /> Marquer gagné</Button>
-      </div>
-    </form>
-  );
 }
 
 /** Confirmation compacte « Perdu » : motif facultatif. */
@@ -139,13 +103,57 @@ function Anchored({ open, children, panel, align = "left" }: { open: boolean; ch
 type Run = (status: DealStatus, closing?: DealClosing) => Promise<boolean>;
 
 /**
- * Commandes de clôture dans l'en-tête de la fiche : « Gagné » / « Perdu » sur une opportunité ouverte,
- * badge daté et « Rouvrir l'opportunité » une fois clôturée, « Préparer l'onboarding » une fois gagnée.
+ * Rouvrir une vente clôturée : liens conservés (projet, revenu, factures). S'il y en a, la décision est
+ * explicite ; un revenu mensuel peut être arrêté au passage, jamais sans le demander.
  */
-export function DealClosingControls({ target, run, hasProject }: { target: ClosingTarget; run: Run; hasProject: boolean }) {
-  const [form, setForm] = useState<"won" | "lost" | "menu" | null>(null);
+function ReopenConfirm({ companyId, busy, onConfirm, onCancel }: { companyId: string; busy: boolean; onConfirm: (stopMissionId: string | null) => void; onCancel: () => void }) {
+  const sale = useSale(companyId);
+  const [stop, setStop] = useState(false);
+  if (sale.isLoading) return <Skeleton className="h-16 w-full" />;
+  const r = sale.data;
+  const monthly = r?.mission_id && r.mission_kind === "recurrent" && r.mission_status !== "termine";
+  const links = [r?.project_name && `le projet « ${r.project_name} »`, r?.mission_id && `le revenu ${amountLine(r) ?? ""}`.trim()].filter(Boolean) as string[];
+  return (
+    <div className="space-y-2.5 text-sm" data-reopen-confirm>
+      <p className="font-semibold">Rouvrir l&apos;opportunité ?</p>
+      {links.length ? (
+        <p className="text-muted">Cette vente a {links.join(" et ")}. Ils restent liés et seront réutilisés si vous la regagnez.</p>
+      ) : (
+        <p className="text-muted">La fiche retrouve sa dernière étape dans Pipelines.</p>
+      )}
+      {monthly && (
+        <label className="flex items-start gap-2">
+          <input type="checkbox" className="mt-0.5 accent-violet-600" checked={stop} onChange={(e) => setStop(e.target.checked)} />
+          <span>Arrêter aussi le revenu mensuel à partir d&apos;aujourd&apos;hui</span>
+        </label>
+      )}
+      <div className="flex justify-end gap-1.5">
+        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>Annuler</Button>
+        <Button type="button" size="sm" disabled={busy} onClick={() => onConfirm(stop && r?.mission_id ? r.mission_id : null)}>
+          <RotateCcw size={13} /> {links.length ? "Rouvrir en conservant les liens" : "Rouvrir"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+async function stopRevenue(missionId: string | null) {
+  if (!missionId) return true;
+  const r = await attempt(() => stopRevenueAction(missionId, todayISO()));
+  if (!r.ok) toast.error(`Revenu non arrêté : ${r.error}`);
+  return r.ok;
+}
+
+/**
+ * Commandes de clôture dans l'en-tête de la fiche : « Gagné » / « Perdu » sur une opportunité ouverte ;
+ * une fois clôturée, badge daté (détail, réouverture) et accès direct à l'endroit où reprendre le dossier.
+ */
+export function DealClosingControls({ target, run }: { target: ClosingTarget; run: Run }) {
+  const router = useRouter();
+  const [form, setForm] = useState<"lost" | "menu" | "reopen" | null>(null);
+  const [win, setWin] = useState<null | "win" | "complete">(null);
   const [busy, setBusy] = useState(false);
-  const [onboarding, setOnboarding] = useState(false);
+  const sale = useSale(target.id);
   const ref = useDismiss(form !== null, () => setForm(null));
   const go = async (status: DealStatus, closing?: DealClosing) => {
     setBusy(true);
@@ -153,56 +161,68 @@ export function DealClosingControls({ target, run, hasProject }: { target: Closi
     setBusy(false);
     if (!ok) return;
     setForm(null);
-    if (status === "won") {
-      toast.success(`${target.name} : opportunité gagnée`, hasProject ? undefined : { action: { label: "Préparer l'onboarding", onClick: () => setOnboarding(true) }, duration: 8000 });
-    } else if (status === "lost") toast.success(`${target.name} : opportunité perdue`);
-    else toast.success(hasProject ? "Opportunité rouverte : retour à la dernière étape, projet conservé" : "Opportunité rouverte : retour à la dernière étape");
+    if (status === "lost") toast.success(`${target.name} : opportunité perdue`, { action: { label: "Voir dans Ventes", onClick: () => router.push("/ventes?vue=perdues") } });
+    else if (status === "open") toast.success("Opportunité rouverte : retour à la dernière étape, liens conservés");
   };
+  const winDialog = <WinSaleDialog company={{ id: target.id, name: target.name }} open={win !== null} complete={win === "complete"} onClose={() => setWin(null)} />;
 
   if (target.deal_status === "open") {
     return (
       <div ref={ref} className="flex items-center gap-1" data-deal-actions>
-        <Anchored open={form === "won"} panel={<WinForm target={target} busy={busy} onConfirm={(c) => void go("won", c)} onCancel={() => setForm(null)} />}>
-          <Button size="sm" onClick={() => setForm(form === "won" ? null : "won")} aria-expanded={form === "won"} className="h-8 border-success/30 text-success hover:bg-success/5"><Trophy size={13} /> Gagné</Button>
-        </Anchored>
+        <Button size="sm" onClick={() => setWin("win")} className="h-8 border-success/30 text-success hover:bg-success/5"><Trophy size={13} /> Gagné</Button>
         <Anchored open={form === "lost"} align="right" panel={<LoseForm target={target} busy={busy} onConfirm={(c) => void go("lost", c)} onCancel={() => setForm(null)} />}>
           <Button size="sm" onClick={() => setForm(form === "lost" ? null : "lost")} aria-expanded={form === "lost"} className="h-8 text-muted hover:text-danger"><X size={13} /> Perdu</Button>
         </Anchored>
+        {winDialog}
       </div>
     );
   }
 
   const won = target.deal_status === "won";
   const date = closedOnLabel(target.deal_closed_at);
+  const s = sale.data;
   return (
     <div ref={ref} className="flex items-center gap-1" data-deal-outcome={target.deal_status}>
-      <Anchored open={form === "menu"} panel={
-        <div className="space-y-2 text-sm">
-          <p>{won ? <>Signé{date ? ` le ${date}` : ""}{target.amount != null ? ` · ${formatAmount(target.amount)}` : ""}</> : <>Perdu{date ? ` le ${date}` : ""}{target.lost_reason ? ` : ${target.lost_reason}` : ""}</>}</p>
-          {hasProject && <p className="text-xs text-muted">Un projet est lié à cette fiche : il est conservé si vous rouvrez l&apos;opportunité.</p>}
-          <Button size="sm" disabled={busy} onClick={() => void go("open")}><RotateCcw size={13} /> Rouvrir l&apos;opportunité</Button>
-        </div>
+      <Anchored open={form === "menu" || form === "reopen"} panel={
+        form === "reopen" ? (
+          <ReopenConfirm companyId={target.id} busy={busy} onCancel={() => setForm(null)} onConfirm={async (stopId) => { if (await stopRevenue(stopId)) await go("open"); }} />
+        ) : (
+          <div className="space-y-2 text-sm">
+            <p>{won ? <>Gagné{date ? ` le ${date}` : ""}{s && amountLine(s) ? ` · ${amountLine(s)}` : ""}</> : <>Perdu{date ? ` le ${date}` : ""}{target.lost_reason ? ` : ${target.lost_reason}` : ""}</>}</p>
+            {won && s?.signed_on && <p className="text-xs text-muted">Signé le {closedOnLabel(s.signed_on)}</p>}
+            <div className="flex flex-wrap gap-1.5">
+              <Link href={won ? "/ventes" : "/ventes?vue=perdues"} className="inline-flex h-8 items-center gap-1 rounded-lg border border-line px-2.5 text-xs font-semibold hover:bg-surface">Voir dans Ventes <ArrowRight size={12} /></Link>
+              <Button size="sm" disabled={busy} onClick={() => setForm("reopen")}><RotateCcw size={13} /> Rouvrir l&apos;opportunité</Button>
+            </div>
+          </div>
+        )
       }>
-        <button type="button" onClick={() => setForm(form === "menu" ? null : "menu")} aria-expanded={form === "menu"} aria-label={`${won ? "Gagné" : "Perdu"} : détails et réouverture`}>
+        <button type="button" onClick={() => setForm(form ? null : "menu")} aria-expanded={form !== null} aria-label={`${won ? "Gagné" : "Perdu"} : détails et réouverture`}>
           <Badge tone={won ? "success" : "danger"} className="h-8 px-2.5 text-xs">
             {won ? <Trophy size={12} /> : <X size={12} />} {won ? "Gagné" : "Perdu"}{date && <span className="font-normal max-sm:hidden"> · {date}</span>}
           </Badge>
         </button>
       </Anchored>
-      {won && !hasProject && (
-        <Button size="sm" className="h-8" onClick={() => setOnboarding(true)}><Briefcase size={13} /> <span className="max-sm:hidden">Préparer l&apos;onboarding</span><span className="sm:hidden">Onboarding</span></Button>
+      {won && s && needsCompletion(s) && (
+        <Button size="sm" className="h-8" onClick={() => setWin("complete")} data-complete-sale>Compléter le suivi</Button>
       )}
-      <CreateProjectModal open={onboarding} onClose={() => setOnboarding(false)} company={{ id: target.id, name: target.name }} />
+      {won && s?.sale_id && s.stage && s.stage !== "termine" && (
+        <Link href="/ventes" className="inline-flex h-8 items-center gap-1 rounded-lg border border-line bg-white px-2.5 text-xs font-semibold hover:border-violet" data-sale-stage>
+          {STAGE_LABELS[s.stage]} <ArrowRight size={12} className="text-muted" />
+        </Link>
+      )}
+      {winDialog}
     </div>
   );
 }
 
 /** Menu compact d'une carte du Kanban : mêmes clôtures que la fiche, mêmes confirmations. */
 export function CardClosingMenu({ target, onChanged }: { target: ClosingTarget; onChanged: (status: DealStatus) => void }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<"won" | "lost" | null>(null);
+  const [form, setForm] = useState<"lost" | "reopen" | null>(null);
+  const [win, setWin] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [onboarding, setOnboarding] = useState(false);
   const ref = useDismiss(open, () => setOpen(false));
   const send = useDealStatus();
   const go = async (status: DealStatus, closing?: DealClosing) => {
@@ -213,8 +233,7 @@ export function CardClosingMenu({ target, onChanged }: { target: ClosingTarget; 
     setForm(null);
     setOpen(false);
     onChanged(status);
-    if (status === "won") toast.success(`${target.name} : opportunité gagnée`, { action: { label: "Préparer l'onboarding", onClick: () => setOnboarding(true) }, duration: 8000 });
-    else if (status === "lost") toast.success(`${target.name} : opportunité perdue`);
+    if (status === "lost") toast.success(`${target.name} : opportunité perdue`, { action: { label: "Voir dans Ventes", onClick: () => router.push("/ventes?vue=perdues") } });
     else toast.success(`${target.name} : opportunité rouverte`);
   };
   const item = "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-surface";
@@ -227,39 +246,35 @@ export function CardClosingMenu({ target, onChanged }: { target: ClosingTarget; 
         <div className="fade-in absolute top-full right-0 z-30 mt-1 w-52 rounded-xl border border-line bg-white p-1 shadow-lg" role="menu">
           {target.deal_status === "open" ? (
             <>
-              <button type="button" role="menuitem" className={cn(item, "text-success")} onClick={() => { setOpen(false); setForm("won"); }}><Trophy size={14} /> Gagné</button>
+              <button type="button" role="menuitem" className={cn(item, "text-success")} onClick={() => { setOpen(false); setWin(true); }}><Trophy size={14} /> Gagné</button>
               <button type="button" role="menuitem" className={cn(item, "text-danger")} onClick={() => { setOpen(false); setForm("lost"); }}><X size={14} /> Perdu</button>
             </>
           ) : (
-            <button type="button" role="menuitem" className={item} disabled={busy} onClick={() => void go("open")}><RotateCcw size={14} /> Rouvrir l&apos;opportunité</button>
+            <button type="button" role="menuitem" className={item} disabled={busy} onClick={() => { setOpen(false); setForm("reopen"); }}><RotateCcw size={14} /> Rouvrir l&apos;opportunité</button>
           )}
         </div>
       )}
       <Modal open={form !== null} onClose={() => setForm(null)} title={target.name}>
-        {form === "won" && <WinForm target={target} busy={busy} onConfirm={(c) => void go("won", c)} onCancel={() => setForm(null)} />}
         {form === "lost" && <LoseForm target={target} busy={busy} onConfirm={(c) => void go("lost", c)} onCancel={() => setForm(null)} />}
+        {form === "reopen" && <ReopenConfirm companyId={target.id} busy={busy} onCancel={() => setForm(null)} onConfirm={async (stopId) => { if (await stopRevenue(stopId)) await go("open"); }} />}
       </Modal>
-      <CreateProjectModal open={onboarding} onClose={() => setOnboarding(false)} company={{ id: target.id, name: target.name }} />
+      <WinSaleDialog company={{ id: target.id, name: target.name }} open={win} onClose={() => setWin(false)} onDone={() => onChanged("won")} />
     </div>
   );
 }
 
-/** L'issue de l'opportunité, à côté de l'étape : même logique que le Kanban (useDealStatus). */
+/** L'issue de l'opportunité, à côté de l'étape : même logique que le Kanban et Ventes. */
 export function RecordDealClosing({ ctx }: { ctx: RecordCtx }) {
   const c = ctx.detail.company;
   const send = useDealStatus();
-  const projects = useQuery({ queryKey: ["company-projects", c.id], queryFn: ({ signal }) => apiGet<Project[]>(`/api/fiches/${c.id}/projets`, signal) });
   const target = { id: c.id, name: c.name, deal_status: c.deal_status, amount: c.amount, deal_closed_at: c.deal_closed_at, lost_reason: c.lost_reason };
   return (
     <DealClosingControls
       target={target}
-      hasProject={(projects.data ?? []).some((p) => p.status !== "archive")}
       run={(status, closing = {}) => {
-        const at = status === "open" ? null : status === "won" && closing.closedOn && closing.closedOn !== new Date().toISOString().slice(0, 10) ? `${closing.closedOn}T12:00:00` : new Date().toISOString();
         const optimistic = {
           deal_status: status,
-          deal_closed_at: at,
-          ...(status === "won" && closing.amount != null ? { amount: closing.amount } : {}),
+          deal_closed_at: status === "open" ? null : new Date().toISOString(),
           ...(status === "lost" ? { lost_reason: closing.lostReason ?? null } : {}),
         };
         return ctx.mutate(optimistic, async () => {
