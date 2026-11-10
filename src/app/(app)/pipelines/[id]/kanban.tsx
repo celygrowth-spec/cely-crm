@@ -2,41 +2,34 @@
 
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiGet, attempt, useSync } from "@/lib/client/query";
 import { toast } from "sonner";
 import { DndContext, PointerSensor, KeyboardSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import { AlertCircle, Plus, Search, Settings2 } from "lucide-react";
+import { AlertCircle, Plus, Search, Settings2, Trophy } from "lucide-react";
 import { moveCompanyAction, searchAction } from "@/app/actions";
 import { useCrm } from "@/components/app-shell";
 import { Badge, Button, EmptyState, Input, Modal, Select, Skeleton, cn } from "@/components/ui";
 import type { CompanyOverview, PipelineWithStages, SearchResult } from "@/lib/crm/types";
 import { formatAmount, relativeDay, todayISO } from "@/lib/format";
-import { CardClosingMenu, closedOnLabel } from "@/components/deal-closing";
+import { CardClosingMenu } from "@/components/deal-closing";
 import { NewPipeline } from "../new-pipeline";
 import { StageManager } from "./stage-manager";
 
 type Card = Pick<CompanyOverview, "id" | "name" | "stage_id" | "amount" | "primary_person_name" | "next_action_title" | "next_action_due" | "deal_status" | "deal_closed_at" | "lost_reason">;
-type Counts = Record<"open" | "won" | "lost", number>;
 
 export function Kanban({ pipelineId }: { pipelineId: string }) {
   const router = useRouter();
   const qc = useQueryClient();
-  const params = useSearchParams();
   const { pipelines, openCompany, openCreate, prefetchCompany } = useCrm();
-  const statut = params.get("statut");
-  const dealStatus: "open" | "won" | "lost" = statut === "won" || statut === "lost" ? statut : "open";
+  // Pipelines = opportunités ouvertes ; les ventes gagnées ou perdues sont dans Ventes
+  const dealStatus = "open" as const;
   const pipeline = pipelines.find((p) => p.id === pipelineId);
   const key = ["pipeline-cards", pipelineId, dealStatus];
   const { data: cards = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: key,
     queryFn: ({ signal }) => apiGet<Card[]>(`/api/pipelines/${pipelineId}/cards?statut=${dealStatus}`, signal),
-    enabled: !!pipeline,
-  });
-  const counts = useQuery({
-    queryKey: ["pipeline-cards", pipelineId, "counts"],
-    queryFn: ({ signal }) => apiGet<Counts>(`/api/pipelines/${pipelineId}/cards?compter=1`, signal),
     enabled: !!pipeline,
   });
   const [manage, setManage] = useState(false);
@@ -96,16 +89,9 @@ export function Kanban({ pipelineId }: { pipelineId: string }) {
           ))}
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Select
-            value={dealStatus}
-            onChange={(e) => window.history.pushState(null, "", `/pipelines/${pipeline.id}${e.target.value === "open" ? "" : `?statut=${e.target.value}`}`)}
-            className="w-auto"
-            aria-label="Statut commercial"
-          >
-            <option value="open">Opportunités ouvertes{counts.data ? ` (${counts.data.open})` : ""}</option>
-            <option value="won">Gagnées{counts.data ? ` (${counts.data.won})` : ""}</option>
-            <option value="lost">Perdues{counts.data ? ` (${counts.data.lost})` : ""}</option>
-          </Select>
+          <Link href="/ventes" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line px-3 text-sm font-semibold hover:bg-surface" data-ventes-link>
+            <Trophy size={14} /> Ventes gagnées et perdues
+          </Link>
           {firstStage && <Button onClick={() => openCreate({ stageId: firstStage.id })}><Plus size={14} /> Nouvelle fiche</Button>}
           <Button onClick={() => setAddExisting(true)}><Search size={14} /> Fiche existante</Button>
           <Button variant="ghost" onClick={() => setManage(true)}><Settings2 size={14} /> Étapes</Button>
@@ -130,7 +116,6 @@ export function Kanban({ pipelineId }: { pipelineId: string }) {
           })}
         </div>
       </DndContext>
-      {dealStatus !== "open" && <p className="text-xs text-muted">Les fiches gagnées ou perdues restent rattachées à leur dernière étape. Rouvrez-les (menu de la carte ou fiche) pour les déplacer : elles reprennent cette étape.</p>}
 
       <Modal open={manage} onClose={() => setManage(false)} title={`Pipeline « ${pipeline.name} »`} wide>
         <StageManager pipeline={pipeline} pipelines={pipelines} onDone={() => { setManage(false); router.refresh(); }} />
@@ -174,8 +159,6 @@ function KCard({ card: c, pipelines, onOpen, onHover, onMove, disabled, onClosed
         {c.primary_person_name && <p className="truncate text-xs text-muted">{c.primary_person_name}</p>}
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
           {c.amount != null && <Badge tone="ink">{formatAmount(c.amount)}</Badge>}
-          {c.deal_status === "won" && <Badge tone="success">Gagné{c.deal_closed_at ? ` · ${closedOnLabel(c.deal_closed_at)}` : ""}</Badge>}
-          {c.deal_status === "lost" && <Badge tone="danger" title={c.lost_reason ?? undefined}>Perdu{c.lost_reason ? ` · ${c.lost_reason}` : ""}</Badge>}
           {c.deal_status === "open" && c.next_action_title && (
             <span className={cn("truncate text-xs", late ? "font-semibold text-danger" : "text-muted")}>
               {c.next_action_title} · {relativeDay(c.next_action_due)}
