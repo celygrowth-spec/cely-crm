@@ -8,15 +8,17 @@ import type { TriggerStage } from "./diagnostic-rules";
 
 const FIRE_URL = /^https:\/\/api\.anthropic\.com\/v1\/claude_code\/routines\/trig_[A-Za-z0-9]+\/fire$/;
 
-export function routineConfig() {
-  const url = process.env.DIAGNOSTIC_ROUTINE_URL?.trim();
-  const token = process.env.DIAGNOSTIC_ROUTINE_TOKEN?.trim();
+type RoutineConfig = { url: string; token: string };
+
+/** Adresse et jeton d'une tâche Claude ; « ONBOARDING » pour celle des projets. */
+export function routineConfig(prefix: "DIAGNOSTIC" | "ONBOARDING" = "DIAGNOSTIC"): RoutineConfig | null {
+  const url = process.env[`${prefix}_ROUTINE_URL`]?.trim();
+  const token = process.env[`${prefix}_ROUTINE_TOKEN`]?.trim();
   return url && token && FIRE_URL.test(url) ? { url, token } : null;
 }
 
 /** Démarre une session de la tâche avec l'identifiant du dossier pour seul texte. */
-export async function fireRoutine(dossierId: string, fetcher: typeof fetch = fetch): Promise<string | null> {
-  const cfg = routineConfig();
+export async function fireRoutine(dossierId: string, fetcher: typeof fetch = fetch, cfg: RoutineConfig | null = routineConfig()): Promise<string | null> {
   if (!cfg) throw new CrmError("Déclenchement automatique non configuré : utilisez le lien vers Claude.");
   let res: Response;
   try {

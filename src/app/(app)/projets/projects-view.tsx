@@ -8,8 +8,9 @@ import { Badge, Button, EmptyState, PageHeader } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import { PROJECT_STATUS_LABELS, PROJECT_STATUS_TONES, type Project } from "@/lib/projects/types";
 import { CreateProjectModal } from "@/components/projects/create-project";
+import { ONBOARDING_STATUS_LABELS, ONBOARDING_STATUS_TONES, type OnboardingStatus } from "@/lib/projects/onboarding-rules";
 
-export function ProjectsView({ projects, archived, openCreate, company }: { projects: Project[]; archived: boolean; openCreate: boolean; company?: { id: string; name: string } }) {
+export function ProjectsView({ projects, onboarding = {}, archived, openCreate, company }: { projects: Project[]; onboarding?: Record<string, OnboardingStatus>; archived: boolean; openCreate: boolean; company?: { id: string; name: string } }) {
   const router = useRouter();
   const [creating, setCreating] = useState(openCreate);
   return (
@@ -52,7 +53,12 @@ export function ProjectsView({ projects, archived, openCreate, company }: { proj
                     {p.blocked_reason && <span className="mt-0.5 flex items-center gap-1 text-xs text-warning"><AlertTriangle size={12} /> {p.blocked_reason}</span>}
                   </td>
                   <td className="px-3 py-2.5">{p.company_name}</td>
-                  <td className="px-3 py-2.5"><Badge tone={PROJECT_STATUS_TONES[p.status]}>{PROJECT_STATUS_LABELS[p.status]}</Badge></td>
+                  <td className="px-3 py-2.5">
+                    <span className="flex flex-wrap gap-1">
+                      <Badge tone={PROJECT_STATUS_TONES[p.status]}>{PROJECT_STATUS_LABELS[p.status]}</Badge>
+                      {onboarding[p.id] && p.status === "a_preparer" && <Badge tone={ONBOARDING_STATUS_TONES[onboarding[p.id]]}>{ONBOARDING_STATUS_LABELS[onboarding[p.id]]}</Badge>}
+                    </span>
+                  </td>
                   <td className="px-3 py-2.5 text-muted">{p.current_phase_name ?? "—"}</td>
                   <td className="px-3 py-2.5 text-muted">{p.next_meeting_at ? formatDate(p.next_meeting_at) : "—"}</td>
                   <td className="px-3 py-2.5 text-muted tabular-nums">{p.open_client_tasks ?? 0}</td>

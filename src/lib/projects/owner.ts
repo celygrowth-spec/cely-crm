@@ -2,6 +2,7 @@ import "server-only";
 // Lectures d'administration du module Projets (session du propriétaire, sous RLS).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CrmError, friendlyError } from "@/lib/crm/service";
+import type { OnboardingStatus } from "./onboarding-rules";
 import type { AdminMeeting, AdminTask, Member, Milestone, Phase, PortalAccess, Project, TaskComment } from "./types";
 
 function check<T>(res: { data: T; error: { message: string; code?: string } | null }): T {
@@ -14,6 +15,12 @@ export async function listProjects(sb: SupabaseClient, opts: { archived?: boolea
   if (opts.companyId) q = q.eq("company_id", opts.companyId);
   else q = opts.archived ? q.eq("status", "archive") : q.neq("status", "archive");
   return check(await q.order("updated_at", { ascending: false }).limit(300)) as Project[];
+}
+
+/** État de préparation des projets nés d'une vente (« Gagné »), par projet. */
+export async function onboardingStatuses(sb: SupabaseClient): Promise<Record<string, OnboardingStatus>> {
+  const rows = check(await sb.from("project_onboarding_status").select("project_id, status").limit(1000)) as { project_id: string; status: OnboardingStatus }[];
+  return Object.fromEntries(rows.map((r) => [r.project_id, r.status]));
 }
 
 export async function getProject(sb: SupabaseClient, id: string): Promise<Project | null> {

@@ -1,15 +1,14 @@
 "use client";
 
-// Dans un projet issu d'une vente : l'onboarding se fait ici. Même état que la carte Ventes (un seul état partagé),
-// éléments à compléter avec le bon écran, slides d'onboarding confiées à Claude quand tout est prêt.
+// Dans un projet issu d'une vente : suivi de la vente (même état que la carte Ventes). Le détail de la
+// préparation, les points à compléter et les slides d'onboarding sont dans « Préparer l'onboarding » (onglet Général).
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Check, Circle, ExternalLink, Loader2, RotateCcw, Sparkles } from "lucide-react";
+import { Loader2, RotateCcw } from "lucide-react";
 import { retryPrepAction, setSaleStageAction } from "@/app/sales-actions";
 import { attempt } from "@/lib/client/query";
-import { claudeLink } from "@/lib/crm/diagnostic-rules";
-import { STAGES, STAGE_LABELS, missingItems, onboardingPrompt, type SaleRow, type SaleStage } from "@/lib/sales/rules";
+import { STAGES, STAGE_LABELS, missingItems, type SaleRow, type SaleStage } from "@/lib/sales/rules";
 import { Button, cn } from "@/components/ui";
 import { useSaleSync, useSale } from "./win-sale";
 
@@ -56,28 +55,16 @@ function Panel({ r, projectId }: { r: SaleRow; projectId: string }) {
       ) : r.prep_state === "failed" ? (
         <p className="mt-2 text-sm text-danger">Préparation interrompue{r.prep_error ? ` : ${r.prep_error}` : ""}. La vente et le projet sont enregistrés.</p>
       ) : (
-        <ul className="mt-2 grid gap-1 sm:grid-cols-2" data-prep-items>
-          {items.map((i) => (
-            <li key={i.key} className="flex items-start gap-1.5 text-sm">
-              {i.done ? <Check size={14} className="mt-0.5 shrink-0 text-success" /> : <Circle size={14} className={cn("mt-0.5 shrink-0", i.required ? "text-warning" : "text-muted")} />}
-              <span className={cn(i.done && "text-muted")}>
-                {i.label}{!i.required && !i.done && <span className="text-muted"> (facultatif)</span>}
-                {!i.done && i.href && <Link href={i.href} className="ml-1 font-semibold text-violet-strong hover:underline">Compléter</Link>}
-                {!i.done && i.hint && <span className="block text-xs text-muted">{i.hint}</span>}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <p className="mt-2 text-sm" data-prep-items>
+          {missing.length
+            ? <>{missing.length === 1 ? "1 point bloque" : `${missing.length} points bloquent`} le démarrage : <Link href={`/projets/${projectId}`} className="font-semibold text-violet-strong hover:underline">Préparer l&apos;onboarding</Link></>
+            : <>Prêt à démarrer · <Link href={`/projets/${projectId}`} className="font-semibold text-violet-strong hover:underline">Préparer l&apos;onboarding</Link></>}
+          {items.length > 0 && <span className="text-muted"> ({items.filter((i) => i.done).length}/{items.length} points traités)</span>}
+        </p>
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {r.stage === "devis_contrat" && <Button size="sm" variant="primary" disabled={busy} onClick={() => void stage("onboarding")}>Documents validés : passer en Onboarding</Button>}
-        {r.stage === "onboarding" && !preparing && missing.length === 0 && r.prep_state === "ready" && (
-          <a href={claudeLink(onboardingPrompt(projectId))} target="_blank" rel="noreferrer noopener" className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-ink px-3 text-xs font-semibold text-white hover:bg-violet-strong" data-onboarding-slides>
-            <Sparkles size={13} /> Générer les slides d&apos;onboarding <ExternalLink size={11} />
-          </a>
-        )}
-        {r.stage === "onboarding" && missing.length > 0 && !preparing && <span className="text-xs font-semibold text-warning">{missing.length} élément{missing.length > 1 ? "s" : ""} à compléter avant les slides</span>}
         {r.stage !== "en_mission" && <Button size="sm" disabled={busy} onClick={() => void stage("en_mission")}>Démarrer la mission</Button>}
         {r.stage === "en_mission" && <Button size="sm" disabled={busy} onClick={() => void stage("termine")}>Terminer la mission</Button>}
         {!preparing && (

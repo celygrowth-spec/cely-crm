@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireOwner } from "@/lib/auth";
 import { getProject } from "@/lib/projects/owner";
+import { OnboardingPanel } from "@/components/projects/onboarding-panel";
 import { ProjectGeneral } from "./general";
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
@@ -8,5 +9,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const { supabase } = await requireOwner();
   const p = await getProject(supabase, id);
   if (!p) notFound();
-  return <ProjectGeneral key={p.updated_at} project={p} />;
+  return (
+    <>
+      <OnboardingPanel projectId={p.id} />
+      <ProjectGeneral key={p.updated_at} project={p} />
+    </>
+  );
 }

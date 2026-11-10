@@ -6,6 +6,7 @@ import { z } from "zod";
 import { CrmError, friendlyError } from "@/lib/crm/service";
 import { centsToDb } from "@/lib/finance/money";
 import type { CallSummary } from "@/lib/fireflies/types";
+import * as onboarding from "@/lib/projects/onboarding";
 import type { Prep, PrepItem, SaleRow, SaleStage } from "./rules";
 
 const uuid = z.uuid("Identifiant invalide");
@@ -164,6 +165,14 @@ export async function prepareSale(sb: SupabaseClient, saleId: string): Promise<v
       const note = lines.join("\n").slice(0, 10000);
       const up = await sb.from("projects").update({ internal_note: note }).eq("id", p.id);
       if (up.error) throw new CrmError(friendlyError(up.error));
+    }
+    if (p) {
+      // préparation détaillée du projet (points à compléter, sources, analyse par Claude) : elle tient aussi
+      // à jour sales.prep et sales.prep_state, pour que Ventes et Projets affichent le même état
+      await rpc(sb, "onboarding_ensure", { p_project: p.id });
+      await onboarding.prepare(sb, p.id);
+      await onboarding.requestAnalysis(sb, p.id);
+      return;
     }
     const missing = items.filter((i) => i.required && !i.done).length;
     await rpc(sb, "sale_prep_save", { p_sale: id, p_state: missing ? "incomplete" : "ready", p_prep: prep, p_error: null });

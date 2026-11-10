@@ -72,6 +72,10 @@ en voyant ce qui est déjà enregistré.
 Limite actuelle : le contenu des fichiers (PDF de la proposition) n'est pas lu par la préparation automatique ; il
 est référencé, et Claude le consulte lors de la génération des slides.
 
+Depuis `20261114000100_projet_onboarding.sql`, la liste des éléments vient de la préparation détaillée du projet
+(bloc « Préparer l'onboarding », voir `docs/projets-depuis-gagne.md`) : réponses, demandes au client, analyse et
+slides par Claude.
+
 ## Réouverture
 
 Rouvrir une vente gagnée demande une décision explicite si un projet ou un revenu est lié : ils restent liés
