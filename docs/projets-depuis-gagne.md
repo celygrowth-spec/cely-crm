@@ -1,17 +1,18 @@
 # Projet préparé automatiquement après « Gagné »
 
-## Ce qui se passe quand je clique sur « Gagné »
+## Ce qui se passe quand je marque une vente gagnée
 
-1. Depuis la fiche (bouton **Gagné**) ou le Kanban (menu de la carte › **Marquer comme gagné…**), je confirme la vente.
-2. Le CRM enregistre la vente (`deal_closings` : un identifiant stable par vente) et crée le projet client,
-   visible dans **Projets**. Le projet n'est pas publié : le client ne voit rien.
-3. La préparation démarre juste après (fiche, contacts, documents, appels Fireflies, diagnostic).
-4. La fiche affiche **Ouvrir le projet** et l'état : *Préparation en cours*, *À compléter* ou *Prêt à démarrer*.
+« Marquer comme gagné » (fiche, Kanban ou Ventes, voir `docs/ventes.md`) enregistre la vente, une par fiche,
+et crée ou lie le projet client, en une seule transaction rejouable sans doublon. Dès que la vente porte un
+projet, sa **préparation** existe (`project_onboarding`, déclencheur sur `sales`). Elle démarre en arrière-plan
+(`prepareSale`, puis `onboarding_prepare`) et tient à jour l'état de la vente (`sales.prep`, `sales.prep_state`) :
+la carte Ventes et le projet affichent le même nombre de points à compléter.
 
-Un double clic, une nouvelle tentative ou un rechargement retrouvent la même vente et le même projet.
-Rouvrir la fiche puis la regagner reprend la même vente tant que son projet n'est ni terminé ni archivé ;
-après un projet terminé, une nouvelle vente crée un second projet. Les autres projets du client ne sont pas touchés.
-Une fiche gagnée avant cette fonction affiche **Créer le projet de cette vente**.
+Dans le projet, l'onglet **Général** commence par le bloc **Préparer l'onboarding**. Le bandeau de suivi de
+la vente (Devis / Contrat › Onboarding › En mission) reste en haut de tous les onglets et renvoie vers ce bloc.
+
+Un projet lié à une vente plus ancienne reçoit sa préparation à la première ouverture. Un projet créé à la main,
+sans vente, n'en a pas.
 
 Si la préparation échoue, la vente et le projet restent enregistrés : le projet explique l'erreur et propose
 **Relancer la préparation**.
@@ -77,4 +78,4 @@ Sans ces deux valeurs, tout fonctionne avec les liens vers Claude.
 
 Préparation, points, sections et versions de slides sont réservés au propriétaire connecté (RLS, aucun droit
 pour `anon`, aucune fonction `portal_*`). Le client ne voit que les demandes que j'ai partagées et la version
-de slides que j'ai partagée. Tests : `tests/db/projet-onboarding.test.ts`.
+de slides que j'ai partagée. Tests : `tests/db/projet-onboarding.test.ts`. Migration : `supabase/migrations/20261114000100_projet_onboarding.sql`.

@@ -95,7 +95,7 @@ function NextStep({ o, run, projectId }: { o: Onboarding; run: Run; projectId: s
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="font-display text-base font-bold">Préparer l&apos;onboarding</h2>
         <Badge tone={ONBOARDING_STATUS_TONES[o.status]}>{o.status === "preparing" && <Spinner />} {ONBOARDING_STATUS_LABELS[o.status]}</Badge>
-        <span className="text-xs text-muted">Vente du {formatDate(o.won_at)} · interne, le client ne voit rien de ce bloc</span>
+        <span className="text-xs text-muted">Vente du {formatDate(o.won_on)} · interne, le client ne voit rien de ce bloc</span>
         <Button size="sm" variant="ghost" className="ml-auto" disabled={busy} onClick={relaunch}><RefreshCw size={13} /> Relancer la préparation</Button>
       </div>
 

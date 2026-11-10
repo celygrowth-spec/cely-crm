@@ -301,12 +301,12 @@ export function registerTools(server: McpServer, client: GetClient) {
       }
       case "waiting_claude":
       case "researching":
-        return "Faites la recherche, enregistrez-la avec save_diagnostic_research, puis enregistrez 10 à 20 questions avec save_diagnostic_questions. Arrêtez-vous ensuite.";
+        return "Lisez d'abord les fichiers de la bibliothèque (get_library_file_url), puis faites toute la recherche avant la moindre question : historique, emails et appels de la fiche, site du prospect page par page, recherche web, LinkedIn, Google Business Profile, Ubersuggest. Enregistrez-la avec save_diagnostic_research, sources comprises. Ensuite seulement, 10 à 20 questions sur ce qui est introuvable en ligne et absent du CRM, avec save_diagnostic_questions. Arrêtez-vous ensuite.";
       case "questions_ready":
         return "Les questions attendent les réponses de l'utilisateur dans le CRM : n'enregistrez rien et arrêtez-vous.";
       case "answers_sent":
       case "generating":
-        return "Les réponses sont envoyées : générez maintenant le PowerPoint et déposez-le (start_diagnostic_version, envoi, confirm_diagnostic_version), même si les données sont limitées ; signalez alors les hypothèses dans les slides. En cas de blocage, signalez-le avec report_diagnostic_failure.";
+        return "Les réponses sont envoyées : relisez la recherche et les réponses, puis générez le PowerPoint selon la structure et la direction artistique des consignes (modèle et charte de la bibliothèque, vérification visuelle de chaque slide), même si les données sont limitées ; les hypothèses sont alors dites comme telles. Déposez-le (start_diagnostic_version, envoi, confirm_diagnostic_version). En cas de blocage, signalez-le avec report_diagnostic_failure.";
       case "version_ready":
         return "La dernière version est reçue : rien à faire tant que l'utilisateur ne demande pas de nouvelle version depuis le CRM.";
       default:

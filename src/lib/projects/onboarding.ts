@@ -1,7 +1,8 @@
 import "server-only";
-// Projet préparé après « Gagné » : partagé par les routes de l'application et le connecteur Claude.
-// Les règles (une vente = un projet, corrections conservées, rien de visible du client sans action
-// explicite) sont appliquées en base (migration 20261112000100_projet_onboarding.sql).
+// Préparation détaillée du projet d'une vente (Ventes › « Marquer comme gagné » crée la vente et le projet) :
+// partagée par les routes de l'application, la préparation de Ventes et le connecteur Claude. Les règles
+// (corrections conservées, rien de visible du client sans action explicite) sont appliquées en base
+// (migration 20261114000100_projet_onboarding.sql).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { CrmError, friendlyError } from "@/lib/crm/service";
@@ -16,21 +17,6 @@ const COMPANY_BUCKET = "company-files";
 function check<T>(res: { data: T; error: { message: string; code?: string } | null }): T {
   if (res.error) throw new CrmError(friendlyError(res.error));
   return res.data;
-}
-
-// Gagné ---------------------------------------------------------------------------------------
-
-export type WinResult = { closing_id: string; project_id: string; created: boolean };
-
-/** Enregistre la vente et crée (ou retrouve) son projet. La préparation est lancée ensuite, à part. */
-export const winDeal = (sb: SupabaseClient, companyId: string) => rpc<WinResult>(sb, "project_win_deal", { p_company: idv(companyId) });
-
-/** Vente active d'une fiche et son projet, pour le bouton « Ouvrir le projet ». */
-export async function activeClosing(sb: SupabaseClient, companyId: string) {
-  const c = check(await sb.from("deal_closings").select("id").eq("company_id", idv(companyId)).is("reopened_at", null).maybeSingle()) as { id: string } | null;
-  if (!c) return null;
-  const s = check(await sb.from("project_onboarding_status").select("project_id, status").eq("closing_id", c.id).maybeSingle()) as { project_id: string; status: string } | null;
-  return s ? { closing_id: c.id, project_id: s.project_id, status: s.status } : { closing_id: c.id, project_id: null, status: null };
 }
 
 // Préparation ---------------------------------------------------------------------------------
@@ -64,8 +50,10 @@ export async function requestAnalysis(sb: SupabaseClient, projectId: string, fet
 
 export async function getOnboarding(sb: SupabaseClient, projectId: string): Promise<Onboarding | null> {
   const id = idv(projectId);
+  // projet lié à une vente antérieure à cette fonction : la préparation est créée à la première ouverture
+  if (!(await rpc<boolean>(sb, "onboarding_ensure", { p_project: id }))) return null;
   const st = check(await sb.from("project_onboarding_status").select("*").eq("project_id", id).maybeSingle()) as
-    Pick<Onboarding, "project_id" | "closing_id" | "company_id" | "won_at" | "status" | "open_required" | "open_optional" | "prep_state" | "prep_error" | "analysis_state" | "analysis_error"> | null;
+    Pick<Onboarding, "project_id" | "sale_id" | "company_id" | "won_on" | "status" | "open_required" | "open_optional" | "prep_state" | "prep_error" | "analysis_state" | "analysis_error"> | null;
   if (!st) return null;
   const [o, items, decks, project, docs, people, members] = await Promise.all([
     sb.from("project_onboarding").select("sections, proposal_file_id, diagnostic_id, analysis_requested_at, analysis_session_url").eq("project_id", id).single(),
@@ -203,7 +191,7 @@ export async function shareDeck(sb: SupabaseClient, projectId: string, deckId: s
 
 export async function openForClaude(sb: SupabaseClient, projectId: string) {
   const o = await getOnboarding(sb, projectId);
-  if (!o) throw new CrmError("Ce projet n'a pas de préparation (il n'a pas été créé depuis une vente).");
+  if (!o) throw new CrmError("Ce projet n'est lié à aucune vente : pas de préparation.");
   const sources = await rpc<Record<string, unknown>>(sb, "onboarding_sources", { p_project: o.project_id });
   const library = check(await sb.from("diagnostic_library_files").select("id, display_name, category").eq("status", "ready").in("category", ["brand", "example"])) as unknown[];
   return {

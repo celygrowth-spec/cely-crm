@@ -10,7 +10,7 @@ import { PROJECT_STATUS_LABELS, PROJECT_STATUS_TONES, type Project } from "@/lib
 import { CreateProjectModal } from "@/components/projects/create-project";
 import { ONBOARDING_STATUS_LABELS, ONBOARDING_STATUS_TONES, type OnboardingStatus } from "@/lib/projects/onboarding-rules";
 
-export function ProjectsView({ projects, onboarding = {}, archived, openCreate }: { projects: Project[]; onboarding?: Record<string, OnboardingStatus>; archived: boolean; openCreate: boolean }) {
+export function ProjectsView({ projects, onboarding = {}, archived, openCreate, company }: { projects: Project[]; onboarding?: Record<string, OnboardingStatus>; archived: boolean; openCreate: boolean; company?: { id: string; name: string } }) {
   const router = useRouter();
   const [creating, setCreating] = useState(openCreate);
   return (
@@ -69,7 +69,7 @@ export function ProjectsView({ projects, onboarding = {}, archived, openCreate }
           </table>
         </div>
       )}
-      <CreateProjectModal open={creating} onClose={() => setCreating(false)} />
+      <CreateProjectModal open={creating} onClose={() => setCreating(false)} company={company} />
     </div>
   );
 }

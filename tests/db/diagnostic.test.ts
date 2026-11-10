@@ -183,7 +183,7 @@ describe("bibliothèque", () => {
   test("le prompt par défaut existe, Claude le lit sans pouvoir toucher aux fichiers", async () => {
     await db.query(`insert into diagnostic_library_files (display_name, mime_type, size_bytes, storage_path, status) values ('Exemple.pdf', 'application/pdf', 1, 'e.pdf', 'ready')`);
     await db.as("claude");
-    expect((await db.one<{ instructions: string }>(`select instructions from diagnostic_settings`)).instructions).toContain("10 à 20 questions");
+    expect((await db.one<{ instructions: string }>(`select instructions from diagnostic_settings`)).instructions).toContain("10 À 20");
     expect(await db.one(`select count(*)::int n from diagnostic_library_files`)).toEqual({ n: 1 });
     await expect(db.query(`insert into diagnostic_library_files (display_name, mime_type, size_bytes, storage_path) values ('x', 'application/pdf', 1, 'x.pdf')`)).rejects.toThrow();
     expect((await db.query(`update diagnostic_library_files set display_name = 'y' returning id`)).rows).toEqual([]);
@@ -306,6 +306,21 @@ describe("nouvelles versions", () => {
     await db.as("owner");
     expect(await db.rpc("diagnostic_claim_trigger", { p_id: dossier, p_stage: "revision" })).toBe(true);
     expect(await db.one(`select status, last_error from diagnostics`)).toEqual({ status: "revision_requested", last_error: null });
+  });
+});
+
+describe("prompt", () => {
+  test("le propriétaire remplace le prompt, qui désigne sa ligne (exigence de Supabase)", async () => {
+    await db.rpc("diagnostic_set_instructions", { p_text: "Nouveau prompt" });
+    expect(await db.one(`select instructions from diagnostic_settings`)).toEqual({ instructions: "Nouveau prompt" });
+    const src = await db.one<{ prosrc: string }>(`select prosrc from pg_proc where proname = 'diagnostic_set_instructions'`);
+    expect(src.prosrc).toMatch(/where id/);
+  });
+
+  test("le prompt installé exige la recherche avant les questions et la direction artistique", async () => {
+    const { instructions } = await db.one<{ instructions: string }>(`select instructions from diagnostic_settings`);
+    expect(instructions).toContain("OBLIGATOIRE AVANT LA MOINDRE QUESTION");
+    expect(instructions).toContain("#8B5BFF");
   });
 });
 

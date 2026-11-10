@@ -1,29 +1,18 @@
--- Projets : « Gagné » crée et prépare le projet client. Migration additive.
---   - deal_closings : une vente (identifiant stable). Un double clic, une relance ou un rechargement
---     retrouvent la même vente et le même projet ; rouvrir puis regagner reprend la vente tant que son
---     projet n'est ni terminé ni archivé. Les autres projets du client restent distincts.
+-- Projets : préparation détaillée du projet né d'une vente (Ventes, sale_confirm). Migration additive.
+--   - La vente (public.sales, une par fiche) reste la référence stable : elle porte le projet. Ce fichier ne
+--     crée ni vente ni projet ; il prépare le projet que la vente a créé ou lié.
 --   - project_onboarding : préparation du projet (sources retenues, sections préremplies, état).
 --   - project_onboarding_items : ce qui manque, avec la réponse (moi ou le client via le portail).
 --   - project_onboarding_decks : versions des slides d'onboarding (fichiers internes du projet).
+--   - La préparation tient à jour sales.prep et sales.prep_state : Ventes et Projets lisent le même état.
 -- Rien de tout cela n'est lisible par le portail : aucune fonction portal_* n'y accède, anon n'a aucun droit.
 
 -- ---------------------------------------------------------------------------
 -- Tables
 -- ---------------------------------------------------------------------------
-create table public.deal_closings (
-  id uuid primary key default gen_random_uuid(),
-  company_id uuid not null references public.companies (id) on delete restrict,
-  won_at timestamptz not null default now(),
-  -- fiche rouverte après la vente : la vente n'est plus active
-  reopened_at timestamptz,
-  created_at timestamptz not null default now()
-);
-create unique index deal_closings_one_active on public.deal_closings (company_id) where reopened_at is null;
-create index deal_closings_company_idx on public.deal_closings (company_id, won_at desc);
-
 create table public.project_onboarding (
   project_id uuid primary key references public.projects (id) on delete cascade,
-  closing_id uuid not null unique references public.deal_closings (id) on delete restrict,
+  sale_id uuid references public.sales (id) on delete set null,
   -- pending : à préparer (ou en cours) ; done : préparé ; failed : erreur, à relancer
   prep_state text not null default 'pending' check (prep_state in ('pending', 'done', 'failed')),
   prep_error text check (prep_error is null or char_length(prep_error) <= 2000),
@@ -92,30 +81,19 @@ create table public.project_onboarding_decks (
 do $$
 declare t text;
 begin
-  foreach t in array array['deal_closings', 'project_onboarding', 'project_onboarding_items', 'project_onboarding_decks'] loop
+  foreach t in array array['project_onboarding', 'project_onboarding_items', 'project_onboarding_decks'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('create policy owner_all on public.%I for all to authenticated using ((select public.is_app_owner())) with check ((select public.is_app_owner()))', t);
     execute format('revoke all on public.%I from anon', t);
   end loop;
 end $$;
 
--- Rouvrir une fiche gagnée : la vente n'est plus active (quel que soit le chemin utilisé).
-create or replace function public.tg_deal_closing_reopen()
-returns trigger language plpgsql set search_path = '' as $$
-begin
-  if old.deal_status = 'won' and new.deal_status <> 'won' then
-    update public.deal_closings set reopened_at = now() where company_id = new.id and reopened_at is null;
-  end if;
-  return new;
-end; $$;
-create trigger deal_closing_reopen after update of deal_status on public.companies
-  for each row execute function public.tg_deal_closing_reopen();
 
 -- ---------------------------------------------------------------------------
 -- État affiché : Préparation en cours / À compléter / Prêt à démarrer
 -- ---------------------------------------------------------------------------
 create or replace view public.project_onboarding_status with (security_invoker = true) as
-  select o.project_id, o.closing_id, c.company_id, c.won_at, o.prep_state, o.prep_error, o.analysis_state, o.analysis_error,
+  select o.project_id, o.sale_id, p.company_id, coalesce(s.signed_on, s.closed_on, (p.created_at at time zone 'Europe/Paris')::date) as won_on, o.prep_state, o.prep_error, o.analysis_state, o.analysis_error,
          (select count(*) from public.project_onboarding_items i where i.project_id = o.project_id and i.status = 'open' and i.required)::int as open_required,
          (select count(*) from public.project_onboarding_items i where i.project_id = o.project_id and i.status = 'open' and not i.required)::int as open_optional,
          case
@@ -124,67 +102,38 @@ create or replace view public.project_onboarding_status with (security_invoker =
            else 'ready'
          end as status
     from public.project_onboarding o
-    join public.deal_closings c on c.id = o.closing_id;
+    join public.projects p on p.id = o.project_id
+    left join public.sales s on s.id = o.sale_id;
 revoke all on public.project_onboarding_status from anon;
 grant select on public.project_onboarding_status to authenticated;
 
 -- ---------------------------------------------------------------------------
--- Gagné → vente → projet (une seule transaction ; la préparation vient ensuite)
+-- La vente porte le projet : la préparation existe dès que le projet est lié
 -- ---------------------------------------------------------------------------
-create or replace function public.project_win_deal(p_company uuid)
-returns jsonb
-language plpgsql
-set search_path = ''
-as $$
-declare
-  c public.companies;
-  v_closing public.deal_closings;
-  v_project uuid;
-  v_name text;
-  v_people uuid[];
-  v_created boolean := false;
+create or replace function public.tg_sales_onboarding()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if new.project_id is not null then
+    insert into public.project_onboarding (project_id, sale_id) values (new.project_id, new.id)
+    on conflict (project_id) do update set sale_id = excluded.sale_id where public.project_onboarding.sale_id is null;
+  end if;
+  return null;
+end; $$;
+create trigger sales_onboarding after insert or update of project_id on public.sales
+  for each row execute function public.tg_sales_onboarding();
+
+-- Vente plus ancienne que cette migration : la préparation est créée à la première ouverture du projet.
+create or replace function public.onboarding_ensure(p_project uuid)
+returns boolean language plpgsql set search_path = '' as $$
+declare v_sale uuid;
 begin
   perform public.assert_owner();
-  select * into c from public.companies where id = p_company and merged_into_id is null for update;
-  if not found then raise exception 'Fiche introuvable' using errcode = 'P0002'; end if;
-  if c.deal_status <> 'won' then
-    perform public.set_deal_status(p_company, 'won');
-  end if;
-
-  select * into v_closing from public.deal_closings where company_id = p_company and reopened_at is null;
-  if not found then
-    -- Fiche rouverte puis regagnée : même vente tant que son projet est actif.
-    select d.* into v_closing from public.deal_closings d
-      join public.project_onboarding o on o.closing_id = d.id
-      join public.projects p on p.id = o.project_id
-     where d.company_id = p_company and p.status not in ('termine', 'archive')
-     order by d.won_at desc limit 1;
-    if found then
-      update public.deal_closings set reopened_at = null where id = v_closing.id;
-    else
-      insert into public.deal_closings (company_id, won_at)
-      values (p_company, coalesce(case when c.deal_status = 'won' then c.deal_closed_at end, now()))
-      returning * into v_closing;
-    end if;
-  end if;
-
-  select project_id into v_project from public.project_onboarding where closing_id = v_closing.id;
-  if v_project is null then
-    v_name := left(btrim(c.name), 140);
-    if exists (select 1 from public.projects where company_id = p_company and name = v_name) then
-      v_name := v_name || ' · ' || to_char(v_closing.won_at, 'MM/YYYY');
-    end if;
-    select coalesce(array_agg(id order by created_at), '{}') into v_people from public.people where company_id = p_company and is_primary;
-    if cardinality(v_people) = 0 then
-      select coalesce(array_agg(id), '{}') into v_people from (select id from public.people where company_id = p_company order by created_at limit 1) x;
-    end if;
-    v_project := public.project_create(jsonb_build_object('company_id', p_company, 'name', v_name, 'status', 'a_preparer'), v_people);
-    insert into public.project_onboarding (project_id, closing_id) values (v_project, v_closing.id);
-    v_created := true;
-  end if;
-  return jsonb_build_object('closing_id', v_closing.id, 'project_id', v_project, 'created', v_created);
-end;
-$$;
+  if exists (select 1 from public.project_onboarding where project_id = p_project) then return true; end if;
+  select id into v_sale from public.sales where project_id = p_project;
+  if v_sale is null then return false; end if;
+  insert into public.project_onboarding (project_id, sale_id) values (p_project, v_sale) on conflict (project_id) do nothing;
+  return true;
+end; $$;
 
 -- ---------------------------------------------------------------------------
 -- Préparation à partir des sources lisibles par le CRM
@@ -224,7 +173,7 @@ declare
   o public.project_onboarding;
   p public.projects;
   c public.companies;
-  d public.deal_closings;
+  v_won date;
   v_sections jsonb;
   v_items jsonb := '[]';
   v_keys text[] := '{}';
@@ -248,9 +197,9 @@ declare
 begin
   perform public.assert_owner();
   select * into o from public.project_onboarding where project_id = p_project for update;
-  if not found then raise exception 'Ce projet n''a pas de préparation (il n''a pas été créé depuis une vente)' using errcode = 'P0002'; end if;
+  if not found then raise exception 'Ce projet n''est lié à aucune vente : pas de préparation' using errcode = 'P0002'; end if;
   select * into p from public.projects where id = p_project;
-  select * into d from public.deal_closings where id = o.closing_id;
+  select coalesce(sa.signed_on, sa.closed_on) into v_won from public.sales sa where sa.id = o.sale_id;
   select * into c from public.companies where id = p.company_id;
   v_sections := o.sections;
 
@@ -280,7 +229,7 @@ begin
 
   -- Résumé de la mission (repris de la fiche)
   v_sections := public.onboarding_put_section(v_sections, 'mission', jsonb_build_array(jsonb_build_object(
-    'text', 'Mission pour ' || c.name || ', signée le ' || to_char(d.won_at at time zone 'Europe/Paris', 'DD/MM/YYYY')
+    'text', 'Mission pour ' || c.name || coalesce(', signée le ' || to_char(v_won, 'DD/MM/YYYY'), '')
             || coalesce(' · montant indiqué sur la fiche : ' || replace(to_char(c.amount, 'FM999G999G990D00'), ',', ' ') || ' €', ''),
     'refs', jsonb_build_array(public.onboarding_ref('company', c.id, 'Fiche CRM')))));
 
@@ -417,6 +366,17 @@ begin
      set sections = v_sections, proposal_file_id = v_proposal, diagnostic_id = v_diag,
          prep_state = 'done', prep_error = null, prep_count = prep_count + 1, prepared_at = now()
    where project_id = p_project;
+  -- Même état pour Ventes : les points de la préparation (les points clos sont marqués faits).
+  update public.sales sa
+     set prep_state = case when exists (select 1 from public.project_onboarding_items i where i.project_id = p_project and i.status = 'open' and i.required)
+                           then 'incomplete' else 'ready' end,
+         prep = jsonb_build_object(
+           'items', coalesce((select jsonb_agg(jsonb_build_object('key', i.key, 'label', i.label, 'done', i.status <> 'open', 'required', i.required,
+                                'href', '/projets/' || p_project, 'hint', i.detail) order by i.required desc, i.priority)
+                                from public.project_onboarding_items i where i.project_id = p_project and i.status <> 'resolved'), '[]'),
+           'sources', jsonb_build_object('propositions', cardinality(v_proposals), 'contracts', cardinality(v_contracts), 'calls', v_calls, 'diagnostic', v_diag is not null)),
+         prep_error = null, prep_at = now()
+   where sa.id = o.sale_id and sa.project_id = p_project;
   return jsonb_build_object('status', (select status from public.project_onboarding_status where project_id = p_project));
 end;
 $$;
@@ -426,6 +386,8 @@ returns void language plpgsql set search_path = '' as $$
 begin
   perform public.assert_owner();
   update public.project_onboarding set prep_state = 'failed', prep_error = left(coalesce(nullif(btrim(p_message), ''), 'Préparation impossible.'), 2000)
+   where project_id = p_project;
+  update public.sales set prep_state = 'failed', prep_error = left(coalesce(nullif(btrim(p_message), ''), 'Préparation impossible.'), 500), prep_at = now()
    where project_id = p_project;
 end; $$;
 
@@ -812,7 +774,7 @@ do $$
 declare f text;
 begin
   foreach f in array array[
-    'project_win_deal(uuid)', 'onboarding_prepare(uuid)', 'onboarding_prep_failed(uuid, text)',
+    'onboarding_ensure(uuid)', 'onboarding_prepare(uuid)', 'onboarding_prep_failed(uuid, text)',
     'onboarding_save_section(uuid, text, jsonb)', 'onboarding_answer(uuid, text, text, uuid)', 'onboarding_share_request(uuid, text, uuid)',
     'onboarding_analysis_claim(uuid)', 'onboarding_analysis_result(uuid, text, text)', 'onboarding_save_analysis(uuid, jsonb, jsonb, date)',
     'onboarding_deck_request(uuid)', 'onboarding_deck_session(uuid, text, text)', 'onboarding_deck_open(uuid)',
@@ -823,7 +785,7 @@ begin
     execute format('revoke all on function public.%s from public, anon', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;
-  foreach f in array array['tg_deal_closing_reopen()', 'tg_onboarding_client_comment()', 'tg_onboarding_client_file()', 'tg_onboarding_client_task()'] loop
+  foreach f in array array['tg_sales_onboarding()', 'tg_onboarding_client_comment()', 'tg_onboarding_client_file()', 'tg_onboarding_client_task()'] loop
     execute format('revoke all on function public.%s from public, anon, authenticated', f);
   end loop;
 end $$;

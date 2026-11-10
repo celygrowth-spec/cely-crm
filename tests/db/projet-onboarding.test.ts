@@ -1,4 +1,4 @@
-// « Gagné » → projet créé une seule fois, préparé depuis les sources, complété, puis slides d'onboarding.
+// Vente gagnée (Ventes › sale_confirm) → projet préparé depuis les sources, complété, puis slides d'onboarding.
 import { beforeEach, describe, expect, test } from "vitest";
 import { createDb, type Db } from "./harness";
 import { SERVER_KEY, login, portal, sha } from "./projets-helpers";
@@ -50,56 +50,54 @@ async function diagnostic(company: string) {
   return id;
 }
 
-const win = (company: string) => db.rpc<{ project_id: string; closing_id: string; created: boolean }>("project_win_deal", { p_company: company });
+const win = (company: string) =>
+  db.rpc<{ project_id: string; sale_id: string }>("sale_confirm", { p_company: company, p_data: JSON.stringify({ revenue: { mode: "plus_tard" } }), p_idempotency_key: null });
 const status = async (project: string) => (await db.one<{ status: string }>(`select status from project_onboarding_status where project_id = $1`, [project])).status;
 const openItems = async (project: string) =>
   (await db.query<{ key: string; required: boolean }>(`select key, required from project_onboarding_items where project_id = $1 and status = 'open' order by priority`, [project])).rows;
 const item = async (project: string, key: string) => db.one<{ id: string; status: string; answered_by: string | null; answer: string | null }>(
   `select id, status, answered_by, answer from project_onboarding_items where project_id = $1 and key = $2`, [project, key]);
 
-describe("Gagné → projet", () => {
-  test("crée la vente et le projet une seule fois, même après double clic, relance ou réouverture", async () => {
+describe("vente gagnée → préparation", () => {
+  test("la vente porte le projet : sa préparation existe aussitôt, et un double clic ne crée rien de plus", async () => {
     const c = await fiche("[TEST] Client Alpha");
     const a = await win(c);
-    expect(a.created).toBe(true);
     const b = await win(c);
-    expect(b).toEqual({ ...a, created: false });
-    expect(await db.one(`select deal_status, deal_closed_at is not null as date from companies where id = $1`, [c])).toEqual({ deal_status: "won", date: true });
-    await db.rpc("set_deal_status", { p_company: c, p_status: "open" });
-    const again = await win(c);
-    expect(again.project_id).toBe(a.project_id);
-    expect(again.closing_id).toBe(a.closing_id);
+    expect(b.project_id).toBe(a.project_id);
     expect(await db.one(`select count(*)::int n from projects where company_id = $1`, [c])).toEqual({ n: 1 });
-    const p = await db.one<{ status: string; member_count: number; company_name: string }>(`select status, member_count, company_name from project_overview where id = $1`, [a.project_id]);
-    expect(p).toEqual({ status: "a_preparer", member_count: 1, company_name: "[TEST] Client Alpha" });
+    expect(await db.one(`select sale_id from project_onboarding where project_id = $1`, [a.project_id])).toEqual({ sale_id: a.sale_id });
     expect(await status(a.project_id)).toBe("preparing");
-  });
-
-  test("une nouvelle vente après un projet terminé crée un second projet distinct", async () => {
-    const c = await fiche("[TEST] Client Beta");
-    const a = await win(c);
-    await db.query(`update projects set status = 'termine' where id = $1`, [a.project_id]);
+    // rouvrir puis regagner : même vente, même projet, même préparation
     await db.rpc("set_deal_status", { p_company: c, p_status: "open" });
-    const b = await win(c);
-    expect(b.created).toBe(true);
-    expect(b.project_id).not.toBe(a.project_id);
-    expect(b.closing_id).not.toBe(a.closing_id);
-    const names = (await db.query<{ name: string }>(`select name from projects where company_id = $1 order by created_at`, [c])).rows.map((r) => r.name);
-    expect(names[0]).toBe("[TEST] Client Beta");
-    expect(names[1]).toMatch(/^\[TEST\] Client Beta · \d\d\/\d{4}$/);
+    expect((await win(c)).project_id).toBe(a.project_id);
+    expect(await db.one(`select count(*)::int n from project_onboarding`)).toEqual({ n: 1 });
   });
 
-  test("une fiche hors pipeline n'est ni gagnée ni dotée d'un projet", async () => {
-    const id = (await db.rpc<{ id: string }>("create_company", { p_company: JSON.stringify({ name: "[TEST] Hors pipeline" }), p_people: "[]", p_force: true })).id;
-    await expect(win(id)).rejects.toThrow(/pipeline/);
-    expect(await db.one(`select count(*)::int n from projects where company_id = $1`, [id])).toEqual({ n: 0 });
+  test("la préparation tient à jour l'état de la vente (Ventes et Projets lisent le même)", async () => {
+    const c = await fiche("[TEST] Client Beta");
+    const { project_id: p, sale_id } = await win(c);
+    await db.rpc("onboarding_prepare", { p_project: p });
+    const s = await db.one<{ prep_state: string; prep: { items: { key: string; done: boolean; required: boolean }[] } }>(`select prep_state, prep from sales where id = $1`, [sale_id]);
+    expect(s.prep_state).toBe("incomplete");
+    expect(s.prep.items.filter((i) => i.required && !i.done).map((i) => i.key)).toEqual(["proposal", "objectives", "scope", "start_date"]);
+  });
+
+  test("un projet créé à la main n'a pas de préparation ; un projet lié à une vente plus ancienne en reçoit une à l'ouverture", async () => {
+    const c = await fiche("[TEST] Client Gamma");
+    const manual = await db.rpc<string>("project_create", { p_data: JSON.stringify({ company_id: c, name: "[TEST] Projet libre" }), p_person_ids: "{}" });
+    expect(await db.rpc("onboarding_ensure", { p_project: manual })).toBe(false);
+    const { project_id: p } = await win(c);
+    await db.exec(`reset role;`);
+    await db.query(`delete from project_onboarding where project_id = $1`, [p]);
+    await db.as("owner");
+    expect(await db.rpc("onboarding_ensure", { p_project: p })).toBe(true);
+    expect(await db.one(`select count(*)::int n from project_onboarding where project_id = $1`, [p])).toEqual({ n: 1 });
   });
 
   test("un inconnu et le portail n'y ont pas accès", async () => {
-    const c = await fiche("[TEST] Client Gamma");
+    const c = await fiche("[TEST] Client Delta");
     const a = await win(c);
     await db.as("stranger");
-    await expect(win(c)).rejects.toThrow();
     expect((await db.query(`select * from project_onboarding`)).rows).toHaveLength(0);
     await db.as("anon");
     await expect(db.query(`select * from project_onboarding_items`)).rejects.toThrow(/permission/);

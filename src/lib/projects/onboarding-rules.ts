@@ -88,8 +88,9 @@ export type Contact = { id: string; name: string; title: string | null; email: s
 export type Onboarding = {
   project_id: string;
   company_id: string;
-  closing_id: string;
-  won_at: string;
+  sale_id: string | null;
+  /** date de signature, sinon de clôture de la vente */
+  won_on: string;
   status: OnboardingStatus;
   open_required: number;
   open_optional: number;

@@ -2,36 +2,24 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { setDealStatusAction } from "@/app/actions";
-import { DEAL_STATUS_LABELS, formatAmount } from "@/lib/format";
+import { formatAmount } from "@/lib/format";
+import { RecordDealClosing } from "./deal-closing";
 import { useCrm } from "./app-shell";
 import { useMoveCompany } from "./use-move-company";
 import type { RecordCtx } from "./company-record";
-import { Badge, Button, Field, Input, Select } from "./ui";
-import { DealProjectLink, WinDealModal } from "./win-deal";
+import { Button, Field, Input, Select } from "./ui";
 
 export function RecordDeal({ ctx }: { ctx: RecordCtx }) {
   const { pipelines } = useCrm();
   const c = ctx.detail.company;
   const [amount, setAmount] = useState(c.amount?.toString() ?? "");
   const [closeDate, setCloseDate] = useState(c.expected_close_date ?? "");
-  const [lostReason, setLostReason] = useState(c.lost_reason ?? "");
-  const [askLost, setAskLost] = useState(false);
-  const [askWin, setAskWin] = useState(false);
   const move = useMoveCompany(ctx);
 
   async function saveDeal() {
     const n = amount.trim() ? Number(amount.replace(/\s/g, "").replace(",", ".")) : null;
     if (n != null && (Number.isNaN(n) || n < 0)) return toast.error("Montant invalide");
     ctx.patch({ amount: n, expected_close_date: closeDate || null });
-  }
-
-  async function setStatus(s: "open" | "lost") {
-    setAskLost(false);
-    ctx.mutate({ deal_status: s, lost_reason: s === "lost" ? lostReason || null : c.lost_reason }, async () => {
-      const res = await setDealStatusAction(c.id, s, s === "lost" ? lostReason : undefined);
-      return res.ok ? { ok: true } : res;
-    });
   }
 
   const dirty = amount !== (c.amount?.toString() ?? "") || closeDate !== (c.expected_close_date ?? "");
@@ -54,35 +42,11 @@ export function RecordDeal({ ctx }: { ctx: RecordCtx }) {
           )}
         </Field>
         {c.pipeline_id && (
-          <Field label="Statut commercial">
-            <div className="flex min-h-9 flex-wrap items-center gap-1.5">
-              <Badge tone={c.deal_status === "won" ? "success" : c.deal_status === "lost" ? "danger" : "violet"}>{DEAL_STATUS_LABELS[c.deal_status]}</Badge>
-              {c.deal_status === "open" ? (
-                <>
-                  <Button size="sm" onClick={() => setAskWin(true)}>Gagné</Button>
-                  <Button size="sm" onClick={() => setAskLost(true)}>Perdu</Button>
-                </>
-              ) : (
-                <>
-                  {c.deal_status === "won" && <DealProjectLink companyId={c.id} />}
-                  <Button size="sm" variant="ghost" onClick={() => setStatus("open")}>Rouvrir</Button>
-                </>
-              )}
-            </div>
+          <Field label="Issue">
+            <div className="flex h-9 items-center"><RecordDealClosing ctx={ctx} /></div>
           </Field>
         )}
       </div>
-      {askLost && (
-        <div className="flex flex-wrap items-end gap-2 rounded-lg bg-surface p-2">
-          <Field label="Motif de perte (facultatif)" className="flex-1">
-            <Input value={lostReason} onChange={(e) => setLostReason(e.target.value)} autoFocus />
-          </Field>
-          <Button size="sm" variant="danger" onClick={() => setStatus("lost")}>Marquer comme perdu</Button>
-          <Button size="sm" variant="ghost" onClick={() => setAskLost(false)}>Annuler</Button>
-        </div>
-      )}
-      <WinDealModal company={askWin ? { id: c.id, name: c.name } : null} onClose={() => setAskWin(false)} />
-      {c.deal_status === "lost" && c.lost_reason && <p className="text-sm text-muted">Motif de perte : {c.lost_reason}</p>}
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
         <Field label="Montant potentiel (€)">
           <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={c.amount ? formatAmount(c.amount) : "—"} />

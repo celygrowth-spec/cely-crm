@@ -2,30 +2,29 @@
 
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiGet, attempt, useSync } from "@/lib/client/query";
 import { toast } from "sonner";
 import { DndContext, PointerSensor, KeyboardSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
-import { AlertCircle, Plus, Search, Settings2 } from "lucide-react";
+import { AlertCircle, Plus, Search, Settings2, Trophy } from "lucide-react";
 import { moveCompanyAction, searchAction } from "@/app/actions";
 import { useCrm } from "@/components/app-shell";
 import { Badge, Button, EmptyState, Input, Modal, Select, Skeleton, cn } from "@/components/ui";
 import type { CompanyOverview, PipelineWithStages, SearchResult } from "@/lib/crm/types";
 import { formatAmount, relativeDay, todayISO } from "@/lib/format";
+import { CardClosingMenu } from "@/components/deal-closing";
 import { NewPipeline } from "../new-pipeline";
 import { StageManager } from "./stage-manager";
-import { WinDealModal } from "@/components/win-deal";
 
-type Card = Pick<CompanyOverview, "id" | "name" | "stage_id" | "amount" | "primary_person_name" | "next_action_title" | "next_action_due">;
+type Card = Pick<CompanyOverview, "id" | "name" | "stage_id" | "amount" | "primary_person_name" | "next_action_title" | "next_action_due" | "deal_status" | "deal_closed_at" | "lost_reason">;
 
 export function Kanban({ pipelineId }: { pipelineId: string }) {
   const router = useRouter();
   const qc = useQueryClient();
-  const params = useSearchParams();
   const { pipelines, openCompany, openCreate, prefetchCompany } = useCrm();
-  const statut = params.get("statut");
-  const dealStatus: "open" | "won" | "lost" = statut === "won" || statut === "lost" ? statut : "open";
+  // Pipelines = opportunités ouvertes ; les ventes gagnées ou perdues sont dans Ventes
+  const dealStatus = "open" as const;
   const pipeline = pipelines.find((p) => p.id === pipelineId);
   const key = ["pipeline-cards", pipelineId, dealStatus];
   const { data: cards = [], isLoading, isError, error, refetch } = useQuery({
@@ -35,7 +34,6 @@ export function Kanban({ pipelineId }: { pipelineId: string }) {
   });
   const [manage, setManage] = useState(false);
   const [addExisting, setAddExisting] = useState(false);
-  const [winning, setWinning] = useState<{ id: string; name: string } | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor));
 
   if (!pipeline) return <EmptyState title="Pipeline introuvable" action={<Link href="/pipelines" className="font-semibold text-violet-strong">Voir les pipelines →</Link>} />;
@@ -62,6 +60,11 @@ export function Kanban({ pipelineId }: { pipelineId: string }) {
     qc.invalidateQueries({ queryKey: ["companies"] });
   }
 
+  /** Clôture ou réouverture depuis une carte : elle quitte cette vue, les autres vues et compteurs se relisent. */
+  function closed(companyId: string) {
+    qc.setQueryData<Card[]>(key, (cs = []) => cs.filter((c) => c.id !== companyId));
+  }
+
   function onDragEnd(e: DragEndEvent) {
     if (e.over) move(String(e.active.id), String(e.over.id));
   }
@@ -86,16 +89,9 @@ export function Kanban({ pipelineId }: { pipelineId: string }) {
           ))}
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Select
-            value={dealStatus}
-            onChange={(e) => window.history.pushState(null, "", `/pipelines/${pipeline.id}${e.target.value === "open" ? "" : `?statut=${e.target.value}`}`)}
-            className="w-auto"
-            aria-label="Statut commercial"
-          >
-            <option value="open">Opportunités ouvertes</option>
-            <option value="won">Gagnées</option>
-            <option value="lost">Perdues</option>
-          </Select>
+          <Link href="/ventes" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line px-3 text-sm font-semibold hover:bg-surface" data-ventes-link>
+            <Trophy size={14} /> Ventes gagnées et perdues
+          </Link>
           {firstStage && <Button onClick={() => openCreate({ stageId: firstStage.id })}><Plus size={14} /> Nouvelle fiche</Button>}
           <Button onClick={() => setAddExisting(true)}><Search size={14} /> Fiche existante</Button>
           <Button variant="ghost" onClick={() => setManage(true)}><Settings2 size={14} /> Étapes</Button>
@@ -113,20 +109,18 @@ export function Kanban({ pipelineId }: { pipelineId: string }) {
               <Column key={s.id} id={s.id} title={s.name} count={col.length} total={total}>
                 {isLoading && [0, 1].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
                 {col.map((c) => (
-                  <KCard key={c.id} card={c} pipelines={pipelines} onOpen={() => openCompany(c.id, { name: c.name })} onHover={() => prefetchCompany(c.id)} onMove={(stageId) => move(c.id, stageId)} onWin={() => setWinning({ id: c.id, name: c.name })} disabled={dealStatus !== "open"} />
+                  <KCard key={c.id} card={c} pipelines={pipelines} onOpen={() => openCompany(c.id, { name: c.name })} onHover={() => prefetchCompany(c.id)} onMove={(stageId) => move(c.id, stageId)} disabled={dealStatus !== "open"} onClosed={() => closed(c.id)} />
                 ))}
               </Column>
             );
           })}
         </div>
       </DndContext>
-      {dealStatus !== "open" && <p className="text-xs text-muted">Les fiches gagnées ou perdues restent rattachées à leur dernière étape. Rouvrez-les depuis la fiche pour les déplacer.</p>}
 
       <Modal open={manage} onClose={() => setManage(false)} title={`Pipeline « ${pipeline.name} »`} wide>
         <StageManager pipeline={pipeline} pipelines={pipelines} onDone={() => { setManage(false); router.refresh(); }} />
       </Modal>
       <AddExisting open={addExisting} onClose={() => setAddExisting(false)} pipeline={pipeline} />
-      <WinDealModal company={winning} onClose={() => setWinning(null)} />
     </div>
   );
 }
@@ -144,9 +138,7 @@ function Column({ id, title, count, total, children }: { id: string; title: stri
   );
 }
 
-const WON = "__gagne__";
-
-function KCard({ card: c, pipelines, onOpen, onHover, onMove, onWin, disabled }: { card: Card; pipelines: PipelineWithStages[]; onOpen: () => void; onHover: () => void; onMove: (stageId: string) => void; onWin: () => void; disabled: boolean }) {
+function KCard({ card: c, pipelines, onOpen, onHover, onMove, disabled, onClosed }: { card: Card; pipelines: PipelineWithStages[]; onOpen: () => void; onHover: () => void; onMove: (stageId: string) => void; disabled: boolean; onClosed: () => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: c.id, disabled });
   const late = c.next_action_due && c.next_action_due < todayISO();
   return (
@@ -155,40 +147,37 @@ function KCard({ card: c, pipelines, onOpen, onHover, onMove, onWin, disabled }:
       style={transform ? { transform: `translate(${transform.x}px, ${transform.y}px)` } : undefined}
       onMouseEnter={onHover}
       className={cn("row-in rounded-lg border border-line bg-white p-2.5 shadow-xs", isDragging && "z-10 shadow-lg ring-2 ring-violet")}
-      {...attributes}
-      {...listeners}
+      {...(disabled ? {} : attributes)}
+      {...(disabled ? {} : listeners)}
     >
-      <button onClick={onOpen} className="block w-full text-left">
+      <div className="flex items-start gap-1">
+      <button onClick={onOpen} className="block min-w-0 flex-1 text-left">
         <p className="flex items-center gap-1.5 font-semibold">
-          {late && <AlertCircle size={14} className="shrink-0 text-danger" aria-label="En retard" />}
+          {late && c.deal_status === "open" && <AlertCircle size={14} className="shrink-0 text-danger" aria-label="En retard" />}
           <span className="truncate">{c.name}</span>
         </p>
         {c.primary_person_name && <p className="truncate text-xs text-muted">{c.primary_person_name}</p>}
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
           {c.amount != null && <Badge tone="ink">{formatAmount(c.amount)}</Badge>}
-          {c.next_action_title && (
+          {c.deal_status === "open" && c.next_action_title && (
             <span className={cn("truncate text-xs", late ? "font-semibold text-danger" : "text-muted")}>
               {c.next_action_title} · {relativeDay(c.next_action_due)}
             </span>
           )}
         </div>
       </button>
+      <CardClosingMenu target={{ id: c.id, name: c.name, deal_status: c.deal_status, amount: c.amount, deal_closed_at: c.deal_closed_at, lost_reason: c.lost_reason }} onChanged={onClosed} />
+      </div>
       {!disabled && (
         <Select
           value=""
-          onChange={(e) => {
-            if (e.target.value === WON) onWin();
-            else if (e.target.value) onMove(e.target.value);
-          }}
+          onChange={(e) => e.target.value && onMove(e.target.value)}
           onPointerDown={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
           className="mt-2 h-7 text-xs text-muted"
           aria-label={`Déplacer ${c.name}`}
         >
-          <option value="">Déplacer ou marquer…</option>
-          <optgroup label="Statut commercial">
-            <option value={WON}>Marquer comme gagné…</option>
-          </optgroup>
+          <option value="">Déplacer vers…</option>
           {pipelines.map((p) => (
             <optgroup key={p.id} label={p.name}>
               {p.stages.filter((s) => s.id !== c.stage_id).map((s) => <option key={s.id} value={s.id}>{p.name} › {s.name}</option>)}
