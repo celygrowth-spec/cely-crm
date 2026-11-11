@@ -5,7 +5,6 @@ import { run } from "@/lib/action";
 import * as p from "@/lib/prospection/service";
 import type { CampaignStatus, Outcome } from "@/lib/prospection/service";
 import type { SequenceStep } from "@/lib/prospection/steps";
-import { todayISO } from "@/lib/format";
 
 export async function createCampaignAction(name: string, templateId: string | null) {
   return run((sb) => p.createCampaignDraft(sb, name, templateId));
@@ -46,11 +45,13 @@ export async function skipStepAction(participantId: string, idempotencyKey: stri
 export async function undoActionAction(actionId: string) {
   return run((sb) => p.undoAction(sb, actionId));
 }
-export async function recordReplyAction(participantId: string, content: string, receivedAt: string | null, personId: string | null) {
-  return run((sb) => p.recordReply(sb, participantId, content, receivedAt, personId));
+export async function recordReplyAction(participantId: string, content: string, receivedAt: string | null, personId: string | null,
+  opts: { outcome?: Exclude<Outcome, "none"> | null; next?: p.NextStep | null; key?: string | null } = {}) {
+  return run((sb) => p.recordReply(sb, participantId, content, receivedAt, personId, opts));
 }
-export async function setOutcomeAction(participantId: string, outcome: Exclude<Outcome, "none">, stageId?: string | null, note?: string | null) {
-  return run((sb) => p.setOutcome(sb, participantId, outcome, stageId, note));
+export async function setOutcomeAction(participantId: string, outcome: Exclude<Outcome, "none">, stageId?: string | null, note?: string | null,
+  next?: p.NextStep | null, key?: string | null) {
+  return run((sb) => p.setOutcome(sb, participantId, outcome, stageId, note, next, key));
 }
 export async function setDoNotContactAction(companyId: string, value: boolean, reason?: string | null) {
   return run((sb) => p.setDoNotContact(sb, companyId, value, reason));
@@ -74,15 +75,9 @@ export async function updateParticipantsAction(
     return { ok, errors };
   });
 }
-export async function getFocusQueueAction(campaignId: string | null) {
-  return run((sb) => p.getFocusQueue(sb, { campaignId, today: todayISO() }));
-}
 export async function saveViewAction(v: { id?: string | null; scope: string; name: string; config: Record<string, unknown> }) {
   return run((sb) => p.saveView(sb, v));
 }
 export async function deleteViewAction(id: string) {
   return run((sb) => p.deleteView(sb, id));
-}
-export async function setPreferenceAction(key: string, value: unknown) {
-  return run((sb) => p.setPreference(sb, key, value));
 }

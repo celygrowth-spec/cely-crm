@@ -17,6 +17,7 @@ import { contextFor, targetPerson } from "@/lib/prospection/workspace";
 import { useCrm } from "../app-shell";
 import { Badge, Button, Field, Input, Select, Spinner, Textarea, cn } from "../ui";
 import { ExecBadge, OutcomeBadge, StepIcon } from "./bits";
+import { NextStepFields, defaultNext, toNextStep, type NextChoice } from "./next-step";
 
 export function ParticipantPanel({
   p, steps, people, drafts, conflicts, onClose,
@@ -24,12 +25,17 @@ export function ParticipantPanel({
   p: ParticipantRow; steps: CampaignStep[]; people: Person[]; drafts: Draft[]; conflicts: Conflict[]; onClose: () => void;
 }) {
   const router = useRouter();
-  const { openCompany, pipelines } = useCrm();
+  const { openCompany } = useCrm();
   const companyPeople = people.filter((x) => x.company_id === p.company_id);
   const person = targetPerson(p, people);
   const [reply, setReply] = useState("");
   const [replyAt, setReplyAt] = useState(nowLocalInput());
-  const [stage, setStage] = useState("");
+  // résultat « Intéressé » / « RDV obtenu » : toujours avec une suite (Q04), enregistré une fois (K06)
+  const [outcome, setOutcome] = useState<"interested" | "meeting" | null>(null);
+  const [suite, setSuite] = useState<NextChoice>(() => defaultNext("interested", p.company.name));
+  const [outcomeKey, setOutcomeKey] = useState(() => crypto.randomUUID());
+  const [replyKey, setReplyKey] = useState(() => crypto.randomUUID());
+  const pickOutcome = (o: "interested" | "meeting") => { setOutcome(o); setSuite(defaultNext(o, p.company.name)); };
   const [busy, setBusy] = useState(false);
   const active = p.status === "a_contacter" || p.status === "en_cours";
 
@@ -104,23 +110,15 @@ export function ParticipantPanel({
                 <Textarea value={reply} onChange={(e) => setReply(e.target.value)} rows={3} placeholder="Coller la réponse reçue…" />
                 <div className="mt-1.5 flex items-center gap-2">
                   <Input type="datetime-local" value={replyAt} onChange={(e) => setReplyAt(e.target.value)} className="h-8 w-52" aria-label="Reçue le" />
-                  <Button size="sm" className="ml-auto" disabled={busy || !reply.trim()} onClick={() => act(() => recordReplyAction(p.id, reply, localInputToISO(replyAt), p.person_id), "Réponse enregistrée : relances de l'entreprise suspendues").then(() => setReply(""))}>
+                  <Button size="sm" className="ml-auto" disabled={busy || !reply.trim()} onClick={() => act(() => recordReplyAction(p.id, reply, localInputToISO(replyAt), p.person_id, { key: replyKey }), "Réponse enregistrée : relances de l'entreprise suspendues").then(() => { setReply(""); setReplyKey(crypto.randomUUID()); })}>
                     Enregistrer la réponse
                   </Button>
                 </div>
               </div>
             )}
             <div className="flex flex-wrap items-center gap-1.5">
-              <Select value={stage} onChange={(e) => setStage(e.target.value)} className="h-8 w-auto max-w-56 text-xs" aria-label="Pipeline et étape">
-                <option value="">Intéressé — sans pipeline</option>
-                {pipelines.map((pl) => (
-                  <optgroup key={pl.id} label={pl.name}>
-                    {pl.stages.map((s) => <option key={s.id} value={s.id}>{pl.name} › {s.name}</option>)}
-                  </optgroup>
-                ))}
-              </Select>
-              <Button size="sm" disabled={busy} onClick={() => act(() => setOutcomeAction(p.id, "interested", stage || null), stage ? "Intéressé : fiche placée dans le pipeline" : "Marqué intéressé")}>Intéressé</Button>
-              <Button size="sm" disabled={busy} onClick={() => act(() => setOutcomeAction(p.id, "meeting"), "Rendez-vous obtenu")}>RDV obtenu</Button>
+              <Button size="sm" variant={outcome === "interested" ? "primary" : "secondary"} disabled={busy} onClick={() => pickOutcome("interested")}>Intéressé…</Button>
+              <Button size="sm" variant={outcome === "meeting" ? "primary" : "secondary"} disabled={busy} onClick={() => pickOutcome("meeting")}>RDV obtenu…</Button>
               <Button size="sm" disabled={busy} onClick={() => { if (confirm("Pas intéressé : la prospection de cette entreprise s'arrête. Continuer ?")) act(() => setOutcomeAction(p.id, "not_interested"), "Prospection arrêtée"); }}>Pas intéressé</Button>
               <Button size="sm" variant="danger" disabled={busy || p.company.do_not_contact} onClick={() => { const r = prompt("Ne plus contacter cette entreprise ? Motif (facultatif) :"); if (r !== null) act(() => setOutcomeAction(p.id, "do_not_contact", null, r), "Marquée « Ne plus contacter »"); }}>
                 <Ban size={12} /> Ne plus contacter
@@ -129,6 +127,18 @@ export function ParticipantPanel({
                 <Button size="sm" variant="ghost" onClick={() => act(() => setDoNotContactAction(p.company_id, false), "« Ne plus contacter » retiré")}>Retirer le blocage</Button>
               )}
             </div>
+            {outcome && (
+              <div className="space-y-2" data-outcome-form>
+                <NextStepFields value={suite} onChange={setSuite} outcome={outcome} />
+                <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => setOutcome(null)}>Annuler</Button>
+                  <Button size="sm" variant="primary" disabled={busy} onClick={() => act(() => setOutcomeAction(p.id, outcome, null, null, toNextStep(suite), outcomeKey),
+                    outcome === "meeting" ? "Rendez-vous obtenu : suite enregistrée" : "Intéressé : suite enregistrée").then(() => { setOutcome(null); setOutcomeKey(crypto.randomUUID()); })}>
+                    Enregistrer le résultat
+                  </Button>
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="flex flex-wrap gap-1.5 border-t border-line pt-3">

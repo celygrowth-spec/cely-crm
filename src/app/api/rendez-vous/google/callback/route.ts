@@ -8,7 +8,7 @@ import { encryptSecret } from "@/lib/appointments/secrets";
 
 export async function GET(req: NextRequest) {
   const { supabase } = await requireAppOwner();
-  const back = new URL("/rendez-vous/agenda-google", req.nextUrl.origin);
+  const back = new URL("/parametres/connecteurs/google-agenda", req.nextUrl.origin);
   const fail = (code: string) => {
     back.searchParams.set("erreur", code);
     const r = NextResponse.redirect(back);

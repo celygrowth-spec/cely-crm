@@ -7,7 +7,7 @@ import { TempsView } from "./temps-view";
 export const dynamic = "force-dynamic";
 
 type SP = Promise<Record<string, string | undefined>>;
-const COLS = "id, company_id, label, started_at, ended_at, source";
+const COLS = "id, company_id, project_id, label, started_at, ended_at, source, corrected_at";
 type Raw = Omit<TimeEntry, "company_name">;
 
 export default async function TempsPage({ searchParams }: { searchParams: SP }) {
@@ -27,8 +27,13 @@ export default async function TempsPage({ searchParams }: { searchParams: SP }) 
   const ids = [...new Set(raw.map((r) => r.company_id))];
   const { data: names } = ids.length ? await supabase.from("companies").select("id, name").in("id", ids) : { data: [] };
   const name = new Map(((names ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
-  const map = (r: Raw): TimeEntry => ({ ...r, company_name: name.get(r.company_id) ?? "Fiche supprimée" });
-  const entries = ((rows.data ?? []) as Raw[]).map(map).filter((e) => !e.ended_at || Date.parse(e.ended_at) > period.start);
+  const pids = [...new Set(raw.map((r) => r.project_id).filter((x): x is string => !!x))];
+  const { data: pnames } = pids.length ? await supabase.from("projects").select("id, name").in("id", pids) : { data: [] };
+  const pname = new Map(((pnames ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
+  const map = (r: Raw): TimeEntry => ({ ...r, company_name: name.get(r.company_id) ?? "Fiche supprimée", project_name: r.project_id ? pname.get(r.project_id) ?? null : null });
+  // K09 : filtre par projet sur les MÊMES sessions (chaque session comptée une seule fois)
+  const projet = sp.projet && /^[0-9a-f-]{36}$/.test(sp.projet) ? sp.projet : null;
+  const entries = ((rows.data ?? []) as Raw[]).map(map).filter((e) => !e.ended_at || Date.parse(e.ended_at) > period.start).filter((e) => !projet || e.project_id === projet);
   return (
     <TempsView
       period={period}
@@ -36,6 +41,8 @@ export default async function TempsPage({ searchParams }: { searchParams: SP }) 
       entries={entries}
       focus={one.data ? map(one.data as Raw) : null}
       openClient={sp.client ?? null}
+      projects={[...pname].map(([id, n]) => ({ id, name: n }))}
+      project={projet}
     />
   );
 }

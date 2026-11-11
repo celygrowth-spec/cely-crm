@@ -3,7 +3,7 @@
 // Accueil Finance : grand graphique à onglets (Réel / Prévisions) et graphique compact « À encaisser ».
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { AgingChart, PlanChart, PlanLegend, RealChart } from "@/components/finance/charts";
+import { AgingChart, PlanChart, PlanLegend, RealChart } from "@/components/finance/charts-lazy";
 import { cn } from "@/components/ui";
 import type { AgingBucket, ForecastMonth } from "@/lib/finance/calc";
 import { eur, sum } from "@/lib/finance/money";

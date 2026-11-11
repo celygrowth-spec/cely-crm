@@ -70,10 +70,13 @@ export function monthlyDues(m: Mission, invoices: Invoice[], from: string, to: s
 /** Date d'encaissement prévue d'un revenu ponctuel. */
 export const oneOffDate = (m: Mission) => m.next_due_date ?? m.start_date;
 
-/** Montant encore attendu d'un revenu ponctuel, hors factures déjà enregistrées (null = inconnu). */
+/**
+ * Montant encore à facturer d'un revenu ponctuel (null = inconnu). Calculé sur le facturé BRUT : un avoir
+ * réduit ce que le client doit, pas l'engagement (C05) ; réduire le revenu est une décision explicite.
+ */
 export function oneOffRemaining(m: Mission): number | null {
   if (m.amount == null) return null;
-  return Math.max(m.amount - m.invoiced_ht, 0);
+  return Math.max(m.amount - (m.billed_ht ?? m.invoiced_ht), 0);
 }
 
 /** Le revenu peut-il encore produire des prévisions ? */
@@ -113,34 +116,47 @@ export function nextOpenDue(m: Mission, invoices: Invoice[], today: string): str
   return scheduleDates(a, m.frequency, m.end_date, from, addFrequency(today, "annuel", 2)).find((d) => !coveringInvoice(m, d, invoices)) ?? null;
 }
 
-/** Statut affiché d'un revenu dans la liste. */
-export type RevenueStatus = "prevu" | "a_encaisser" | "en_retard" | "partiel" | "encaisse" | "en_cours" | "termine" | "a_verifier";
+/**
+ * État d'encaissement d'un revenu : MÊME règle que la base (finance_revenue_state), lue aussi par Ventes.
+ * - ponctuel : Prévu · Date passée (rien facturé) · À encaisser · En retard · Partiellement encaissé ·
+ *   Encaissé (seulement quand tout le montant prévu est facturé ET réglé) ;
+ * - mensuel : Prévu (aucune échéance due) · À jour · Partiellement réglé · En retard (facture en retard ou
+ *   échéance passée non facturée) · Terminé (date de fin passée).
+ */
+export type RevenueStatus = "prevu" | "a_verifier" | "a_encaisser" | "en_retard" | "partiel" | "encaisse" | "a_jour" | "termine";
 export function revenueStatus(m: Mission, invoices: Invoice[], today: string): RevenueStatus {
   const mine = invoices.filter((i) => i.mission_id === m.id && live(i));
   if (mine.some((i) => i.status === "en_retard")) return "en_retard";
+  const open = mine.some((i) => i.status === "partielle" || i.status === "a_encaisser");
   if (m.kind === "recurrent") {
     if (m.status === "termine" || (m.end_date && m.end_date < today)) return "termine";
-    if (mine.some((i) => i.status === "partielle" || i.status === "a_encaisser")) return "a_encaisser";
-    return "en_cours";
+    const a = anchorDate(m);
+    const due = a ? scheduleDates(a, m.frequency, m.end_date, a, today).filter((d) => d < today) : [];
+    if (due.some((d) => !coveringInvoice(m, d, invoices))) return "en_retard";
+    if (open) return "partiel";
+    return due.length ? "a_jour" : "prevu";
   }
-  if (mine.some((i) => i.status === "partielle")) return "partiel";
-  if (mine.some((i) => i.status === "a_encaisser")) return "a_encaisser";
-  const rest = oneOffRemaining(m);
-  if (mine.length && rest === 0) return "encaisse";
+  const billed = m.billed_ht ?? m.invoiced_ht;
+  if (billed > 0 && (m.amount == null || billed >= m.amount) && m.remaining <= 0) return "encaisse";
+  if (m.received > 0) return "partiel";
+  if (open) return "a_encaisser";
   const d = oneOffDate(m);
   return d && d < today ? "a_verifier" : "prevu";
 }
 
 export const REVENUE_STATUS: Record<RevenueStatus, string> = {
   prevu: "Prévu",
+  a_verifier: "Date passée",
   a_encaisser: "À encaisser",
   en_retard: "En retard",
-  partiel: "Partiel",
+  partiel: "Partiellement encaissé",
   encaisse: "Encaissé",
-  en_cours: "En cours",
+  a_jour: "À jour",
   termine: "Terminé",
-  a_verifier: "Date passée",
 };
+/** Libellé selon le type : un mensuel est « Partiellement réglé ». */
+export const revenueStatusLabel = (s: RevenueStatus, kind: "ponctuel" | "recurrent" | "mensuel" | null | undefined) =>
+  s === "partiel" && (kind === "recurrent" || kind === "mensuel") ? "Partiellement réglé" : REVENUE_STATUS[s];
 
 export const DUE_STATE: Record<DueState, string> = {
   prevue: "Prévue",

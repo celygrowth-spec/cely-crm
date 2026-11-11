@@ -102,7 +102,7 @@ du webhook doit répondre sans protection : une préversion Vercel protégée re
 Fireflies.
 
 1. **Migrations** : dans Supabase › SQL Editor, coller et exécuter, dans cet ordre, le contenu de
-   `supabase/migrations/20261108000100_fireflies.sql`, `20261108000200_fireflies_rattachement.sql` puis
+   `supabase/migrations/20261108000150_fireflies.sql`, `20261108000200_fireflies_rattachement.sql` puis
    `20261108000300_fireflies_historique.sql`. Les modules Rendez-vous et Mail doivent déjà être installés.
 2. **Clé API** : dans Fireflies › Integrations › Fireflies API, copier la clé. Dans Vercel › projet › Settings ›
    Environment Variables, créer `FIREFLIES_API_KEY` avec cette valeur.

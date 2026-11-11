@@ -83,22 +83,6 @@ export async function searchCompanies(sb: SupabaseClient, query: string, include
   ) as SearchResult[];
 }
 
-export async function findDuplicates(
-  sb: SupabaseClient,
-  input: { name?: string | null; website?: string | null; emails?: string[]; linkedins?: string[]; personNames?: string[]; excludeId?: string },
-): Promise<DuplicateCandidate[]> {
-  return check(
-    await sb.rpc("find_duplicates", {
-      p_name: input.name ?? null,
-      p_website: input.website ?? null,
-      p_emails: input.emails ?? [],
-      p_linkedins: input.linkedins ?? [],
-      p_person_names: input.personNames ?? [],
-      p_exclude: input.excludeId ?? null,
-    }),
-  ) as DuplicateCandidate[];
-}
-
 /** Partie légère de la fiche : sans l'historique, chargé à part pour ne pas retarder l'ouverture. */
 export async function getCompanyCore(sb: SupabaseClient, id: string): Promise<CompanyCore | null> {
   parse(idSchema, id);
@@ -330,52 +314,4 @@ export async function setDealStatus(sb: SupabaseClient, companyId: string, statu
     p_closed_on: status === "won" ? c.closedOn ?? null : null,
     p_amount: status === "won" ? c.amount ?? null : null,
   })) as DealResult;
-}
-
-// ---------------------------------------------------------------------------
-// Campagnes
-// ---------------------------------------------------------------------------
-
-export async function markStepSent(
-  sb: SupabaseClient,
-  participantId: string,
-  content: string,
-  sentAt?: string | null,
-  personId?: string | null,
-  idempotencyKey?: string,
-) {
-  parse(idSchema, participantId);
-  return check(
-    await sb.rpc("mark_step_sent", {
-      p_participant: participantId,
-      p_content: content,
-      p_sent_at: sentAt ?? null,
-      p_person: personId ?? null,
-      p_idempotency_key: idempotencyKey ?? null,
-    }),
-  ) as { status: string; finished: boolean };
-}
-
-export async function recordReply(sb: SupabaseClient, participantId: string, content: string, receivedAt?: string | null) {
-  parse(idSchema, participantId);
-  if (!content.trim()) throw new CrmError("Le contenu de la réponse est obligatoire.");
-  check(await sb.rpc("record_reply", { p_participant: participantId, p_content: content, p_received_at: receivedAt ?? null }));
-}
-
-export async function updateParticipant(
-  sb: SupabaseClient,
-  participantId: string,
-  action: "postpone" | "resume" | "stop" | "finish" | "set_person",
-  opts: { due?: string | null; reason?: string | null } = {},
-) {
-  parse(idSchema, participantId);
-  if (opts.due) parse(dateSchema, opts.due);
-  check(
-    await sb.rpc("update_participant", {
-      p_participant: participantId,
-      p_action: action,
-      p_due: opts.due ?? null,
-      p_reason: opts.reason ?? null,
-    }),
-  );
 }

@@ -15,7 +15,6 @@ import {
   expenseSchema,
   invoiceSchema,
   keySchema,
-  missionSchema,
   openingSchema,
   paymentSchema,
   rateSchema,
@@ -32,7 +31,6 @@ import {
   type CreditNoteInput,
   type ExpenseInput,
   type InvoiceInput,
-  type MissionInput,
   type PaymentInput,
   type RateInput,
   type SettingsInput,
@@ -59,10 +57,6 @@ async function q(res: PromiseLike<{ error: { message: string; code?: string } | 
 }
 
 // Missions ------------------------------------------------------------------
-
-export async function saveMissionAction(id: string | null, input: MissionInput, key?: string) {
-  return run((sb) => rpc(sb, "finance_save_mission", { p_id: id ? idv(id) : null, p_data: v(missionSchema, input), p_idempotency_key: optKey(key) }));
-}
 
 // Revenus unifiés (ponctuel / mensuel) -------------------------------------
 

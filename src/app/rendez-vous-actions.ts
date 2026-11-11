@@ -237,8 +237,10 @@ export async function disconnectGoogleAction() {
     // révocation chez Google (jeton propre au module Rendez-vous : n'affecte pas Gmail)
     const { data } = await sb.rpc("appt_server_google", { p_server_key: serverRpcKey() });
     const enc = (data as { refresh_token_enc?: string } | null)?.refresh_token_enc;
-    if (enc) await google.revoke(decryptSecret(enc)).catch(() => undefined);
+    // C08 : le résultat réel de la révocation est rendu (jamais « révoqué » si Google n'a pas confirmé)
+    const revoked = enc ? await google.revoke(decryptSecret(enc)).catch(() => false) : true;
     await rpc(sb, "appt_disconnect_google", {});
+    return { revoked };
   });
 }
 

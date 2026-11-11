@@ -4,7 +4,8 @@ import "server-only";
 // confirme rien avant la réussite des étapes nécessaires, et toute divergence restante est
 // rattrapée par reconcileCalendar (la base fait foi, Google est aligné sur elle).
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { randomUUID } from "node:crypto";
+import { after } from "next/server";
+import { createHash, randomUUID } from "node:crypto";
 import { env } from "@/lib/env";
 import { appUrl, googleConfig } from "./config";
 import * as google from "./google";
@@ -24,6 +25,19 @@ export class CalendarUnavailable extends BookingError {
   constructor(detail: string) {
     super(`Les disponibilités ne peuvent pas être vérifiées pour le moment. Réessayez dans quelques minutes. (${detail})`, "calendar");
   }
+}
+
+/**
+ * C08 : sans agenda connecté (ou sans agenda à vérifier), les disponibilités ne sont pas vérifiables : la réservation
+ * en ligne et le report par l'invité sont suspendus. Les rendez-vous existants et l'annulation restent possibles.
+ */
+export class BookingSuspended extends BookingError {
+  constructor() {
+    super("La prise de rendez-vous en ligne est momentanément suspendue : mes disponibilités ne peuvent pas être vérifiées. Écrivez-moi pour convenir d'un créneau ; les rendez-vous déjà confirmés sont maintenus.", "calendar");
+  }
+}
+function requireVerifiable(creds: GoogleCreds | null): asserts creds is GoogleCreds {
+  if (!creds || creds.check.length === 0 || !creds.destination) throw new BookingSuspended();
 }
 
 type PgError = { message: string; code?: string };
@@ -117,7 +131,7 @@ function calendarEvent(b: EventData, calendarId: string, origin?: string | null)
     b.event.location_detail ? `Lieu : ${b.event.location_detail}` : null,
     ...(b.answers ?? []).map((a) => `${a.label} : ${a.value}`),
     "",
-    `Rendez-vous géré dans Cely CRM : ${appUrl(origin)}/rendez-vous/liste?rdv=${b.id}`,
+    `Rendez-vous géré dans Cely CRM : ${appUrl(origin)}/rendez-vous/agenda?vue=liste&rdv=${b.id}`,
   ].filter((l): l is string => l !== null);
   return {
     bookingId: b.id,
@@ -145,6 +159,7 @@ export async function getPublicEvent(slug: string): Promise<PublicEvent | null> 
 export async function getSlots(p: { slug: string; from: string; to: string; exclude?: string | null; sb?: SupabaseClient }): Promise<string[]> {
   const sb = p.sb ?? publicClient();
   const creds = await googleCreds(sb);
+  requireVerifiable(creds);
   const busy = await externalBusy(sb, creds, new Date(Date.parse(p.from) - 6 * 3600_000).toISOString(), new Date(Date.parse(p.to) + 6 * 3600_000).toISOString());
   const r = await rpc<string[] | null>(sb, "appt_public_slots", {
     p_server_key: serverRpcKey(), p_slug: p.slug, p_from: p.from, p_to: p.to, p_busy: busy, p_exclude_booking: p.exclude ?? null,
@@ -187,12 +202,17 @@ export type BookResult =
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function bookPublic(input: BookingRequest, origin?: string | null): Promise<BookResult> {
+export async function bookPublic(input: BookingRequest, origin?: string | null, client?: { ip?: string | null }): Promise<BookResult> {
   const parsed = bookingRequestSchema.safeParse(input);
   if (!parsed.success) return { status: "error", message: parsed.error.issues.map((i) => i.message).join(" · "), retryable: false };
   const req = parsed.data;
   const sb = publicClient();
   const key = serverRpcKey();
+  // C09 : champ piège, puis limites par adresse IP (empreinte) et par email ; rien n'est réservé au-delà
+  if (req.fax) return { status: "error", message: "La réservation n'a pas pu être enregistrée.", retryable: false };
+  const ipHash = client?.ip ? createHash("sha256").update(`${key}:${client.ip}`).digest("hex").slice(0, 40) : null;
+  const limited = await rpc<string | null>(sb, "appt_rate_check", { p_server_key: key, p_email: req.invitee.email, p_ip_hash: ipHash });
+  if (limited) return { status: "error", message: limited, retryable: false };
 
   const event = await getPublicEvent(req.slug);
   if (!event) return { status: "error", message: "Ce rendez-vous n'est plus proposé.", retryable: false };
@@ -204,8 +224,10 @@ export async function bookPublic(input: BookingRequest, origin?: string | null):
   let busy: Interval[];
   try {
     creds = await googleCreds(sb);
+    requireVerifiable(creds);
     busy = await externalBusy(sb, creds, new Date(Date.parse(start) - 6 * 3600_000).toISOString(), new Date(Date.parse(end) + 6 * 3600_000).toISOString());
   } catch (e) {
+    if (e instanceof BookingSuspended) return { status: "error", message: e.message, retryable: false };
     if (e instanceof BookingError) return { status: "error", message: e.message, retryable: true };
     throw e;
   }
@@ -284,13 +306,13 @@ async function compensateDelete(sb: SupabaseClient, token: string, calendarId: s
   }
 }
 
-let reconciling = false;
+/** Reprise après réponse, attendue par la plateforme (after) : jamais interrompue en plein travail (C07). */
 function reconcileSoon(sb: SupabaseClient, origin?: string | null) {
-  if (reconciling) return;
-  reconciling = true;
-  void reconcileCalendar(sb, origin, 5).finally(() => {
-    reconciling = false;
-  });
+  try {
+    after(() => reconcileCalendar(sb, origin, 5).then(() => undefined, () => undefined));
+  } catch {
+    void reconcileCalendar(sb, origin, 5).catch(() => undefined); // hors requête (tests) : au mieux
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -365,6 +387,8 @@ export async function rescheduleBooking(actor: Actor, id: string, slug: string, 
   let busy: Interval[];
   try {
     creds = await googleCreds(sb);
+    // l'invité ne reporte que sur un créneau réellement vérifié ; le propriétaire garde la main
+    if (actor.kind === "invitee") requireVerifiable(creds);
     busy = await externalBusy(sb, creds, new Date(Date.parse(start) - 6 * 3600_000).toISOString(), new Date(Date.parse(start) + 18 * 3600_000).toISOString());
   } catch (e) {
     if (e instanceof BookingError) return { status: "error", message: e.message };

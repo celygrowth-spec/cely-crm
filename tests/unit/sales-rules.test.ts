@@ -1,10 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { amountLine, board, inPeriod, metrics, missingItems, needsCompletion, onboardingPrompt, periodStart, type SaleRow } from "@/lib/sales/rules";
+import { amountLine, board, inPeriod, metrics, missingCount, needsCompletion, periodStart, type SaleRow } from "@/lib/sales/rules";
 
 const row = (x: Partial<SaleRow>): SaleRow => ({
-  company_id: Math.random().toString(36), name: "Client", deal_status: "won", deal_closed_at: null, closed_on: "2026-11-05", lost_reason: null,
+  row_id: Math.random().toString(36), company_id: Math.random().toString(36), company_deal_status: "won", cycle: 1, project_removed_at: null, prep_status: null, prep_missing: null, name: "Client", deal_status: "won", deal_closed_at: null, closed_on: "2026-11-05", lost_reason: null,
   deal_amount: null, archived_at: null, pipeline_name: null, stage_name: null, primary_person_name: null, sale_id: "s", sale_state: "won",
-  signed_on: null, revenue_mode: null, documents_ready: false, prep_state: null, prep: null, prep_error: null, mission_id: null, mission_kind: null,
+  signed_on: null, revenue_mode: null, documents_ready: false, prep_error: null, mission_id: null, mission_kind: null,
   mission_amount: null, mission_start: null, mission_end: null, mission_status: null, invoiced_ttc: null, received: null, remaining: null,
   project_id: null, project_name: null, project_status: null, candidate_mission_id: null, candidate_project_id: null, billing: "a_renseigner", stage: null, ...x,
 });
@@ -50,15 +50,9 @@ describe("tableau après-vente", () => {
     expect(sp(amountLine(row({ deal_amount: "800.00" })))).toBe("800 €");
     expect(amountLine(row({}))).toBeNull();
   });
-  test("éléments obligatoires manquants", () => {
-    const r = row({ prep: { items: [
-      { key: "proposition", label: "", done: false, required: true }, { key: "contexte", label: "", done: false, required: false },
-      { key: "dates", label: "", done: true, required: true }] } });
-    expect(missingItems(r).map((i) => i.key)).toEqual(["proposition"]);
-  });
-  test("le lien vers Claude ne porte que l'identifiant du projet et interdit toute publication", () => {
-    const p = onboardingPrompt("11111111-1111-4111-8111-111111111111");
-    expect(p).toContain("get_project");
-    expect(p).toMatch(/Ne publie rien/);
+  test("éléments à compléter : seulement quand la préparation (source Projets) le dit", () => {
+    expect(missingCount(row({ prep_status: "to_complete", prep_missing: 2 }))).toBe(2);
+    expect(missingCount(row({ prep_status: "preparing", prep_missing: 2 }))).toBe(0);
+    expect(missingCount(row({ prep_status: "ready", prep_missing: 0 }))).toBe(0);
   });
 });

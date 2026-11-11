@@ -16,7 +16,7 @@ export default async function ModelesPage() {
   return (
     <div>
       <PageHeader
-        title="Modèles de prospection"
+        title="Modèles de séquence"
         description="Une suite d'étapes manuelles réutilisable. Aucun envoi automatique."
         actions={<ButtonLink href="/prospection/modeles/nouveau" variant="primary"><Plus size={15} /> Nouveau modèle</ButtonLink>}
       />

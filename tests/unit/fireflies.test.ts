@@ -243,6 +243,7 @@ describe("routes de l'historique", () => {
 
   test("transcription : réponse privée, jamais en cache partagé", async () => {
     const chain = { select: () => chain, eq: () => chain, maybeSingle: async () => ({ data: { lines: [] }, error: null }) };
+    rpc.mockImplementation(async (fn: string) => ({ data: fn === "is_app_owner" ? true : null, error: null })); // session du propriétaire
     session = { supabase: { rpc, from: () => chain } as never };
     const { GET } = await import("@/app/api/fireflies/calls/[id]/transcript/route");
     const r = await GET(new Request("https://crm.test/x"), { params: Promise.resolve({ id: CALL }) });

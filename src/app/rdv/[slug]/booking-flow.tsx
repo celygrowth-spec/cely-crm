@@ -29,6 +29,8 @@ export function BookingFlow({ event }: { event: PublicEvent }) {
   const [slot, setSlot] = useState<string | null>(null);
   const [step, setStep] = useState<"pick" | "form" | "done">("pick");
   const [form, setForm] = useState<Form>(EMPTY);
+  // champ piège invisible (anti-robot) : un visiteur ne le voit ni ne le remplit
+  const honeypot = useRef<HTMLInputElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [alternatives, setAlternatives] = useState<string[] | null>(null);
@@ -72,6 +74,7 @@ export function BookingFlow({ event }: { event: PublicEvent }) {
           invitee: { first_name: form.first_name, last_name: form.last_name, email: form.email, company_name: form.company_name, website: form.website, phone: form.phone, timezone: tz },
           answers: form.answers,
           idempotency_key: attemptKey.current,
+          fax: honeypot.current?.value || undefined,
         }),
       });
       const body = (await res.json().catch(() => ({ error: "Réponse illisible du serveur" }))) as BookResponse;
@@ -115,6 +118,9 @@ export function BookingFlow({ event }: { event: PublicEvent }) {
           <p className="mb-2 text-sm font-semibold text-ink">Ajouter à votre agenda</p>
           <AddToCalendar booking={done.booking} manageUrl={manageUrl} />
         </div>
+        <p className="mt-5 rounded-lg bg-surface px-3 py-2 text-sm text-muted" data-invitation-note>
+          Vous allez recevoir l&apos;invitation Google Agenda envoyée par {event.display_name}. Un report ou une annulation vous sera notifié de la même façon.
+        </p>
         <div className="mt-5">
           <PrivateLink url={manageUrl} />
         </div>
@@ -153,6 +159,7 @@ export function BookingFlow({ event }: { event: PublicEvent }) {
               <ArrowLeft size={16} /> Changer de créneau
             </button>
             <h2 className="font-display text-lg font-bold text-ink">Vos informations</h2>
+            <input ref={honeypot} name="fax" tabIndex={-1} autoComplete="off" aria-hidden className="absolute -left-[9999px] h-0 w-0 opacity-0" />
 
             {error && (
               <div ref={errorRef} tabIndex={-1} role="alert" className="rounded-lg border border-danger/20 bg-danger/5 px-3 py-2 text-sm text-danger">

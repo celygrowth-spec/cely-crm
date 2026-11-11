@@ -8787,7 +8787,7 @@ grant execute on function public.finance_due_date(date, text, int), public.finan
   to authenticated;
 
 
--- ===== 20261108000100_fireflies.sql =====
+-- ===== 20261108000150_fireflies.sql =====
 -- Fireflies, phase 1 : import automatique des appels (voir docs/integrations/fireflies.md).
 --
 -- Flux : le webhook enregistre une tâche (fireflies_enqueue) AVANT d'accuser réception ; le serveur
@@ -12503,3 +12503,3038 @@ begin
     execute format('revoke all on function public.%s from public, anon, authenticated', f);
   end loop;
 end $$;
+
+
+-- ===== 20261115000100_ventes_cycles.sql =====
+-- Audit, lot 1 — ventes protégées (C01, C03, C10, C11, Q05, Q11, K10). Migration additive : aucune donnée réelle
+-- n'est modifiée ; les ventes existantes deviennent le cycle 1 de leur fiche, avec tous leurs liens.
+--
+--  C11  Une clé d'idempotence est liée à l'opération qui l'a utilisée (et, si fourni, à ses paramètres) :
+--       réutilisée ailleurs ou avec d'autres paramètres, elle produit une erreur explicite.
+--  C01  Une fiche gagnée ou perdue ne change plus d'étape ni de pipeline (sélecteur, « Hors pipeline », campagne,
+--       Claude) : la base le refuse ; seule « Rouvrir l'opportunité » (ou « Nouvelle opportunité ») la rouvre.
+--  Q05  Une vente par cycle commercial : un client qui revient a une nouvelle vente et une nouvelle mission ; la
+--       fiche garde une seule opportunité active et l'accès à ses ventes passées.
+--  C10  Un revenu supprimé n'est plus jamais renvoyé ; un revenu lié à une vente ne se supprime pas (on l'arrête).
+--  C03  Rouvrir ou perdre une vente qui a un projet, un revenu ou des accès client applique vos décisions
+--       (projet, échéances, portail) en une seule opération ; sans décision, la base refuse.
+--  Q11  Ventes ne fait plus reculer un projet en cours sans confirmation explicite.
+--  K10  L'état de préparation de l'onboarding a une seule source : project_onboarding (lue par Ventes et Projets).
+
+-- ===========================================================================
+-- C11 — idempotence : portée (opération appelante) et paramètres
+-- ===========================================================================
+alter table public.idempotency_keys
+  add column if not exists caller text,
+  add column if not exists fingerprint text;
+
+-- Opération qui utilise la clé : première fonction de la pile qui n'est pas un utilitaire d'idempotence.
+create or replace function public.idem_caller()
+returns text
+language plpgsql
+as $$
+declare v_ctx text; v_name text;
+begin
+  get diagnostics v_ctx = pg_context;
+  for v_name in select (regexp_match(l, 'PL/pgSQL function (?:public\.)?([a-z0-9_]+)\('))[1] from regexp_split_to_table(v_ctx, E'\n') with ordinality as t(l, n) order by n
+  loop
+    if v_name is not null and v_name not in ('idem_caller', 'idem_get', 'idem_begin', 'idem_put', 'lock_keys') then return v_name; end if;
+  end loop;
+  return null;
+end;
+$$;
+
+create or replace function public.idem_get(p_key text)
+returns jsonb
+language plpgsql
+as $$
+declare r public.idempotency_keys;
+begin
+  if p_key is null then return null; end if;
+  perform public.lock_keys(array['idem:' || p_key]);
+  select * into r from public.idempotency_keys where key = p_key;
+  if r.key is null then return null; end if;
+  if r.caller is not null and r.caller is distinct from public.idem_caller() then
+    raise exception 'Clé de requête déjà utilisée par une autre opération (%) : réessayez avec une nouvelle clé.', r.caller using errcode = '22023';
+  end if;
+  return r.result;
+end;
+$$;
+
+-- Comme idem_get, avec les paramètres : une même clé avec d'autres paramètres est une erreur explicite.
+create or replace function public.idem_begin(p_key text, p_params jsonb)
+returns jsonb
+language plpgsql
+as $$
+declare r public.idempotency_keys; v_fp text := md5(coalesce(p_params, 'null'::jsonb)::text);
+begin
+  if p_key is null then return null; end if;
+  perform public.lock_keys(array['idem:' || p_key]);
+  perform set_config('cely.idem_fingerprint', v_fp, true);
+  select * into r from public.idempotency_keys where key = p_key;
+  if r.key is null then return null; end if;
+  if r.caller is not null and r.caller is distinct from public.idem_caller() then
+    raise exception 'Clé de requête déjà utilisée par une autre opération (%) : réessayez avec une nouvelle clé.', r.caller using errcode = '22023';
+  end if;
+  if r.fingerprint is not null and r.fingerprint <> v_fp then
+    raise exception 'Cette requête a déjà été envoyée avec d''autres informations : rechargez avant de réessayer.' using errcode = '22023';
+  end if;
+  return r.result;
+end;
+$$;
+
+create or replace function public.idem_put(p_key text, p_scope text, p_result jsonb)
+returns jsonb
+language plpgsql
+as $$
+begin
+  if p_key is not null then
+    insert into public.idempotency_keys (key, scope, result, caller, fingerprint)
+    values (p_key, p_scope, p_result, public.idem_caller(), nullif(current_setting('cely.idem_fingerprint', true), ''))
+    on conflict (key) do nothing;
+    perform set_config('cely.idem_fingerprint', '', true);
+  end if;
+  return p_result;
+end;
+$$;
+
+-- ===========================================================================
+-- C01 — une fiche clôturée ne change pas d'étape sans réouverture explicite
+-- ===========================================================================
+create or replace function public.tg_companies_closed_guard()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.deal_status <> 'open' and new.deal_status = old.deal_status
+     and (new.stage_id is distinct from old.stage_id or new.pipeline_id is distinct from old.pipeline_id)
+     and new.merged_into_id is null then
+    raise exception 'Opportunité % : utilisez « Rouvrir l''opportunité » avant de changer d''étape.',
+      case old.deal_status when 'won' then 'gagnée' else 'perdue' end using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+create trigger companies_closed_guard before update of stage_id, pipeline_id on public.companies
+  for each row execute function public.tg_companies_closed_guard();
+
+-- Déplace (ou retire) une fiche OUVERTE. Une fiche gagnée ou perdue est refusée avec une explication
+-- (interface, campagne « Intéressé + étape », Claude) : jamais de réouverture implicite.
+create or replace function public.move_company(
+  p_company uuid,
+  p_stage uuid,
+  p_stop_followups boolean default true,
+  p_idempotency_key text default null)
+returns jsonb
+language plpgsql
+as $$
+declare
+  v_prev jsonb;
+  c public.companies;
+  v_to public.stages;
+  v_to_pipeline public.pipelines;
+  v_from_stage text;
+  v_from_pipeline text;
+  v_stopped int := 0;
+begin
+  perform public.assert_owner();
+  v_prev := public.idem_begin(p_idempotency_key, jsonb_build_object('company', p_company, 'stage', p_stage, 'stop', p_stop_followups));
+  if v_prev is not null then return v_prev; end if;
+
+  select * into c from public.companies where id = p_company and merged_into_id is null for update;
+  if not found then raise exception 'Fiche introuvable' using errcode = 'P0002'; end if;
+
+  if c.deal_status <> 'open' then
+    raise exception 'Opportunité % : elle reste clôturée. Pour la déplacer, utilisez d''abord « Rouvrir l''opportunité » sur la fiche.',
+      case c.deal_status when 'won' then 'gagnée' else 'perdue' end using errcode = 'P0001';
+  end if;
+
+  if p_stage is not null then
+    select * into v_to from public.stages where id = p_stage;
+    if not found then raise exception 'Étape introuvable' using errcode = 'P0002'; end if;
+    select * into v_to_pipeline from public.pipelines where id = v_to.pipeline_id;
+  end if;
+
+  if c.stage_id is not distinct from p_stage then
+    return jsonb_build_object('status', 'unchanged');
+  end if;
+
+  select s.name, p.name into v_from_stage, v_from_pipeline
+    from public.stages s join public.pipelines p on p.id = s.pipeline_id where s.id = c.stage_id;
+
+  update public.companies
+     set pipeline_id = v_to.pipeline_id, stage_id = v_to.id,
+         prospect_status = case when p_stage is not null and prospect_status in ('nouveau','contacte','en_discussion')
+                                then 'qualifie' else prospect_status end
+   where id = c.id;
+
+  -- l'entrée dans un pipeline arrête par défaut les relances de prospection actives
+  if p_stage is not null and p_stop_followups then
+    update public.campaign_participants
+       set status = 'arrete', next_due_date = null, stop_reason = 'Entrée dans le pipeline ' || v_to_pipeline.name
+     where company_id = c.id and status in ('a_contacter','en_cours','a_repondu');
+    get diagnostics v_stopped = row_count;
+  end if;
+
+  perform public.log_event(c.id, 'stage_change',
+    case when p_stage is null then 'Retirée du pipeline ' || coalesce(v_from_pipeline, '')
+         when c.pipeline_id is distinct from v_to.pipeline_id and c.pipeline_id is not null
+           then 'Transférée de ' || v_from_pipeline || ' › ' || v_from_stage || ' vers ' || v_to_pipeline.name || ' › ' || v_to.name
+         when c.pipeline_id is null then 'Entrée dans ' || v_to_pipeline.name || ' › ' || v_to.name
+         else v_to_pipeline.name || ' : ' || coalesce(v_from_stage, '—') || ' → ' || v_to.name end,
+    jsonb_build_object('from_pipeline_id', c.pipeline_id, 'from_pipeline', v_from_pipeline,
+                       'from_stage_id', c.stage_id, 'from_stage', v_from_stage,
+                       'to_pipeline_id', v_to.pipeline_id, 'to_pipeline', v_to_pipeline.name,
+                       'to_stage_id', v_to.id, 'to_stage', v_to.name,
+                       'stopped_followups', v_stopped));
+
+  if v_stopped > 0 then
+    perform public.log_event(c.id, 'prospecting',
+      v_stopped || ' relance(s) de prospection arrêtée(s) suite à l''entrée dans le pipeline');
+  end if;
+
+  return public.idem_put(p_idempotency_key, 'move_company',
+    jsonb_build_object('status', 'moved', 'stopped_followups', v_stopped));
+end;
+$$;
+
+-- ===========================================================================
+-- Q05 — une vente par cycle commercial
+-- ===========================================================================
+alter table public.sales drop constraint if exists sales_company_id_key;
+alter table public.sales add column if not exists cycle integer not null default 1 check (cycle >= 1);
+alter table public.sales add column if not exists ended_at timestamptz;
+-- projet de la vente supprimé : jamais recréé en silence (une recréation demande votre choix)
+alter table public.sales add column if not exists project_removed_at timestamptz;
+alter table public.sales drop constraint if exists sales_state_check;
+alter table public.sales add constraint sales_state_check check (state in ('won', 'reopened', 'lost', 'completed'));
+create unique index if not exists sales_company_cycle_idx on public.sales (company_id, cycle);
+-- une seule vente active (gagnée ou rouverte) par fiche
+create unique index if not exists sales_one_active_idx on public.sales (company_id) where state in ('won', 'reopened');
+comment on column public.sales.state is 'won : gagnée, suivie ; reopened : opportunité rouverte (liens conservés) ; lost : cycle perdu après réouverture ; completed : cycle terminé, remplacé par une nouvelle opportunité.';
+
+create or replace function public.tg_sales_project_removed()
+returns trigger
+language plpgsql
+as $$
+begin
+  update public.sales set project_removed_at = now() where project_id = old.id;
+  return old;
+end;
+$$;
+create trigger sales_project_removed before delete on public.projects
+  for each row execute function public.tg_sales_project_removed();
+
+-- L'issue commerciale reste la vérité : la vente active suit la fiche (gagnée ↔ rouverte ; perdue clôt le cycle).
+create or replace function public.tg_sales_follow_deal()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.deal_status = 'won' and old.deal_status <> 'won' then
+    update public.sales set state = 'won', ended_at = null where company_id = new.id and state = 'reopened';
+  elsif old.deal_status = 'won' and new.deal_status = 'open' then
+    update public.sales set state = 'reopened' where company_id = new.id and state = 'won';
+  elsif new.deal_status = 'lost' and old.deal_status <> 'lost' then
+    update public.sales set state = 'lost', ended_at = now() where company_id = new.id and state in ('won', 'reopened');
+  end if;
+  return null;
+end;
+$$;
+
+-- ===========================================================================
+-- C10 — un revenu lié à une vente ne se supprime pas (on l'arrête)
+-- ===========================================================================
+create or replace function public.tg_finance_mission_sale_guard()
+returns trigger
+language plpgsql
+as $$
+begin
+  if exists (select 1 from public.sales where mission_id = old.id) then
+    raise exception 'Ce revenu est lié à une vente : arrêtez ses échéances futures plutôt que de le supprimer.' using errcode = 'P0001';
+  end if;
+  return old;
+end;
+$$;
+create trigger finance_mission_sale_guard before delete on public.finance_missions
+  for each row execute function public.tg_finance_mission_sale_guard();
+
+-- ===========================================================================
+-- « Marquer comme gagné » : cycle actif retrouvé, nouveau cycle sinon ; références vérifiées ; idempotence
+-- avec paramètres. Une fiche déjà gagnée garde sa clôture ; aucun lien existant n'est remplacé ni dupliqué.
+-- p_data : { closed_on, signed_on?, documents_ready?, revenue?: {mode, amount?, date?, end_date?},
+--            link_mission_id?, link_invoice_id?, link_project_id?, project_name?, create_project? }
+-- ===========================================================================
+create or replace function public.sale_confirm(p_company uuid, p_data jsonb, p_idempotency_key text default null)
+returns jsonb
+language plpgsql
+as $$
+declare
+  v_prev jsonb;
+  c public.companies;
+  s public.sales;
+  v_today date := public.today_paris();
+  v_closed date := coalesce(nullif(p_data ->> 'closed_on', '')::date, public.today_paris());
+  v_signed date := nullif(p_data ->> 'signed_on', '')::date;
+  v_rev jsonb := coalesce(p_data -> 'revenue', '{}'::jsonb);
+  v_mode text := coalesce(nullif(v_rev ->> 'mode', ''), 'plus_tard');
+  v_amount numeric(12,2) := nullif(v_rev ->> 'amount', '')::numeric;
+  v_rev_date date := nullif(v_rev ->> 'date', '')::date;
+  v_rev_end date := nullif(v_rev ->> 'end_date', '')::date;
+  v_link_mission uuid := nullif(p_data ->> 'link_mission_id', '')::uuid;
+  v_link_invoice uuid := nullif(p_data ->> 'link_invoice_id', '')::uuid;
+  v_link_project uuid := nullif(p_data ->> 'link_project_id', '')::uuid;
+  v_inv public.finance_invoices;
+  v_mission uuid;
+  v_project uuid;
+  v_people uuid[];
+  v_created jsonb := '{}'::jsonb;
+  v_was_open boolean;
+  m public.finance_missions;
+begin
+  perform public.assert_owner();
+  v_prev := public.idem_begin(p_idempotency_key, jsonb_build_object('company', p_company, 'data', p_data));
+  if v_prev is not null then return v_prev; end if;
+
+  select * into c from public.companies where id = p_company and merged_into_id is null for update;
+  if not found then raise exception 'Fiche introuvable' using errcode = 'P0002'; end if;
+  if v_mode not in ('mensuel', 'ponctuel', 'plus_tard') then raise exception 'Type de revenu invalide' using errcode = '22023'; end if;
+  if v_closed > v_today then raise exception 'La date de clôture ne peut pas être dans le futur.' using errcode = '22023'; end if;
+  if v_signed is not null and v_signed > v_today then raise exception 'La date de signature ne peut pas être dans le futur.' using errcode = '22023'; end if;
+  if v_mode <> 'plus_tard' and v_link_mission is null then
+    if v_amount is null or v_amount <= 0 then raise exception 'Indiquez un montant positif, ou choisissez « Renseigner plus tard ».' using errcode = '22023'; end if;
+    if v_rev_date is null then
+      raise exception '%', case v_mode when 'mensuel' then 'Indiquez la date de début du revenu mensuel.' else 'Indiquez la date d''encaissement prévue.' end using errcode = '22023';
+    end if;
+    if v_rev_end is not null and v_rev_end < v_rev_date then raise exception 'La date de fin précède la date de début.' using errcode = '22023'; end if;
+  end if;
+
+  -- 1. la fiche passe Gagné ; une fiche déjà gagnée garde sa clôture
+  if c.deal_status = 'lost' then raise exception 'Opportunité perdue : rouvrez-la avant de la marquer gagnée.' using errcode = '22023'; end if;
+  v_was_open := c.deal_status = 'open';
+  if v_was_open then
+    perform public.set_deal_status(p_company, 'won', null, v_closed, case when v_mode = 'ponctuel' then v_amount end);
+  end if;
+
+  -- 2. la vente active (gagnée ou rouverte) de ce cycle, sinon un nouveau cycle
+  select * into s from public.sales where company_id = p_company and state in ('won', 'reopened') for update;
+  if s.id is null then
+    insert into public.sales (company_id, cycle, state, closed_on, signed_on, revenue_mode, documents_ready)
+    values (p_company, coalesce((select max(cycle) from public.sales where company_id = p_company), 0) + 1, 'won',
+            case when not v_was_open and c.deal_closed_at is not null then (c.deal_closed_at at time zone 'Europe/Paris')::date else v_closed end,
+            v_signed, v_mode, coalesce((p_data ->> 'documents_ready')::boolean, false))
+    returning * into s;
+    v_created := v_created || '{"sale": true}';
+  else
+    update public.sales
+       set state = 'won', ended_at = null,
+           closed_on = case when v_was_open then v_closed else closed_on end,
+           signed_on = coalesce(v_signed, signed_on),
+           documents_ready = case when p_data ? 'documents_ready' then (p_data ->> 'documents_ready')::boolean else documents_ready end
+     where id = s.id
+    returning * into s;
+  end if;
+
+  -- 3. le revenu : lier l'existant, ou créer le revenu prévu ; une référence disparue n'est jamais renvoyée
+  v_mission := s.mission_id;
+  if v_mission is not null and not exists (select 1 from public.finance_missions where id = v_mission) then v_mission := null; end if;
+  if v_link_mission is not null then
+    select * into m from public.finance_missions where id = v_link_mission and company_id = p_company;
+    if not found then raise exception 'Ce revenu n''appartient pas à cette fiche.' using errcode = '22023'; end if;
+    if exists (select 1 from public.sales x where x.mission_id = v_link_mission and x.id <> s.id) then
+      raise exception 'Ce revenu est déjà lié à une autre vente.' using errcode = '22023';
+    end if;
+    if v_mission is not null and v_mission <> v_link_mission then
+      raise exception 'Cette vente a déjà un revenu lié.' using errcode = '22023';
+    end if;
+    v_mission := v_link_mission;
+    update public.sales set mission_id = v_mission, revenue_mode = case when m.kind = 'recurrent' then 'mensuel' else 'ponctuel' end where id = s.id;
+  elsif v_mission is null and v_mode <> 'plus_tard' then
+    -- la vente est verrouillée (for update) : pas de doublon possible, pas besoin de clé fixe
+    v_mission := (public.finance_add_revenue(jsonb_build_object(
+      'company_id', p_company, 'label', left('Vente ' || c.name || case when s.cycle > 1 then ' (' || s.cycle || ')' else '' end, 200),
+      'kind', v_mode, 'amount', v_amount, 'date', v_rev_date, 'end_date', v_rev_end), null) ->> 'id')::uuid;
+    update public.sales set mission_id = v_mission, revenue_mode = v_mode where id = s.id;
+    v_created := v_created || '{"revenue": true}';
+  end if;
+
+  -- facture déjà enregistrée : rattachée au revenu de la vente (créé depuis elle s'il n'y en a pas)
+  if v_link_invoice is not null then
+    select * into v_inv from public.finance_invoices where id = v_link_invoice and company_id = p_company and kind = 'facture' and cancelled_at is null for update;
+    if not found then raise exception 'Facture introuvable pour cette fiche.' using errcode = '22023'; end if;
+    if v_inv.mission_id is not null and v_inv.mission_id is distinct from v_mission then
+      if v_mission is null and not exists (select 1 from public.sales x where x.mission_id = v_inv.mission_id) then
+        v_mission := v_inv.mission_id;
+        update public.sales set mission_id = v_mission,
+               revenue_mode = (select case when kind = 'recurrent' then 'mensuel' else 'ponctuel' end from public.finance_missions where id = v_mission)
+         where id = s.id;
+      else
+        raise exception 'Cette facture est déjà rattachée à un autre revenu.' using errcode = '22023';
+      end if;
+    end if;
+    if v_mission is null then
+      v_mission := (public.finance_add_revenue(jsonb_build_object(
+        'company_id', p_company, 'label', left('Vente ' || c.name, 200), 'kind', 'ponctuel', 'amount', v_inv.amount_ht,
+        'date', coalesce(v_inv.due_date, v_inv.issue_date)), null) ->> 'id')::uuid;
+      update public.sales set mission_id = v_mission, revenue_mode = 'ponctuel' where id = s.id;
+      v_created := v_created || '{"revenue": true}';
+    end if;
+    update public.finance_invoices set mission_id = v_mission,
+           forecast_due_date = coalesce(forecast_due_date, (select coalesce(next_due_date, start_date) from public.finance_missions where id = v_mission and kind = 'ponctuel'))
+     where id = v_inv.id;
+  end if;
+
+  -- 4. le projet : lier un projet en cours ou à préparer, sinon le créer une fois ; jamais un projet terminé
+  --    réutilisé automatiquement ; un projet supprimé n'est recréé que sur demande explicite (create_project)
+  select * into s from public.sales where id = s.id;
+  v_project := s.project_id;
+  if v_project is null and v_link_project is not null then
+    if not exists (select 1 from public.projects where id = v_link_project and company_id = p_company) then
+      raise exception 'Ce projet n''appartient pas à cette fiche.' using errcode = '22023';
+    end if;
+    -- jamais un projet terminé ou archivé, ni celui d'une autre vente (même passée) : un nouveau gain = une nouvelle mission
+    if exists (select 1 from public.projects where id = v_link_project and status in ('termine', 'archive')) then
+      raise exception 'Ce projet est terminé ou archivé : un nouveau gain crée une nouvelle mission.' using errcode = '22023';
+    end if;
+    if exists (select 1 from public.sales x where x.project_id = v_link_project and x.id <> s.id) then
+      raise exception 'Ce projet appartient à une autre vente de cette fiche.' using errcode = '22023';
+    end if;
+    v_project := v_link_project;
+    update public.sales set project_id = v_project, project_removed_at = null where id = s.id;
+  elsif v_project is null and (s.project_removed_at is null or coalesce((p_data ->> 'create_project')::boolean, false)) then
+    select array_agg(p.id) into v_people from (
+      select id from public.people where company_id = p_company order by is_primary desc, created_at limit 1) p;
+    select * into m from public.finance_missions where id = v_mission;
+    v_project := public.project_create(jsonb_build_object(
+      'company_id', p_company,
+      'name', left(coalesce(nullif(btrim(p_data ->> 'project_name'), ''), 'Mission ' || c.name), 160),
+      'start_date', coalesce(m.start_date, v_rev_date),
+      'end_date', case when m.kind = 'recurrent' then m.end_date else null end,
+      'status', 'a_preparer'), coalesce(v_people, '{}'));
+    update public.sales set project_id = v_project, project_removed_at = null where id = s.id;
+    v_created := v_created || '{"project": true}';
+  end if;
+
+  return public.idem_put(p_idempotency_key, 'sale_confirm', jsonb_build_object(
+    'sale_id', s.id, 'cycle', s.cycle, 'project_id', v_project, 'mission_id', v_mission, 'created', v_created,
+    'project_removed', v_project is null and s.project_removed_at is not null));
+end;
+$$;
+
+-- ===========================================================================
+-- C03 — effets d'une réouverture ou d'une perte : décisions explicites, une seule opération
+-- ===========================================================================
+
+-- Ce qui est lié à la vente active d'une fiche, pour décider (projet, revenu, accès client).
+create or replace function public.deal_links(p_company uuid)
+returns jsonb
+language sql
+stable
+as $$
+  select jsonb_build_object(
+    'sale_id', s.id, 'cycle', s.cycle, 'state', s.state,
+    'project', case when p.id is not null then jsonb_build_object('id', p.id, 'name', p.name, 'status', p.status, 'published', p.portal_published) end,
+    'mission', case when m.id is not null then jsonb_build_object('id', m.id, 'label', m.label, 'kind', m.kind, 'amount', m.amount, 'status', m.status,
+      'end_date', m.end_date, 'invoiced', exists (select 1 from public.finance_invoices i where i.mission_id = m.id and i.cancelled_at is null)) end,
+    'portal_people', coalesce((
+      select jsonb_agg(jsonb_build_object('person_id', pe.id, 'name', btrim(coalesce(pe.first_name, '') || ' ' || coalesce(pe.last_name, '')),
+               'other_projects', (select count(*) from public.project_members pm2 join public.projects p2 on p2.id = pm2.project_id
+                                   where pm2.person_id = pe.id and p2.id <> p.id and p2.status not in ('termine', 'archive'))))
+        from public.project_members pm join public.people pe on pe.id = pm.person_id
+        join public.portal_accesses a on a.person_id = pe.id and a.revoked_at is null and (a.expires_at is null or a.expires_at > now())
+       where pm.project_id = p.id), '[]'::jsonb))
+    from public.sales s
+    left join public.projects p on p.id = s.project_id
+    left join public.finance_missions m on m.id = s.mission_id
+   where s.company_id = p_company and s.state in ('won', 'reopened')
+$$;
+
+-- Une vente a-t-elle des liens qui demandent une décision ? (projet non terminé, revenu actif, accès client)
+create or replace function public.deal_links_need_decision(p_company uuid)
+returns boolean
+language sql
+stable
+as $$
+  select exists (
+    select 1 from public.sales s
+      left join public.projects p on p.id = s.project_id
+      left join public.finance_missions m on m.id = s.mission_id
+     where s.company_id = p_company and s.state in ('won', 'reopened')
+       and ((p.id is not null and p.status not in ('termine', 'archive')) or (m.id is not null and m.status <> 'termine')))
+$$;
+
+-- Gagné / perdu / rouvert : la fiche garde son dernier pipeline et sa dernière étape (redéfinition complète).
+-- Rouvrir ou perdre une vente qui a encore un projet ou un revenu actif passe par deal_transition (décisions).
+create or replace function public.set_deal_status(
+  p_company uuid,
+  p_status text,
+  p_lost_reason text default null,
+  p_closed_on date default null,
+  p_amount numeric default null)
+returns jsonb
+language plpgsql
+as $$
+declare
+  c public.companies;
+  v_today date := (now() at time zone 'Europe/Paris')::date;
+  v_closed timestamptz;
+  v_stage public.stages;
+  v_pipeline text;
+  v_projects text;
+  v_reason text := nullif(btrim(coalesce(p_lost_reason, '')), '');
+  v_text text;
+begin
+  perform public.assert_owner();
+  if p_status not in ('open','won','lost') then raise exception 'Statut invalide' using errcode = '22023'; end if;
+  select * into c from public.companies where id = p_company and merged_into_id is null for update;
+  if not found then raise exception 'Fiche introuvable' using errcode = 'P0002'; end if;
+  if c.pipeline_id is null then
+    raise exception 'La fiche doit être dans un pipeline pour être marquée gagnée ou perdue.' using errcode = '22023';
+  end if;
+  if c.deal_status = p_status then
+    return jsonb_build_object('status', 'unchanged', 'deal_status', c.deal_status);
+  end if;
+  if p_status <> 'open' and c.deal_status <> 'open' then
+    raise exception 'Opportunité déjà clôturée : rouvrez-la d''abord.' using errcode = '22023';
+  end if;
+  if p_status in ('open', 'lost') and coalesce(current_setting('cely.deal_effects', true), '') <> '1'
+     and public.deal_links_need_decision(p_company) then
+    raise exception 'Cette vente a un projet ou un revenu actif : choisissez ce qu''ils deviennent (projet, échéances, accès client) avant de %.',
+      case p_status when 'open' then 'la rouvrir' else 'la marquer perdue' end using errcode = 'P0001';
+  end if;
+  if p_amount is not null and p_amount < 0 then raise exception 'Montant invalide' using errcode = '22023'; end if;
+  if v_reason is not null and char_length(v_reason) > 500 then raise exception 'Motif trop long (500 caractères au plus)' using errcode = '22023'; end if;
+
+  select p.name into v_pipeline from public.pipelines p where p.id = c.pipeline_id;
+
+  if p_status = 'won' then
+    if p_closed_on is not null and p_closed_on > v_today then
+      raise exception 'La date de signature ne peut pas être dans le futur.' using errcode = '22023';
+    end if;
+    v_closed := case when p_closed_on is null or p_closed_on = v_today then now()
+                     else (p_closed_on + time '12:00') at time zone 'Europe/Paris' end;
+    update public.companies
+       set deal_status = 'won', deal_closed_at = v_closed, amount = coalesce(p_amount, amount)
+     where id = c.id;
+    v_text := 'Opportunité gagnée : signée le ' || to_char((v_closed at time zone 'Europe/Paris')::date, 'DD/MM/YYYY')
+           || coalesce(' · ' || regexp_replace(replace(to_char(coalesce(p_amount, c.amount), 'FM999999999990.00'), '.', ','), ',00$', '') || ' €', '');
+
+  elsif p_status = 'lost' then
+    v_closed := now();
+    update public.companies
+       set deal_status = 'lost', deal_closed_at = v_closed, lost_reason = v_reason
+     where id = c.id;
+    v_text := 'Opportunité perdue' || coalesce(' : ' || v_reason, '');
+
+  else
+    select * into v_stage from public.stages where id = c.stage_id;
+    if not found then
+      select * into v_stage from public.stages where pipeline_id = c.pipeline_id order by position limit 1;
+    end if;
+    select string_agg(pr.name, ', ' order by pr.created_at) into v_projects
+      from public.projects pr where pr.company_id = c.id and pr.status <> 'archive';
+    -- la réouverture explicite est la seule à pouvoir changer l'étape d'une fiche clôturée (même instruction)
+    update public.companies
+       set deal_status = 'open', deal_closed_at = null, stage_id = coalesce(v_stage.id, stage_id)
+     where id = c.id;
+    v_text := 'Opportunité rouverte : était ' || case c.deal_status when 'won' then 'gagnée' else 'perdue' end
+           || coalesce(' · retour à l''étape ' || v_pipeline || ' › ' || v_stage.name, '')
+           || coalesce(' · projet conservé : ' || v_projects, '');
+  end if;
+
+  perform public.log_event(c.id, 'deal_status', v_text,
+    jsonb_build_object(
+      'from', c.deal_status, 'to', p_status,
+      'closed_at', v_closed,
+      'amount', case when p_status = 'won' then coalesce(p_amount, c.amount) end,
+      'lost_reason', case when p_status = 'lost' then v_reason end,
+      'pipeline', v_pipeline,
+      'stage', coalesce(v_stage.name, (select s.name from public.stages s where s.id = c.stage_id)),
+      'projects', v_projects));
+
+  return jsonb_build_object(
+    'status', 'ok', 'deal_status', p_status, 'deal_closed_at', v_closed,
+    'stage_id', coalesce(v_stage.id, c.stage_id), 'projects', v_projects);
+end;
+$$;
+
+-- Rouvrir ou perdre, avec les décisions sur les éléments liés, en une seule opération (tout ou rien).
+-- p_options : { project?: 'continue'|'en_attente'|'archive', revenue?: 'continue'|'stop', revenue_stop_on?: date,
+--               portal?: 'keep'|'revoke', lost_reason?: text }
+-- Sans décision alors qu'un projet ou un revenu est actif : refus explicite (rien n'est changé).
+create or replace function public.deal_transition(p_company uuid, p_status text, p_options jsonb default '{}', p_idempotency_key text default null)
+returns jsonb
+language plpgsql
+as $$
+declare
+  v_prev jsonb;
+  v_links jsonb;
+  v_project uuid;
+  v_mission public.finance_missions;
+  v_opt jsonb := coalesce(p_options, '{}'::jsonb);
+  v_project_choice text := v_opt ->> 'project';
+  v_revenue_choice text := v_opt ->> 'revenue';
+  v_portal_choice text := coalesce(v_opt ->> 'portal', 'keep');
+  v_stop date := coalesce(nullif(v_opt ->> 'revenue_stop_on', '')::date, public.today_paris());
+  v_effects jsonb := '[]'::jsonb;
+  v_revoked int := 0;
+  v_skipped int := 0;
+  v_res jsonb;
+  r record;
+begin
+  perform public.assert_owner();
+  if p_status not in ('open', 'lost') then raise exception 'Transition invalide' using errcode = '22023'; end if;
+  v_prev := public.idem_begin(p_idempotency_key, jsonb_build_object('company', p_company, 'status', p_status, 'options', v_opt));
+  if v_prev is not null then return v_prev; end if;
+  perform 1 from public.companies where id = p_company for update;
+
+  v_links := public.deal_links(p_company);
+  if public.deal_links_need_decision(p_company) then
+    if (v_links -> 'project') is not null and (v_links -> 'project' ->> 'status') not in ('termine', 'archive')
+       and coalesce(v_project_choice, '') not in ('continue', 'en_attente', 'archive') then
+      raise exception 'Choisissez ce que devient le projet « % » : continuer, mettre en attente ou archiver.', v_links -> 'project' ->> 'name' using errcode = 'P0001';
+    end if;
+    if (v_links -> 'mission') is not null and (v_links -> 'mission' ->> 'status') <> 'termine'
+       and coalesce(v_revenue_choice, '') not in ('continue', 'stop') then
+      raise exception 'Choisissez si les échéances futures du revenu « % » continuent ou s''arrêtent.', v_links -> 'mission' ->> 'label' using errcode = 'P0001';
+    end if;
+  end if;
+  if v_portal_choice not in ('keep', 'revoke') then raise exception 'Choix du portail invalide' using errcode = '22023'; end if;
+
+  -- projet
+  v_project := nullif(v_links -> 'project' ->> 'id', '')::uuid;
+  if v_project is not null and v_project_choice in ('en_attente', 'archive') then
+    update public.projects set status = v_project_choice, archived_at = case when v_project_choice = 'archive' then now() else archived_at end
+     where id = v_project and status not in ('termine', 'archive');
+    v_effects := v_effects || jsonb_build_array(case v_project_choice when 'archive' then 'Projet archivé' else 'Projet mis en attente' end);
+  end if;
+
+  -- revenu : les factures et règlements gardent leur historique ; seules les échéances futures s'arrêtent
+  select * into v_mission from public.finance_missions where id = nullif(v_links -> 'mission' ->> 'id', '')::uuid for update;
+  if v_mission.id is not null and v_revenue_choice = 'stop' and v_mission.status <> 'termine' then
+    if v_mission.kind = 'recurrent' then
+      if v_mission.start_date is not null and v_stop < v_mission.start_date then v_stop := v_mission.start_date; end if;
+      update public.finance_missions set end_date = v_stop,
+             status = case when v_stop <= public.today_paris() then 'termine' else status end
+       where id = v_mission.id;
+      v_effects := v_effects || jsonb_build_array('Revenu mensuel arrêté au ' || to_char(v_stop, 'DD/MM/YYYY'));
+    else
+      update public.finance_missions set status = 'termine' where id = v_mission.id;
+      v_effects := v_effects || jsonb_build_array('Prévision du revenu ponctuel retirée');
+    end if;
+  end if;
+
+  -- accès client : révoqués seulement pour les personnes sans autre projet actif
+  if v_portal_choice = 'revoke' then
+    for r in select (x ->> 'person_id')::uuid as person_id, (x ->> 'other_projects')::int as other from jsonb_array_elements(v_links -> 'portal_people') x loop
+      if r.other = 0 then
+        -- fonction du portail (droits et journal du portail) ; seuls les accès effectivement révoqués sont comptés
+        perform public.portal_access_revoke(r.person_id);
+        if exists (select 1 from public.portal_accesses where person_id = r.person_id and revoked_at is not null) then
+          v_revoked := v_revoked + 1;
+        end if;
+      else
+        v_skipped := v_skipped + 1;
+      end if;
+    end loop;
+    if v_revoked > 0 then v_effects := v_effects || jsonb_build_array(v_revoked || ' accès client révoqué(s)'); end if;
+  end if;
+
+  perform set_config('cely.deal_effects', '1', true);
+  v_res := public.set_deal_status(p_company, p_status, v_opt ->> 'lost_reason');
+  perform set_config('cely.deal_effects', '', true);
+
+  if jsonb_array_length(v_effects) > 0 then
+    perform public.log_event(p_company, 'system',
+      case p_status when 'open' then 'Réouverture' else 'Perte' end || ' : ' || (select string_agg(e, ' · ') from jsonb_array_elements_text(v_effects) e),
+      jsonb_build_object('effects', v_effects, 'sale_id', v_links ->> 'sale_id'));
+  end if;
+  return public.idem_put(p_idempotency_key, 'deal_transition', v_res || jsonb_build_object(
+    'effects', v_effects, 'portal_kept_other_projects', v_skipped));
+end;
+$$;
+
+-- Client qui revient : la vente actuelle (gagnée) est terminée et une nouvelle opportunité s'ouvre sur la même
+-- fiche. Le projet et le revenu précédents gardent leur historique ; le prochain « Gagné » crée un nouveau cycle.
+create or replace function public.deal_new_opportunity(p_company uuid, p_stage uuid, p_idempotency_key text default null)
+returns jsonb
+language plpgsql
+as $$
+declare
+  v_prev jsonb;
+  c public.companies;
+  v_stage public.stages;
+  v_sale uuid;
+begin
+  perform public.assert_owner();
+  v_prev := public.idem_begin(p_idempotency_key, jsonb_build_object('company', p_company, 'stage', p_stage));
+  if v_prev is not null then return v_prev; end if;
+  select * into c from public.companies where id = p_company and merged_into_id is null for update;
+  if not found then raise exception 'Fiche introuvable' using errcode = 'P0002'; end if;
+  if c.deal_status = 'open' then raise exception 'Une opportunité est déjà ouverte sur cette fiche.' using errcode = '22023'; end if;
+  select * into v_stage from public.stages where id = p_stage;
+  if not found then raise exception 'Étape introuvable' using errcode = 'P0002'; end if;
+
+  update public.sales set state = 'completed', ended_at = now() where company_id = p_company and state in ('won', 'reopened')
+  returning id into v_sale;
+  perform set_config('cely.deal_effects', '1', true);
+  update public.companies
+     set deal_status = 'open', deal_closed_at = null, lost_reason = null, amount = null,
+         pipeline_id = v_stage.pipeline_id, stage_id = v_stage.id
+   where id = c.id;
+  perform set_config('cely.deal_effects', '', true);
+  perform public.log_event(c.id, 'deal_status',
+    'Nouvelle opportunité : ' || (select name from public.pipelines where id = v_stage.pipeline_id) || ' › ' || v_stage.name
+      || case when v_sale is not null then ' (la vente précédente reste dans Ventes › Gagnées)' else '' end,
+    jsonb_build_object('from', c.deal_status, 'to', 'open', 'new_cycle', true, 'previous_sale_id', v_sale));
+  return public.idem_put(p_idempotency_key, 'deal_new_opportunity', jsonb_build_object('status', 'ok', 'previous_sale_id', v_sale));
+end;
+$$;
+
+-- ===========================================================================
+-- Q11 — suivi après-vente : formalités (documents) ≠ préparation ≠ exécution (projet)
+-- Faire reculer un projet en cours ou en attente demande une confirmation explicite (p_confirm).
+-- ===========================================================================
+drop function if exists public.sale_set_stage(uuid, text);
+create or replace function public.sale_set_stage(p_sale uuid, p_stage text, p_confirm boolean default false)
+returns jsonb
+language plpgsql
+as $$
+declare s public.sales; v_project public.projects; v_label text; v_target text;
+begin
+  perform public.assert_owner();
+  if p_stage not in ('devis_contrat', 'onboarding', 'en_mission', 'termine') then raise exception 'Étape de suivi invalide' using errcode = '22023'; end if;
+  select * into s from public.sales where id = p_sale for update;
+  if not found then raise exception 'Vente introuvable' using errcode = 'P0002'; end if;
+  if s.state <> 'won' then raise exception 'Cette vente n''est pas en cours de suivi (rouverte, perdue ou terminée).' using errcode = '22023'; end if;
+  select * into v_project from public.projects where id = s.project_id;
+  if p_stage in ('en_mission', 'termine') and v_project.id is null then
+    raise exception 'Aucun projet lié : créez ou liez le projet d''abord.' using errcode = '22023';
+  end if;
+  if p_stage in ('devis_contrat', 'onboarding') and v_project.status in ('en_cours', 'en_attente') and not p_confirm then
+    raise exception 'Le projet « % » est %. Le repasser « à préparer » demande votre confirmation.',
+      v_project.name, case v_project.status when 'en_cours' then 'en cours' else 'en attente' end using errcode = 'P0001';
+  end if;
+  update public.sales set documents_ready = p_stage <> 'devis_contrat' where id = s.id;
+  v_target := case p_stage when 'en_mission' then 'en_cours' when 'termine' then 'termine' else 'a_preparer' end;
+  if v_project.id is not null and v_project.status <> 'archive' and v_project.status is distinct from v_target then
+    update public.projects set status = v_target where id = v_project.id;
+  end if;
+  v_label := case p_stage when 'devis_contrat' then 'Devis / Contrat' when 'onboarding' then 'Onboarding' when 'en_mission' then 'En mission' else 'Mission terminée' end;
+  perform public.log_event(s.company_id, 'system', 'Suivi client : ' || v_label, jsonb_build_object('sale_id', s.id, 'stage', p_stage, 'project_id', s.project_id));
+  return jsonb_build_object('sale_id', s.id, 'stage', p_stage);
+end;
+$$;
+
+-- ===========================================================================
+-- Vue des ventes : une ligne par cycle gagné (ou terminé), plus les fiches perdues et les anciens dossiers gagnés
+-- sans vente. K10 : la préparation vient de project_onboarding_status (même état que Projets).
+-- ===========================================================================
+drop view if exists public.sales_overview;
+create view public.sales_overview with (security_invoker = true) as
+  with rows as (
+    -- ventes (cycles) gagnées, en cours de suivi ou terminées
+    select s.id as row_id, c.id as company_id, s.id as sale_id, s.cycle, s.state as sale_state,
+           case when s.state = 'lost' then 'lost' else 'won' end as deal_status,
+           s.closed_on, s.signed_on, s.revenue_mode, s.documents_ready, s.mission_id, s.project_id, s.project_removed_at
+      from public.sales s join public.companies c on c.id = s.company_id
+     where c.merged_into_id is null and s.state in ('won', 'completed')
+    union all
+    -- fiches perdues (avec la vente du cycle perdu s'il y en a une)
+    select c.id, c.id, ls.id, ls.cycle, ls.state, 'lost',
+           (c.deal_closed_at at time zone 'Europe/Paris')::date, ls.signed_on, ls.revenue_mode, ls.documents_ready, ls.mission_id, ls.project_id, ls.project_removed_at
+      from public.companies c
+      left join lateral (select * from public.sales x where x.company_id = c.id and x.state = 'lost' order by x.cycle desc limit 1) ls on true
+     where c.merged_into_id is null and c.deal_status = 'lost'
+    union all
+    -- anciens dossiers gagnés sans vente enregistrée (aucune création automatique)
+    select c.id, c.id, null, null, null, 'won',
+           (c.deal_closed_at at time zone 'Europe/Paris')::date, null, null, null, null, null, null
+      from public.companies c
+     where c.merged_into_id is null and c.deal_status = 'won'
+       and not exists (select 1 from public.sales x where x.company_id = c.id and x.state in ('won', 'reopened'))
+  )
+  select r.row_id,
+         c.id as company_id,
+         c.name,
+         r.deal_status,
+         c.deal_status as company_deal_status,
+         c.deal_closed_at,
+         r.closed_on,
+         c.lost_reason,
+         c.amount as deal_amount,
+         c.archived_at,
+         pl.name as pipeline_name,
+         st.name as stage_name,
+         pp.name as primary_person_name,
+         r.sale_id,
+         r.cycle,
+         r.sale_state,
+         r.signed_on,
+         r.revenue_mode,
+         r.documents_ready,
+         r.project_removed_at,
+         ob.status as prep_status,
+         ob.open_required as prep_missing,
+         ob.prep_error,
+         mo.id as mission_id,
+         mo.kind as mission_kind,
+         mo.amount as mission_amount,
+         mo.start_date as mission_start,
+         mo.end_date as mission_end,
+         mo.status as mission_status,
+         mo.invoiced_ttc,
+         mo.received,
+         mo.remaining,
+         pr.id as project_id,
+         pr.name as project_name,
+         pr.status as project_status,
+         case when r.sale_id is null and r.deal_status = 'won' then lm.mission_id end as candidate_mission_id,
+         case when r.sale_id is null and r.deal_status = 'won' then lp.project_id end as candidate_project_id,
+         case
+           when mo.id is null then 'a_renseigner'
+           when mo.invoiced_ttc > 0 and mo.remaining <= 0 and mo.received > 0 then 'encaisse'
+           when mo.invoiced_ttc > 0 then 'facture'
+           else 'prevu'
+         end as billing,
+         case
+           when r.deal_status <> 'won' then null
+           when r.sale_state = 'completed' then 'termine'
+           when pr.status in ('termine', 'archive') then 'termine'
+           when pr.status in ('en_cours', 'en_attente') then 'en_mission'
+           when r.sale_id is null and pr.id is null then null
+           when r.sale_id is not null and not r.documents_ready then 'devis_contrat'
+           else 'onboarding'
+         end as stage
+    from rows r
+    join public.companies c on c.id = r.company_id
+    left join public.pipelines pl on pl.id = c.pipeline_id
+    left join public.stages st on st.id = c.stage_id
+    left join lateral (
+      select nullif(btrim(coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, '')), '') as name
+        from public.people p where p.company_id = c.id order by p.is_primary desc, p.created_at limit 1) pp on true
+    left join lateral (
+      select case when count(*) = 1 then min(m.id::text)::uuid end as mission_id
+        from public.finance_missions m
+       where m.company_id = c.id and not exists (select 1 from public.sales x where x.mission_id = m.id)) lm on true
+    left join lateral (
+      select case when count(*) = 1 then min(p.id::text)::uuid end as project_id
+        from public.projects p where p.company_id = c.id and p.status <> 'archive'
+         and not exists (select 1 from public.sales x where x.project_id = p.id)) lp on true
+    left join public.finance_mission_overview mo on mo.id = r.mission_id
+    left join public.projects pr on pr.id = coalesce(r.project_id, case when r.sale_id is null and r.deal_status = 'won' then lp.project_id end)
+    left join public.project_onboarding_status ob on ob.project_id = pr.id;
+revoke all on public.sales_overview from anon;
+grant select on public.sales_overview to authenticated;
+
+-- ===========================================================================
+-- Droits d'exécution
+-- ===========================================================================
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'public.idem_caller()', 'public.idem_begin(text, jsonb)',
+    'public.deal_links(uuid)', 'public.deal_links_need_decision(uuid)',
+    'public.deal_transition(uuid, text, jsonb, text)', 'public.deal_new_opportunity(uuid, uuid, text)',
+    'public.sale_set_stage(uuid, text, boolean)']
+  loop
+    execute format('revoke execute on function %s from public, anon', f);
+    execute format('grant execute on function %s to authenticated', f);
+  end loop;
+end $$;
+
+-- ===========================================================================
+-- K10 — une nouvelle pièce (proposition, contrat) relance la préparation des ventes suivies de la fiche ; la
+-- préparation repart à l'ouverture du projet et conserve vos corrections (sections « owner »). Un contrat ajouté
+-- reste une pièce à examiner : il ne vaut pas confirmation des documents (sales.documents_ready reste le vôtre).
+-- ===========================================================================
+create or replace function public.tg_files_refresh_onboarding()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.status = 'ready' and new.category in ('Proposition', 'Contrat')
+     and (tg_op = 'INSERT' or old.status is distinct from 'ready' or old.category is distinct from new.category) then
+    update public.project_onboarding o set prep_state = 'pending', prep_error = null
+      from public.sales s
+     where s.company_id = new.company_id and s.state = 'won' and o.project_id = s.project_id and o.prep_state <> 'pending';
+  end if;
+  return null;
+end;
+$$;
+create trigger files_refresh_onboarding after insert or update of status, category on public.company_files
+  for each row execute function public.tg_files_refresh_onboarding();
+
+
+-- ===== 20261115000200_fusion_complete.sql =====
+-- Audit, lot 2 — fusion complète (C02). Migration additive : aucune donnée existante n'est modifiée ici (le
+-- rattrapage des fusions passées est un script séparé : supabase/maintenance/rattrapage-fusions.sql).
+--  * Tout suit la fiche conservée : personnes, historique, tâches, listes, campagnes, ventes (renumérotées en cycles),
+--    revenus, factures et règlements, projets (membres, tâches, fichiers partagés, onboarding), rendez-vous, fichiers,
+--    emails, appels Fireflies, diagnostics, temps.
+--  * Conflits présentés avant confirmation (merge_preview) ; deux ventes en cours sont bloquées avec une explication ;
+--    l'issue choisie doit être celle qui porte la vente active.
+--  * Une seule transaction ; l'identifiant absorbé reste tracé (companies.merged_into_id, table merges).
+
+-- Ce que chaque fiche apporte, et ce qui bloque ou demande attention.
+create or replace function public.merge_preview(p_keep uuid, p_merge uuid)
+returns jsonb
+language plpgsql
+stable
+as $$
+declare
+  v_counts jsonb := '{}'::jsonb;
+  v_blocking jsonb := '[]'::jsonb;
+  v_warnings jsonb := '[]'::jsonb;
+  k public.companies;
+  m public.companies;
+  ks public.sales;
+  ms public.sales;
+  side record;
+begin
+  perform public.assert_owner();
+  select * into k from public.companies where id = p_keep;
+  select * into m from public.companies where id = p_merge;
+  if k.id is null or m.id is null then raise exception 'Fiche introuvable' using errcode = 'P0002'; end if;
+  for side in select * from (values ('keep', p_keep), ('merge', p_merge)) as x(label, id) loop
+    v_counts := v_counts || jsonb_build_object(side.label, jsonb_build_object(
+      'personnes', (select count(*) from public.people where company_id = side.id),
+      'historique', (select count(*) from public.interactions where company_id = side.id),
+      'taches', (select count(*) from public.tasks where company_id = side.id),
+      'campagnes', (select count(*) from public.campaign_participants where company_id = side.id),
+      'ventes', (select count(*) from public.sales where company_id = side.id),
+      'revenus', (select count(*) from public.finance_missions where company_id = side.id),
+      'factures', (select count(*) from public.finance_invoices where company_id = side.id),
+      'reglements', (select count(*) from public.finance_payments p join public.finance_invoices i on i.id = p.invoice_id where i.company_id = side.id),
+      'projets', (select count(*) from public.projects where company_id = side.id),
+      'taches_projet', (select count(*) from public.project_tasks t join public.projects p on p.id = t.project_id where p.company_id = side.id),
+      'rendez_vous', (select count(*) from public.appt_bookings where company_id = side.id),
+      'fichiers', (select count(*) from public.company_files where company_id = side.id),
+      'emails', (select count(*) from public.mail_messages where company_id = side.id),
+      'appels', (select count(*) from public.fireflies_calls where company_id = side.id),
+      'diagnostics', (select count(*) from public.diagnostics where company_id = side.id),
+      'temps', (select count(*) from public.time_entries where company_id = side.id)));
+  end loop;
+
+  select * into ks from public.sales where company_id = p_keep and state in ('won', 'reopened');
+  select * into ms from public.sales where company_id = p_merge and state in ('won', 'reopened');
+  if ks.id is not null and ms.id is not null then
+    v_blocking := v_blocking || jsonb_build_array(
+      'Les deux fiches ont une vente en cours. Terminez ou marquez perdue l''une des deux (Ventes) avant de fusionner.');
+  end if;
+  if (ks.id is not null or ms.id is not null) then
+    v_warnings := v_warnings || jsonb_build_array(
+      'Une vente en cours existe sur « ' || case when ks.id is not null then k.name else m.name end
+      || ' » : gardez la position commerciale (pipeline et issue) de cette fiche.');
+  end if;
+  if exists (select 1 from public.campaign_participants a join public.campaign_participants b on a.campaign_id = b.campaign_id
+              where a.company_id = p_keep and b.company_id = p_merge) then
+    v_warnings := v_warnings || jsonb_build_array('Les deux fiches sont dans une même campagne : le suivi de la fiche conservée est gardé, l''autre est arrêté et consigné.');
+  end if;
+  if (select count(*) from public.projects where company_id in (p_keep, p_merge) and status not in ('termine', 'archive')) > 1 then
+    v_warnings := v_warnings || jsonb_build_array('Plusieurs projets actifs seront rattachés à la même fiche : vérifiez-les ensuite dans Projets.');
+  end if;
+  return jsonb_build_object('counts', v_counts, 'blocking', v_blocking, 'warnings', v_warnings,
+    'active_sale', case when ks.id is not null then 'keep' when ms.id is not null then 'merge' end);
+end;
+$$;
+
+-- Les rendez-vous ne s'écrivent pas directement (module Rendez-vous) : déplacement dédié, réservé au propriétaire.
+create or replace function public.merge_move_bookings(p_from uuid, p_to uuid)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare v_n int;
+begin
+  perform public.assert_owner();
+  if not exists (select 1 from public.companies where id = p_to and merged_into_id is null) then
+    raise exception 'Fiche introuvable' using errcode = 'P0002';
+  end if;
+  update public.appt_bookings set company_id = p_to where company_id = p_from;
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
+
+-- Fusion complète (redéfinition entière de merge_companies).
+create or replace function public.merge_companies(
+  p_keep uuid, p_merge uuid, p_fields jsonb default '{}', p_pipeline_from text default 'keep')
+returns jsonb
+language plpgsql
+as $$
+declare
+  k public.companies;
+  m public.companies;
+  r record;
+  v_conflicts int := 0;
+  v_people int;
+  v_moved jsonb := '{}'::jsonb;
+  v_n int;
+  v_offset int;
+  ks public.sales;
+  ms public.sales;
+  v_active public.sales;
+  v_result_status text;
+  f text;
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Fusion');
+  if p_keep = p_merge then raise exception 'Impossible de fusionner une fiche avec elle-même' using errcode = '22023'; end if;
+  if p_pipeline_from not in ('keep', 'merged') then raise exception 'Choix du pipeline invalide' using errcode = '22023'; end if;
+  -- verrouillage dans un ordre stable
+  perform 1 from public.companies where id in (p_keep, p_merge) order by id for update;
+  select * into k from public.companies where id = p_keep;
+  select * into m from public.companies where id = p_merge;
+  if k.id is null or m.id is null then raise exception 'Fiche introuvable' using errcode = 'P0002'; end if;
+  if k.merged_into_id is not null or m.merged_into_id is not null then
+    raise exception 'Une des fiches a déjà été fusionnée' using errcode = '22023';
+  end if;
+
+  -- ventes : deux ventes en cours sont incompatibles ; l'issue gardée doit être celle de la vente active
+  select * into ks from public.sales where company_id = k.id and state in ('won', 'reopened') for update;
+  select * into ms from public.sales where company_id = m.id and state in ('won', 'reopened') for update;
+  if ks.id is not null and ms.id is not null then
+    raise exception 'Fusion impossible : les deux fiches ont une vente en cours. Terminez ou marquez perdue l''une des deux dans Ventes, puis fusionnez.' using errcode = 'P0001';
+  end if;
+  if ks.id is not null then v_active := ks; else v_active := ms; end if;
+  v_result_status := case when p_pipeline_from = 'merged' then m.deal_status else k.deal_status end;
+  if v_active.id is not null and v_result_status <> (case v_active.state when 'won' then 'won' else 'open' end) then
+    raise exception 'Fusion impossible en l''état : la vente en cours de « % » demande de garder sa position commerciale (pipeline et issue « % »).',
+      case when ks.id is not null then k.name else m.name end,
+      case v_active.state when 'won' then 'gagnée' else 'ouverte' end using errcode = 'P0001';
+  end if;
+
+  insert into public.merges (kept_company_id, merged_company_id, merged_snapshot, field_choices)
+  values (k.id, m.id,
+          jsonb_build_object('company', to_jsonb(m),
+                             'people', coalesce((select jsonb_agg(to_jsonb(p)) from public.people p where p.company_id = m.id), '[]')),
+          coalesce(p_fields, '{}') || jsonb_build_object('pipeline_from', p_pipeline_from));
+
+  for f in select jsonb_object_keys(coalesce(p_fields, '{}')) loop
+    if f not in ('name','website','description','source_id','amount','expected_close_date','prospect_status','lost_reason') then
+      raise exception 'Champ inconnu : %', f using errcode = '22023';
+    end if;
+  end loop;
+
+  update public.companies set
+    name = case when p_fields ->> 'name' = 'merged' then m.name else k.name end,
+    website = case when p_fields ->> 'website' = 'merged' then m.website else coalesce(k.website, m.website) end,
+    description = case when p_fields ->> 'description' = 'merged' then m.description else coalesce(k.description, m.description) end,
+    source_id = case when p_fields ->> 'source_id' = 'merged' then m.source_id else coalesce(k.source_id, m.source_id) end,
+    amount = case when p_fields ->> 'amount' = 'merged' then m.amount else coalesce(k.amount, m.amount) end,
+    expected_close_date = case when p_fields ->> 'expected_close_date' = 'merged' then m.expected_close_date else coalesce(k.expected_close_date, m.expected_close_date) end,
+    prospect_status = case when p_fields ->> 'prospect_status' = 'merged' then m.prospect_status else k.prospect_status end,
+    lost_reason = case when p_fields ->> 'lost_reason' = 'merged' then m.lost_reason else coalesce(k.lost_reason, m.lost_reason) end,
+    tags = array(select distinct unnest(k.tags || m.tags)),
+    pipeline_id = case when p_pipeline_from = 'merged' then m.pipeline_id else k.pipeline_id end,
+    stage_id = case when p_pipeline_from = 'merged' then m.stage_id else k.stage_id end,
+    deal_status = case when p_pipeline_from = 'merged' then m.deal_status else k.deal_status end,
+    deal_closed_at = case when p_pipeline_from = 'merged' then m.deal_closed_at else k.deal_closed_at end,
+    archived_at = case when k.archived_at is not null and m.archived_at is null then null else k.archived_at end
+  where id = k.id;
+
+  -- personnes : un seul contact principal conservé (leurs accès au portail les suivent)
+  if exists (select 1 from public.people where company_id = k.id and is_primary) then
+    update public.people set is_primary = false where company_id = m.id;
+  end if;
+  update public.people set company_id = k.id where company_id = m.id;
+  get diagnostics v_people = row_count;
+
+  update public.interactions set company_id = k.id where company_id = m.id;
+  update public.tasks set company_id = k.id where company_id = m.id;
+  update public.import_row_keys set company_id = k.id where company_id = m.id;
+
+  insert into public.list_members (list_id, company_id, added_at)
+  select list_id, k.id, added_at from public.list_members where company_id = m.id
+  on conflict do nothing;
+  delete from public.list_members where company_id = m.id;
+
+  -- campagnes : sans conflit, le participant est rattaché à la fiche conservée ;
+  -- en conflit, celui de la fiche fusionnée est arrêté et son état est consigné.
+  for r in
+    select cp.*, ca.name as campaign_name
+      from public.campaign_participants cp join public.campaigns ca on ca.id = cp.campaign_id
+     where cp.company_id = m.id
+  loop
+    if exists (select 1 from public.campaign_participants where campaign_id = r.campaign_id and company_id = k.id) then
+      update public.campaign_participants
+         set status = 'arrete', next_due_date = null, stop_reason = 'Fusionné dans la fiche ' || k.name
+       where id = r.id;
+      perform public.log_event(k.id, 'merge',
+        'Campagne « ' || r.campaign_name || ' » : la fiche fusionnée y était aussi (étape ' || r.current_step
+        || ', statut ' || r.status || '). Le suivi de cette fiche a été conservé.',
+        jsonb_build_object('campaign_id', r.campaign_id, 'merged_participant', to_jsonb(r)));
+      v_conflicts := v_conflicts + 1;
+    else
+      update public.campaign_participants set company_id = k.id where id = r.id;
+    end if;
+  end loop;
+
+  -- ventes : déplacées et renumérotées après les cycles de la fiche conservée
+  select coalesce(max(cycle), 0) into v_offset from public.sales where company_id = k.id;
+  update public.sales set company_id = k.id, cycle = cycle + v_offset where company_id = m.id;
+  get diagnostics v_n = row_count; v_moved := v_moved || jsonb_build_object('ventes', v_n);
+  -- projets (membres, tâches, fichiers partagés, onboarding suivent le projet) et rendez-vous
+  update public.projects set company_id = k.id where company_id = m.id;
+  get diagnostics v_n = row_count; v_moved := v_moved || jsonb_build_object('projets', v_n);
+  v_n := public.merge_move_bookings(m.id, k.id); v_moved := v_moved || jsonb_build_object('rendez_vous', v_n);
+
+  delete from public.duplicate_dismissals where company_a = m.id or company_b = m.id;
+
+  -- la fiche absorbée : archivée, son identifiant pointe vers la fiche conservée. Les déclencheurs déplacent
+  -- revenus, factures, fichiers, emails, appels, diagnostics et temps.
+  update public.companies
+     set merged_into_id = k.id, archived_at = coalesce(archived_at, now()),
+         pipeline_id = null, stage_id = null
+   where id = m.id;
+
+  perform public.log_event(k.id, 'merge',
+    'Fiche « ' || m.name || ' » fusionnée dans cette fiche (ancien identifiant ' || m.id || ')',
+    jsonb_build_object('merged_company_id', m.id, 'merged_name', m.name, 'people_moved', v_people,
+                       'campaign_conflicts', v_conflicts, 'moved', v_moved,
+                       'pipeline_from', p_pipeline_from,
+                       'discarded_pipeline', case when p_pipeline_from = 'merged' then k.stage_id else m.stage_id end));
+
+  return jsonb_build_object('status', 'merged', 'kept_id', k.id, 'merged_id', m.id,
+                            'people_moved', v_people, 'campaign_conflicts', v_conflicts, 'moved', v_moved);
+end;
+$$;
+
+-- La vente est désormais déplacée par merge_companies (renumérotée) : le déclencheur ne fait plus rien.
+create or replace function public.tg_sales_follow_merge()
+returns trigger
+language plpgsql
+as $$
+begin
+  return null;
+end;
+$$;
+
+revoke execute on function public.merge_move_bookings(uuid, uuid) from public, anon;
+grant execute on function public.merge_move_bookings(uuid, uuid) to authenticated;
+revoke execute on function public.merge_preview(uuid, uuid) from public, anon;
+grant execute on function public.merge_preview(uuid, uuid) to authenticated;
+
+
+-- ===== 20261115000300_finance_coherente.sql =====
+-- Audit, lot 3 — Finance cohérente (C04, C05, Q06, Q07, K14 calculs).
+-- Migration additive : une colonne (companies.amount_recurring), des fonctions, des déclencheurs et deux vues
+-- reconstruites. Aucune donnée existante n'est modifiée à l'installation.
+
+-- ===========================================================================
+-- C04 — cohérence client ↔ revenu ↔ facture ↔ vente, contrôlée en base pour TOUS les chemins
+-- (formulaires, Claude, fusion). Vérifiée en fin de transaction : une fusion qui déplace revenus et
+-- factures ensemble reste possible ; un état incohérent à la validation est refusé.
+-- ===========================================================================
+create or replace function public.tg_finance_invoice_consistency()
+returns trigger
+language plpgsql
+as $$
+begin
+  if not exists (select 1 from public.finance_invoices where id = new.id) then return null; end if;
+  if new.mission_id is not null and exists (
+       select 1 from public.finance_invoices i join public.finance_missions m on m.id = i.mission_id
+        where i.id = new.id and m.company_id <> i.company_id) then
+    raise exception 'Cette facture vise le revenu d''un autre client.' using errcode = '22023';
+  end if;
+  if new.credited_invoice_id is not null and exists (
+       select 1 from public.finance_invoices a join public.finance_invoices f on f.id = a.credited_invoice_id
+        where a.id = new.id and f.company_id <> a.company_id) then
+    raise exception 'Un avoir appartient au même client que sa facture.' using errcode = '22023';
+  end if;
+  return null;
+end;
+$$;
+drop trigger if exists finance_invoice_consistency on public.finance_invoices;
+create constraint trigger finance_invoice_consistency
+  after insert or update of company_id, mission_id, credited_invoice_id on public.finance_invoices
+  deferrable initially deferred for each row execute function public.tg_finance_invoice_consistency();
+
+create or replace function public.tg_finance_mission_consistency()
+returns trigger
+language plpgsql
+as $$
+begin
+  if exists (select 1 from public.finance_missions m join public.sales s on s.mission_id = m.id
+              where m.id = new.id and s.company_id <> m.company_id) then
+    raise exception 'Ce revenu est lié à une vente d''un autre client : il ne change pas de client.' using errcode = '22023';
+  end if;
+  if exists (select 1 from public.finance_missions m join public.finance_invoices i on i.mission_id = m.id
+              where m.id = new.id and i.company_id <> m.company_id) then
+    raise exception 'Des factures de ce revenu appartiennent à un autre client.' using errcode = '22023';
+  end if;
+  return null;
+end;
+$$;
+drop trigger if exists finance_mission_consistency on public.finance_missions;
+create constraint trigger finance_mission_consistency
+  after update of company_id on public.finance_missions
+  deferrable initially deferred for each row execute function public.tg_finance_mission_consistency();
+
+-- Une vente ne pointe que vers un revenu de son client (contrôle immédiat, message clair).
+create or replace function public.tg_sales_mission_company()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.mission_id is not null and exists (select 1 from public.finance_missions m where m.id = new.mission_id and m.company_id <> new.company_id) then
+    raise exception 'Ce revenu appartient à un autre client.' using errcode = '22023';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists sales_mission_company on public.sales;
+create constraint trigger sales_mission_company
+  after insert or update of mission_id, company_id on public.sales
+  deferrable initially deferred for each row execute function public.tg_sales_mission_company();
+
+-- ---------------------------------------------------------------------------
+-- Échéances : dates d'un revenu, facture qui couvre une échéance, échéance la plus proche non couverte.
+-- Même règle que src/lib/finance/revenues.ts (coveringInvoice) : rattachement explicite, sinon, pour les
+-- anciennes factures mensuelles sans rattachement, facture émise le même mois.
+-- ---------------------------------------------------------------------------
+create or replace function public.finance_due_covered(p_mission uuid, p_due date, p_except uuid default null)
+returns boolean
+language sql
+stable
+as $$
+  select exists (
+    select 1 from public.finance_invoices i join public.finance_missions m on m.id = i.mission_id
+     where i.mission_id = p_mission and i.kind = 'facture' and i.cancelled_at is null and i.id is distinct from p_except
+       and (i.forecast_due_date = p_due
+            or (i.forecast_due_date is null and m.kind = 'recurrent' and coalesce(m.frequency, 'mensuel') = 'mensuel'
+                and date_trunc('month', i.issue_date) = date_trunc('month', p_due))));
+$$;
+
+-- Échéance d'un revenu récurrent la plus proche d'une date, non encore couverte (null si aucune).
+create or replace function public.finance_nearest_open_due(p_mission uuid, p_near date, p_except uuid default null)
+returns date
+language plpgsql
+stable
+as $$
+declare m public.finance_missions; d date; best date; k int;
+begin
+  select * into m from public.finance_missions where id = p_mission;
+  if m.id is null or m.kind <> 'recurrent' or coalesce(m.start_date, m.next_due_date) is null then return null; end if;
+  for k in 0..600 loop
+    d := public.finance_due_date(coalesce(m.start_date, m.next_due_date), m.frequency, k);
+    exit when (m.end_date is not null and d > m.end_date) or d > p_near + 400;
+    if not public.finance_due_covered(p_mission, d, p_except)
+       and (best is null or abs(d - p_near) < abs(best - p_near)) then
+      best := d;
+    end if;
+  end loop;
+  return best;
+end;
+$$;
+
+-- Q06 / C04 : toute facture rattachée à un revenu couvre une échéance précise ; une échéance mensuelle
+-- n'est jamais couverte deux fois (sinon la prévision serait comptée en double ou disparaîtrait à tort).
+create or replace function public.tg_finance_invoice_cover()
+returns trigger
+language plpgsql
+as $$
+declare m public.finance_missions;
+begin
+  if new.kind <> 'facture' then return new; end if;
+  if new.mission_id is null then new.forecast_due_date := null; return new; end if;
+  if tg_op = 'UPDATE' and new.mission_id is distinct from old.mission_id and new.forecast_due_date is not distinct from old.forecast_due_date then
+    new.forecast_due_date := null;   -- autre revenu : l'ancienne échéance ne vaut plus
+  end if;
+  select * into m from public.finance_missions where id = new.mission_id;
+  if new.forecast_due_date is null then
+    new.forecast_due_date := case when m.kind = 'ponctuel' then coalesce(m.next_due_date, m.start_date)
+                                  else public.finance_nearest_open_due(m.id, new.issue_date, new.id) end;
+  elsif m.kind = 'recurrent' and new.cancelled_at is null and public.finance_due_covered(m.id, new.forecast_due_date, new.id) then
+    raise exception 'L''échéance du % est déjà facturée : enregistrez le paiement sur cette facture.', to_char(new.forecast_due_date, 'DD/MM/YYYY') using errcode = '22023';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists finance_invoice_cover on public.finance_invoices;
+create trigger finance_invoice_cover
+  before insert or update of mission_id, forecast_due_date, cancelled_at on public.finance_invoices
+  for each row execute function public.tg_finance_invoice_cover();
+
+-- ---------------------------------------------------------------------------
+-- Factures : modification partielle (un champ absent reste inchangé ; mission_id: null = retirer le lien),
+-- jamais vers le revenu d'un autre client.
+-- ---------------------------------------------------------------------------
+create or replace function public.finance_update_invoice(p_id uuid, p_data jsonb)
+returns jsonb
+language plpgsql
+as $$
+declare v_inv public.finance_invoices; v_ht numeric(12,2); v_vat numeric(12,2); v_ttc numeric(12,2); v_paid numeric(12,2); v_mission uuid;
+begin
+  perform public.assert_owner();
+  select * into v_inv from public.finance_invoices where id = p_id for update;
+  if v_inv.id is null then raise exception 'Facture introuvable' using errcode = 'P0002'; end if;
+  v_ht := case when p_data ? 'amount_ht' then public.finance_num(p_data, 'amount_ht') else v_inv.amount_ht end;
+  if v_ht is null or v_ht <= 0 then raise exception 'Le montant HT doit être positif' using errcode = '22023'; end if;
+  v_vat := case when p_data ? 'vat_amount' then public.finance_num(p_data, 'vat_amount') else v_inv.vat_amount end;
+  v_ttc := case when p_data ? 'amount_ttc' then public.finance_num(p_data, 'amount_ttc')
+                when p_data ? 'amount_ht' or p_data ? 'vat_amount' then v_ht + coalesce(v_vat, 0) else v_inv.amount_ttc end;
+  if v_vat is not null and v_ttc <> v_ht + v_vat then
+    raise exception 'HT + TVA ne correspond pas au TTC' using errcode = '22023';
+  end if;
+  select paid_net into v_paid from public.finance_invoice_overview where id = p_id;
+  if v_ttc < coalesce(v_paid, 0) then
+    raise exception 'Le montant TTC serait inférieur aux paiements déjà reçus' using errcode = '22023';
+  end if;
+  v_mission := case when p_data ? 'mission_id' then nullif(p_data ->> 'mission_id', '')::uuid else v_inv.mission_id end;
+  if v_mission is not null and not exists (select 1 from public.finance_missions where id = v_mission and company_id = v_inv.company_id) then
+    raise exception 'Ce revenu appartient à un autre client.' using errcode = '22023';
+  end if;
+  update public.finance_invoices set
+    reference = case when p_data ? 'reference' then public.finance_txt(p_data, 'reference') else reference end,
+    issue_date = coalesce(case when p_data ? 'issue_date' then public.finance_date(p_data, 'issue_date') end, issue_date),
+    due_date = case when p_data ? 'due_date' then public.finance_date(p_data, 'due_date') else due_date end,
+    amount_ht = v_ht,
+    vat_rate = case when p_data ? 'vat_rate' then nullif(p_data ->> 'vat_rate', '')::numeric(5,2) else vat_rate end,
+    vat_amount = v_vat, amount_ttc = v_ttc,
+    note = case when p_data ? 'note' then public.finance_txt(p_data, 'note') else note end,
+    mission_id = v_mission,
+    forecast_due_date = case when p_data ? 'forecast_due_date' then public.finance_date(p_data, 'forecast_due_date')
+                             when v_mission is distinct from v_inv.mission_id then null else forecast_due_date end
+  where id = p_id;
+  return jsonb_build_object('id', p_id);
+end;
+$$;
+
+-- Facture enregistrée à la main : même contrôle client, et pour un ponctuel le total facturé ne dépasse pas
+-- le montant prévu (acompte + solde = montant ; au-delà, modifiez d'abord le revenu). Référence unique par client.
+create or replace function public.finance_record_invoice(p_data jsonb, p_idempotency_key text default null)
+returns jsonb
+language plpgsql
+as $$
+declare
+  v_prev jsonb; v_id uuid; v_company uuid; v_mission uuid; v_m public.finance_missions;
+  v_ht numeric(12,2); v_vat numeric(12,2); v_ttc numeric(12,2); v_cover date; v_ref text; v_billed numeric(12,2);
+begin
+  perform public.assert_owner();
+  v_prev := public.idem_get(p_idempotency_key);
+  if v_prev is not null then return v_prev; end if;
+  v_company := nullif(p_data ->> 'company_id', '')::uuid;
+  v_mission := nullif(p_data ->> 'mission_id', '')::uuid;
+  if not exists (select 1 from public.companies where id = v_company and merged_into_id is null) then
+    raise exception 'Fiche client introuvable' using errcode = 'P0002';
+  end if;
+  if v_mission is not null then
+    select * into v_m from public.finance_missions where id = v_mission for update;
+    if v_m.id is null or v_m.company_id <> v_company then
+      raise exception 'Ce revenu appartient à un autre client.' using errcode = '22023';
+    end if;
+  end if;
+  v_ht := public.finance_num(p_data, 'amount_ht');
+  v_vat := public.finance_num(p_data, 'vat_amount');
+  v_ttc := coalesce(public.finance_num(p_data, 'amount_ttc'), v_ht + coalesce(v_vat, 0));
+  if v_ht is null or v_ht <= 0 then raise exception 'Le montant HT doit être positif' using errcode = '22023'; end if;
+  if v_vat is not null and v_ttc <> v_ht + v_vat then
+    raise exception 'HT + TVA ne correspond pas au TTC' using errcode = '22023';
+  end if;
+  v_ref := public.finance_txt(p_data, 'reference');
+  if v_ref is not null and exists (select 1 from public.finance_invoices where company_id = v_company and kind = 'facture'
+                                    and cancelled_at is null and lower(reference) = lower(v_ref)) then
+    raise exception 'La facture « % » est déjà enregistrée pour ce client.', v_ref using errcode = '23505';
+  end if;
+  if v_m.id is not null and v_m.kind = 'ponctuel' and v_m.amount is not null then
+    select coalesce(sum(amount_ht), 0) into v_billed from public.finance_invoices
+     where mission_id = v_m.id and kind = 'facture' and cancelled_at is null;
+    if v_billed + v_ht > v_m.amount then
+      raise exception 'Le total facturé (% €) dépasserait le montant du revenu (% €) : modifiez d''abord le revenu.',
+        v_billed + v_ht, v_m.amount using errcode = '22023';
+    end if;
+  end if;
+  v_cover := public.finance_date(p_data, 'forecast_due_date');
+
+  insert into public.finance_invoices (company_id, mission_id, reference, issue_date, due_date, amount_ht, vat_rate, vat_amount,
+                                       amount_ttc, forecast_due_date, note)
+  values (v_company, v_mission, v_ref, public.finance_date(p_data, 'issue_date'),
+          public.finance_date(p_data, 'due_date'), v_ht, nullif(p_data ->> 'vat_rate', '')::numeric(5,2), v_vat, v_ttc,
+          v_cover, public.finance_txt(p_data, 'note'))
+  returning id, forecast_due_date into v_id, v_cover;
+
+  if v_cover is not null and v_m.id is not null and v_m.kind = 'recurrent' and v_m.next_due_date = v_cover then
+    update public.finance_missions set next_due_date = public.finance_add_frequency(v_cover, v_m.frequency) where id = v_m.id;
+  end if;
+  return public.idem_put(p_idempotency_key, 'finance_record_invoice', jsonb_build_object('id', v_id));
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Revenus (anciennes « missions ») : modification partielle ; un revenu lié à une vente, ou déjà facturé,
+-- ne change pas de client.
+-- ---------------------------------------------------------------------------
+create or replace function public.finance_save_mission(p_id uuid, p_data jsonb, p_idempotency_key text default null)
+returns jsonb
+language plpgsql
+as $$
+declare v_prev jsonb; v_id uuid; v_company uuid; m public.finance_missions;
+begin
+  perform public.assert_owner();
+  v_prev := public.idem_get(p_idempotency_key);
+  if v_prev is not null then return v_prev; end if;
+  if p_id is not null then
+    select * into m from public.finance_missions where id = p_id for update;
+    if m.id is null then raise exception 'Revenu introuvable' using errcode = 'P0002'; end if;
+  end if;
+  v_company := case when p_data ? 'company_id' then nullif(p_data ->> 'company_id', '')::uuid else m.company_id end;
+  if not exists (select 1 from public.companies where id = v_company and merged_into_id is null) then
+    raise exception 'Fiche client introuvable' using errcode = 'P0002';
+  end if;
+  if p_id is null then
+    insert into public.finance_missions (company_id, label, status, kind, start_date, end_date, amount, frequency, next_due_date, note)
+    values (v_company, btrim(p_data ->> 'label'), coalesce(public.finance_txt(p_data, 'status'), 'actif'),
+            coalesce(public.finance_txt(p_data, 'kind'), 'ponctuel'), public.finance_date(p_data, 'start_date'),
+            public.finance_date(p_data, 'end_date'), public.finance_num(p_data, 'amount'),
+            public.finance_txt(p_data, 'frequency'), coalesce(public.finance_date(p_data, 'next_due_date'), public.finance_date(p_data, 'start_date')),
+            public.finance_txt(p_data, 'note'))
+    returning id into v_id;
+  else
+    if v_company <> m.company_id then
+      if exists (select 1 from public.sales where mission_id = m.id) then
+        raise exception 'Ce revenu est lié à une vente : il ne change pas de client. Fusionnez les fiches, ou créez un revenu pour l''autre client.' using errcode = '22023';
+      end if;
+      if exists (select 1 from public.finance_invoices where mission_id = m.id and cancelled_at is null) then
+        raise exception 'Ce revenu a déjà des factures : il ne change pas de client.' using errcode = '22023';
+      end if;
+    end if;
+    update public.finance_missions set
+      company_id = v_company,
+      label = coalesce(nullif(btrim(p_data ->> 'label'), ''), label),
+      status = coalesce(public.finance_txt(p_data, 'status'), status),
+      kind = coalesce(public.finance_txt(p_data, 'kind'), kind),
+      start_date = case when p_data ? 'start_date' then public.finance_date(p_data, 'start_date') else start_date end,
+      end_date = case when p_data ? 'end_date' then public.finance_date(p_data, 'end_date') else end_date end,
+      amount = case when p_data ? 'amount' then public.finance_num(p_data, 'amount') else amount end,
+      frequency = case when p_data ? 'frequency' then public.finance_txt(p_data, 'frequency') else frequency end,
+      next_due_date = case when p_data ? 'next_due_date' then public.finance_date(p_data, 'next_due_date') else next_due_date end,
+      note = case when p_data ? 'note' then public.finance_txt(p_data, 'note') else note end
+    where id = m.id returning id into v_id;
+  end if;
+  return public.idem_put(p_idempotency_key, 'finance_save_mission', jsonb_build_object('id', v_id));
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Q06 — « Facturer le solde » : un ponctuel accepte plusieurs factures (acompte puis solde) tant que le total
+-- facturé ne dépasse pas le montant prévu. Un mensuel : une facture par échéance.
+-- ---------------------------------------------------------------------------
+create or replace function public.finance_settle_due(p_mission uuid, p_data jsonb, p_idempotency_key text default null)
+returns jsonb
+language plpgsql
+as $$
+declare
+  v_prev jsonb; v_m public.finance_missions; v_due date; v_ht numeric(12,2); v_rate numeric(5,2); v_vat numeric(12,2);
+  v_ttc numeric(12,2); v_paid_on date; v_paid numeric(12,2); v_inv uuid; v_ok boolean := false; k int; v_billed numeric(12,2);
+begin
+  perform public.assert_owner();
+  v_prev := public.idem_get(p_idempotency_key);
+  if v_prev is not null then return v_prev; end if;
+  select * into v_m from public.finance_missions where id = p_mission for update;
+  if v_m.id is null then raise exception 'Revenu introuvable' using errcode = 'P0002'; end if;
+  v_due := public.finance_date(p_data, 'due_date');
+  if v_due is null then raise exception 'Échéance manquante' using errcode = '22023'; end if;
+  if v_m.kind = 'ponctuel' then
+    v_ok := v_due = coalesce(v_m.next_due_date, v_m.start_date);
+  else
+    for k in 0..600 loop
+      exit when public.finance_due_date(coalesce(v_m.start_date, v_m.next_due_date), v_m.frequency, k) > v_due;
+      if public.finance_due_date(coalesce(v_m.start_date, v_m.next_due_date), v_m.frequency, k) = v_due then v_ok := true; exit; end if;
+    end loop;
+    if v_m.end_date is not null and v_due > v_m.end_date then v_ok := false; end if;
+  end if;
+  if not v_ok then raise exception 'Cette date n''est pas une échéance de ce revenu' using errcode = '22023'; end if;
+  v_ht := public.finance_num(p_data, 'amount');
+  if v_ht is null or v_ht <= 0 then raise exception 'Le montant doit être positif' using errcode = '22023'; end if;
+  if v_m.kind = 'ponctuel' then
+    select coalesce(sum(amount_ht), 0) into v_billed from public.finance_invoices
+     where mission_id = v_m.id and kind = 'facture' and cancelled_at is null;
+    if v_m.amount is not null and v_billed + v_ht > v_m.amount then
+      raise exception 'Il reste % € à facturer sur ce revenu (montant prévu % €).', greatest(v_m.amount - v_billed, 0), v_m.amount using errcode = '22023';
+    end if;
+  elsif public.finance_due_covered(v_m.id, v_due) then
+    raise exception 'Cette échéance a déjà une facture : enregistrez le paiement sur cette facture' using errcode = '22023';
+  end if;
+  v_rate := nullif(p_data ->> 'vat_rate', '')::numeric(5,2);
+  v_vat := case when v_rate is null then null else round(v_ht * v_rate / 100, 2) end;
+  v_ttc := v_ht + coalesce(v_vat, 0);
+  v_paid_on := public.finance_date(p_data, 'paid_on');
+  insert into public.finance_invoices (company_id, mission_id, reference, issue_date, due_date, amount_ht, vat_rate, vat_amount, amount_ttc, forecast_due_date, note)
+  values (v_m.company_id, v_m.id, public.finance_txt(p_data, 'reference'), least(v_due, coalesce(v_paid_on, v_due)), v_due,
+          v_ht, v_rate, v_vat, v_ttc, v_due, public.finance_txt(p_data, 'note'))
+  returning id into v_inv;
+  if v_paid_on is not null then
+    v_paid := coalesce(public.finance_num(p_data, 'paid_amount'), v_ttc);
+    if v_paid <= 0 or v_paid > v_ttc then raise exception 'Le montant reçu doit être compris entre 0 et %', v_ttc using errcode = '22023'; end if;
+    insert into public.finance_payments (invoice_id, kind, paid_on, amount) values (v_inv, 'paiement', v_paid_on, v_paid);
+  end if;
+  return public.idem_put(p_idempotency_key, 'finance_settle_due', jsonb_build_object('id', v_inv));
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- C05 (c) — annuler un paiement déjà remboursé donnerait un encaissé négatif : refusé.
+-- ---------------------------------------------------------------------------
+create or replace function public.finance_cancel_payment(p_id uuid)
+returns jsonb
+language plpgsql
+as $$
+declare p public.finance_payments; v_paid numeric(12,2); v_refunded numeric(12,2);
+begin
+  perform public.assert_owner();
+  select * into p from public.finance_payments where id = p_id;
+  if p.id is null then raise exception 'Paiement introuvable' using errcode = 'P0002'; end if;
+  perform 1 from public.finance_invoices where id = p.invoice_id for update;
+  if p.cancelled_at is null and p.kind = 'paiement' then
+    select coalesce(sum(amount) filter (where kind = 'paiement'), 0), coalesce(sum(amount) filter (where kind = 'remboursement'), 0)
+      into v_paid, v_refunded
+      from public.finance_payments where invoice_id = p.invoice_id and cancelled_at is null and id <> p.id;
+    if v_refunded > v_paid then
+      raise exception 'Ce paiement a été remboursé : annulez d''abord le remboursement.' using errcode = '22023';
+    end if;
+  end if;
+  update public.finance_payments set cancelled_at = coalesce(cancelled_at, now()) where id = p_id;
+  return jsonb_build_object('id', p_id);
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- C05 (d) — un avoir réduit ce que le client doit, pas le montant prévu du revenu. S'il change l'engagement,
+-- la décision est explicite : p_data.reduce_revenue = true réduit aussi le montant prévu (revenu ponctuel).
+-- ---------------------------------------------------------------------------
+create or replace function public.finance_record_credit_note(p_invoice uuid, p_data jsonb, p_idempotency_key text default null)
+returns jsonb
+language plpgsql
+as $$
+declare v_prev jsonb; v_inv public.finance_invoices; v_ht numeric(12,2); v_vat numeric(12,2); v_ttc numeric(12,2);
+        v_credited numeric(12,2); v_id uuid; v_m public.finance_missions;
+begin
+  perform public.assert_owner();
+  v_prev := public.idem_get(p_idempotency_key);
+  if v_prev is not null then return v_prev; end if;
+  select * into v_inv from public.finance_invoices where id = p_invoice for update;
+  if v_inv.id is null or v_inv.kind <> 'facture' then raise exception 'Facture introuvable' using errcode = 'P0002'; end if;
+  if v_inv.cancelled_at is not null then raise exception 'Facture annulée' using errcode = '22023'; end if;
+  v_ht := public.finance_num(p_data, 'amount_ht');
+  v_vat := public.finance_num(p_data, 'vat_amount');
+  v_ttc := coalesce(public.finance_num(p_data, 'amount_ttc'), v_ht + coalesce(v_vat, 0));
+  select coalesce(sum(amount_ttc), 0) into v_credited from public.finance_invoices
+   where credited_invoice_id = p_invoice and cancelled_at is null;
+  if v_ttc + v_credited > v_inv.amount_ttc then
+    raise exception 'Le total des avoirs dépasserait le montant de la facture' using errcode = '22023';
+  end if;
+  insert into public.finance_invoices (kind, company_id, mission_id, credited_invoice_id, reference, issue_date, amount_ht, vat_amount, amount_ttc, note)
+  values ('avoir', v_inv.company_id, v_inv.mission_id, v_inv.id, public.finance_txt(p_data, 'reference'),
+          coalesce(public.finance_date(p_data, 'issue_date'), public.today_paris()), v_ht, v_vat, v_ttc, public.finance_txt(p_data, 'note'))
+  returning id into v_id;
+  if coalesce((p_data ->> 'reduce_revenue')::boolean, false) and v_inv.mission_id is not null then
+    select * into v_m from public.finance_missions where id = v_inv.mission_id for update;
+    if v_m.kind = 'ponctuel' and v_m.amount is not null then
+      update public.finance_missions set amount = greatest(amount - v_ht, 0) where id = v_m.id;
+    end if;
+  end if;
+  return public.idem_put(p_idempotency_key, 'finance_record_credit_note', jsonb_build_object('id', v_id));
+end;
+$$;
+
+-- ===========================================================================
+-- Vue des revenus : facturé brut (billed_ht, hors avoirs) pour le « reste à facturer » (C05 d), et état
+-- d'encaissement commun à Finance et Ventes (C05 a) :
+--   ponctuel : prevu · a_verifier (date passée, rien facturé) · a_encaisser · en_retard · partiel · encaisse
+--   mensuel  : prevu (aucune échéance due) · a_jour · partiel · en_retard · termine
+-- ===========================================================================
+create or replace view public.finance_mission_overview with (security_invoker = true) as
+  select m.*,
+         c.name as company_name,
+         (coalesce(sum(o.amount_ht) filter (where o.kind = 'facture' and o.cancelled_at is null), 0)
+           - coalesce(sum(o.amount_ht) filter (where o.kind = 'avoir' and o.cancelled_at is null), 0))::numeric(12,2) as invoiced_ht,
+         (coalesce(sum(o.amount_ttc) filter (where o.kind = 'facture' and o.cancelled_at is null), 0)
+           - coalesce(sum(o.amount_ttc) filter (where o.kind = 'avoir' and o.cancelled_at is null), 0))::numeric(12,2) as invoiced_ttc,
+         coalesce(sum(o.paid_net) filter (where o.kind = 'facture' and o.cancelled_at is null), 0)::numeric(12,2) as received,
+         coalesce(sum(o.balance), 0)::numeric(12,2) as remaining,
+         coalesce(sum(o.amount_ht) filter (where o.kind = 'facture' and o.cancelled_at is null), 0)::numeric(12,2) as billed_ht
+    from public.finance_missions m
+    join public.companies c on c.id = m.company_id
+    left join public.finance_invoice_overview o on o.mission_id = m.id
+   group by m.id, c.name;
+
+create or replace function public.finance_revenue_state(p_mission uuid, p_today date default null)
+returns text
+language plpgsql
+stable
+as $$
+declare
+  m public.finance_mission_overview; v_today date := coalesce(p_today, public.today_paris());
+  v_late boolean; v_open boolean; v_any_due boolean := false; d date; k int;
+begin
+  select * into m from public.finance_mission_overview where id = p_mission;
+  if m.id is null then return null; end if;
+  select bool_or(o.status = 'en_retard'), bool_or(o.status in ('a_encaisser', 'partielle'))
+    into v_late, v_open
+    from public.finance_invoice_overview o where o.mission_id = m.id and o.kind = 'facture' and o.cancelled_at is null;
+  if coalesce(v_late, false) then return 'en_retard'; end if;
+  if m.kind = 'recurrent' then
+    if m.status = 'termine' or (m.end_date is not null and m.end_date < v_today) then return 'termine'; end if;
+    if coalesce(m.start_date, m.next_due_date) is not null then
+      for k in 0..600 loop
+        d := public.finance_due_date(coalesce(m.start_date, m.next_due_date), m.frequency, k);
+        exit when d >= v_today or (m.end_date is not null and d > m.end_date);
+        v_any_due := true;
+        if not public.finance_due_covered(m.id, d) then return 'en_retard'; end if;
+      end loop;
+    end if;
+    if coalesce(v_open, false) then return 'partiel'; end if;
+    return case when v_any_due then 'a_jour' else 'prevu' end;
+  end if;
+  -- ponctuel
+  if m.billed_ht > 0 and (m.amount is null or m.billed_ht >= m.amount) and m.remaining <= 0 then return 'encaisse'; end if;
+  if m.received > 0 then return 'partiel'; end if;
+  if coalesce(v_open, false) then return 'a_encaisser'; end if;
+  return case when coalesce(m.next_due_date, m.start_date) < v_today then 'a_verifier' else 'prevu' end;
+end;
+$$;
+
+-- ===========================================================================
+-- Q07 — montant affiché : estimé avant la clôture ; après Gagné, celui du revenu confirmé (« X € / mois » pour
+-- un mensuel). L'ancien montant estimé reste dans l'historique.
+-- ===========================================================================
+alter table public.companies add column if not exists amount_recurring boolean not null default false;
+
+create or replace function public.sale_sync_deal_amount(p_sale uuid)
+returns void
+language plpgsql
+as $$
+declare s public.sales; m public.finance_missions; c public.companies; v_fmt text;
+begin
+  select * into s from public.sales where id = p_sale;
+  if s.id is null or s.state <> 'won' or s.mission_id is null then return; end if;
+  select * into m from public.finance_missions where id = s.mission_id;
+  select * into c from public.companies where id = s.company_id;
+  if m.amount is null or c.id is null or c.deal_status <> 'won' then return; end if;
+  if c.amount is not distinct from m.amount and c.amount_recurring = (m.kind = 'recurrent') then return; end if;
+  update public.companies set amount = m.amount, amount_recurring = (m.kind = 'recurrent') where id = c.id;
+  v_fmt := regexp_replace(translate(to_char(m.amount, 'FM999,999,999,990.00'), ',.', ' ,'), ',00$', '') || ' €'
+           || case when m.kind = 'recurrent' then ' / mois' else '' end;
+  perform public.log_event(c.id, 'system',
+    'Montant confirmé : ' || v_fmt
+    || coalesce(' (estimé avant clôture : ' || regexp_replace(translate(to_char(c.amount, 'FM999,999,999,990.00'), ',.', ' ,'), ',00$', '') || ' €'
+                || case when c.amount_recurring then ' / mois' else '' end || ')', ''),
+    jsonb_build_object('sale_id', s.id, 'previous_amount', c.amount, 'amount', m.amount, 'recurring', m.kind = 'recurrent'));
+end;
+$$;
+
+create or replace function public.tg_sales_sync_amount()
+returns trigger
+language plpgsql
+as $$
+begin
+  perform public.sale_sync_deal_amount(new.id);
+  return null;
+end;
+$$;
+drop trigger if exists sales_sync_amount on public.sales;
+create trigger sales_sync_amount after insert or update of mission_id, state on public.sales
+  for each row execute function public.tg_sales_sync_amount();
+
+create or replace function public.tg_finance_mission_sync_amount()
+returns trigger
+language plpgsql
+as $$
+declare s uuid;
+begin
+  for s in select id from public.sales where mission_id = new.id and state = 'won' loop
+    perform public.sale_sync_deal_amount(s);
+  end loop;
+  return null;
+end;
+$$;
+drop trigger if exists finance_mission_sync_amount on public.finance_missions;
+create trigger finance_mission_sync_amount after update of amount, kind on public.finance_missions
+  for each row execute function public.tg_finance_mission_sync_amount();
+
+-- La liste des fiches (Kanban, Prospection, export) expose l'unité du montant : colonne ajoutée en fin de vue.
+do $$
+declare v text; i int;
+begin
+  v := pg_get_viewdef('public.company_overview'::regclass, false);
+  if position('amount_recurring' in v) > 0 then return; end if;
+  i := position(E'\n   FROM ' in v);
+  if i = 0 then raise exception 'company_overview : forme inattendue'; end if;
+  execute 'create or replace view public.company_overview with (security_invoker = true) as '
+          || substr(v, 1, i - 1) || ', c.amount_recurring' || substr(v, i);
+end $$;
+
+-- Hors Gagné, le montant est une estimation totale.
+create or replace function public.tg_companies_amount_kind()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.deal_status is distinct from 'won' or new.amount is null then new.amount_recurring := false; end if;
+  return new;
+end;
+$$;
+drop trigger if exists companies_amount_kind on public.companies;
+create trigger companies_amount_kind before update of amount, deal_status, amount_recurring on public.companies
+  for each row execute function public.tg_companies_amount_kind();
+
+-- Ventes lit le même état d'encaissement que Finance (« Encaissé » seulement quand tout est facturé et réglé).
+drop view if exists public.sales_overview;
+create view public.sales_overview with (security_invoker = true) as
+  with rows as (
+    -- ventes (cycles) gagnées, en cours de suivi ou terminées
+    select s.id as row_id, c.id as company_id, s.id as sale_id, s.cycle, s.state as sale_state,
+           case when s.state = 'lost' then 'lost' else 'won' end as deal_status,
+           s.closed_on, s.signed_on, s.revenue_mode, s.documents_ready, s.mission_id, s.project_id, s.project_removed_at
+      from public.sales s join public.companies c on c.id = s.company_id
+     where c.merged_into_id is null and s.state in ('won', 'completed')
+    union all
+    -- fiches perdues (avec la vente du cycle perdu s'il y en a une)
+    select c.id, c.id, ls.id, ls.cycle, ls.state, 'lost',
+           (c.deal_closed_at at time zone 'Europe/Paris')::date, ls.signed_on, ls.revenue_mode, ls.documents_ready, ls.mission_id, ls.project_id, ls.project_removed_at
+      from public.companies c
+      left join lateral (select * from public.sales x where x.company_id = c.id and x.state = 'lost' order by x.cycle desc limit 1) ls on true
+     where c.merged_into_id is null and c.deal_status = 'lost'
+    union all
+    -- anciens dossiers gagnés sans vente enregistrée (aucune création automatique)
+    select c.id, c.id, null, null, null, 'won',
+           (c.deal_closed_at at time zone 'Europe/Paris')::date, null, null, null, null, null, null
+      from public.companies c
+     where c.merged_into_id is null and c.deal_status = 'won'
+       and not exists (select 1 from public.sales x where x.company_id = c.id and x.state in ('won', 'reopened'))
+  )
+  select r.row_id,
+         c.id as company_id,
+         c.name,
+         r.deal_status,
+         c.deal_status as company_deal_status,
+         c.deal_closed_at,
+         r.closed_on,
+         c.lost_reason,
+         c.amount as deal_amount,
+         c.archived_at,
+         pl.name as pipeline_name,
+         st.name as stage_name,
+         pp.name as primary_person_name,
+         r.sale_id,
+         r.cycle,
+         r.sale_state,
+         r.signed_on,
+         r.revenue_mode,
+         r.documents_ready,
+         r.project_removed_at,
+         ob.status as prep_status,
+         ob.open_required as prep_missing,
+         ob.prep_error,
+         mo.id as mission_id,
+         mo.kind as mission_kind,
+         mo.amount as mission_amount,
+         mo.start_date as mission_start,
+         mo.end_date as mission_end,
+         mo.status as mission_status,
+         mo.invoiced_ttc,
+         mo.received,
+         mo.remaining,
+         pr.id as project_id,
+         pr.name as project_name,
+         pr.status as project_status,
+         case when r.sale_id is null and r.deal_status = 'won' then lm.mission_id end as candidate_mission_id,
+         case when r.sale_id is null and r.deal_status = 'won' then lp.project_id end as candidate_project_id,
+         case when mo.id is null then 'a_renseigner' else public.finance_revenue_state(mo.id) end as billing,
+         mo.billed_ht,
+         c.amount_recurring,
+         case
+           when r.deal_status <> 'won' then null
+           when r.sale_state = 'completed' then 'termine'
+           when pr.status in ('termine', 'archive') then 'termine'
+           when pr.status in ('en_cours', 'en_attente') then 'en_mission'
+           when r.sale_id is null and pr.id is null then null
+           when r.sale_id is not null and not r.documents_ready then 'devis_contrat'
+           else 'onboarding'
+         end as stage
+    from rows r
+    join public.companies c on c.id = r.company_id
+    left join public.pipelines pl on pl.id = c.pipeline_id
+    left join public.stages st on st.id = c.stage_id
+    left join lateral (
+      select nullif(btrim(coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, '')), '') as name
+        from public.people p where p.company_id = c.id order by p.is_primary desc, p.created_at limit 1) pp on true
+    left join lateral (
+      select case when count(*) = 1 then min(m.id::text)::uuid end as mission_id
+        from public.finance_missions m
+       where m.company_id = c.id and not exists (select 1 from public.sales x where x.mission_id = m.id)) lm on true
+    left join lateral (
+      select case when count(*) = 1 then min(p.id::text)::uuid end as project_id
+        from public.projects p where p.company_id = c.id and p.status <> 'archive'
+         and not exists (select 1 from public.sales x where x.project_id = p.id)) lp on true
+    left join public.finance_mission_overview mo on mo.id = r.mission_id
+    left join public.projects pr on pr.id = coalesce(r.project_id, case when r.sale_id is null and r.deal_status = 'won' then lp.project_id end)
+    left join public.project_onboarding_status ob on ob.project_id = pr.id;
+revoke all on public.sales_overview from anon;
+grant select on public.sales_overview to authenticated;
+
+-- ===========================================================================
+-- Droits
+-- ===========================================================================
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'public.finance_due_covered(uuid, date, uuid)', 'public.finance_nearest_open_due(uuid, date, uuid)',
+    'public.finance_revenue_state(uuid, date)', 'public.sale_sync_deal_amount(uuid)']
+  loop
+    execute format('revoke execute on function %s from public, anon', f);
+    execute format('grant execute on function %s to authenticated', f);
+  end loop;
+end $$;
+revoke execute on function public.tg_finance_invoice_consistency(), public.tg_finance_mission_consistency(),
+  public.tg_sales_mission_company(), public.tg_finance_invoice_cover(), public.tg_sales_sync_amount(),
+  public.tg_finance_mission_sync_amount(), public.tg_companies_amount_kind() from public, anon;
+revoke all on public.finance_mission_overview from anon;
+grant select on public.finance_mission_overview to authenticated;
+
+
+-- ===== 20261115000400_aujourdhui.sql =====
+-- Audit, lot 4 — « Aujourd'hui » (Q01, K01, Q04, K06). Migration additive : la vue todo_items gagne les tâches de
+-- projet qui me sont attribuées (colonnes ajoutées en fin de vue), le compteur du menu suit les mêmes règles, et les
+-- résultats de prospection laissent toujours une suite, enregistrés une seule fois.
+
+-- ===========================================================================
+-- Q01 — tâches de projet attribuées à moi dans la file du jour, le compteur et la « prochaine action » de la fiche.
+-- Les deux tables restent séparées : la validation se fait sur la tâche d'origine (projet).
+-- ===========================================================================
+create or replace view public.todo_items with (security_invoker = true) as
+  select 'task'::text as item_type, t.id, t.company_id, c.name as company_name, t.person_id,
+         btrim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')) as person_name,
+         t.title, t.due_date, null::uuid as campaign_id, null::text as campaign_name, null::text as channel,
+         null::int as step_position, null::text as step_message,
+         null::text as step_type, null::text as step_subject, null::text as step_instructions, null::int as sequence_version,
+         null::int as step_count,
+         null::uuid as project_id, null::text as project_name, null::text as task_status
+    from public.tasks t
+    join public.companies c on c.id = t.company_id
+    left join public.people p on p.id = t.person_id
+   where t.done_at is null and c.merged_into_id is null and c.archived_at is null
+  union all
+  select 'followup', cp.id, cp.company_id, c.name, cp.person_id,
+         btrim(coalesce(p.first_name,'') || ' ' || coalesce(p.last_name,'')),
+         cs.name, cp.next_due_date, ca.id, ca.name, cs.channel, cs.position, cs.message,
+         cs.step_type, cs.subject, cs.instructions, cp.sequence_version,
+         (select count(*)::int from public.campaign_steps x where x.campaign_id = ca.id and x.version = cp.sequence_version),
+         null::uuid, null::text, null::text
+    from public.campaign_participants cp
+    join public.campaigns ca on ca.id = cp.campaign_id and ca.status = 'active'
+    join public.companies c on c.id = cp.company_id
+    join public.campaign_steps cs on cs.campaign_id = cp.campaign_id and cs.version = cp.sequence_version and cs.position = cp.current_step
+    left join public.people p on p.id = cp.person_id
+   where cp.status in ('a_contacter','en_cours') and cp.next_due_date is not null
+     and c.merged_into_id is null and c.archived_at is null and not c.do_not_contact
+  union all
+  -- tâches de projet qui me sont attribuées (projets actifs) ; sans échéance : visibles dans « Tout »
+  select 'project_task', pt.id, pr.company_id, c.name, null::uuid, null::text,
+         pt.title, pt.due_date, null, null, null, null, null, null, null, null, null, null,
+         pr.id, pr.name, pt.status
+    from public.project_tasks pt
+    join public.projects pr on pr.id = pt.project_id and pr.status not in ('termine', 'archive')
+    join public.companies c on c.id = pr.company_id
+   where pt.assignee_kind = 'owner' and pt.status <> 'termine' and c.merged_into_id is null;
+
+-- Compteur du menu : mêmes règles que la page (dû aujourd'hui ou en retard), plus les réponses et les appels à rattacher.
+create or replace function public.nav_counters(p_today date)
+returns jsonb
+language sql
+stable
+as $$
+  select jsonb_build_object(
+    'todo', (select count(*) from public.todo_items where due_date <= p_today),
+    'due', (select count(*) from public.todo_items where item_type = 'followup' and due_date <= p_today),
+    'replies', (select count(*) from public.campaign_participants where status = 'a_repondu' and outcome in ('none', 'replied')),
+    'calls', (select count(*) from public.fireflies_calls where link_state = 'to_link'));
+$$;
+
+-- ===========================================================================
+-- Q04 + K06 — un résultat « Rendez-vous obtenu » ou « Intéressé » laisse toujours une suite visible (étape du
+-- pipeline, rendez-vous lié à venir, ou tâche de suivi) ; réponse et résultat s'enregistrent en UNE opération,
+-- protégée contre le double clic et les reprises réseau (clé liée à l'opération et à ses paramètres).
+-- p_next : { stage_id?, task?: { title, due_date } }
+-- ===========================================================================
+create or replace function public.prospect_has_next(p_company uuid)
+returns boolean
+language sql
+stable
+as $$
+  select exists (select 1 from public.companies c where c.id = p_company and c.stage_id is not null and c.deal_status = 'open')
+      or exists (select 1 from public.appt_bookings b where b.company_id = p_company and b.status in ('pending', 'confirmed') and b.starts_at >= now())
+      or exists (select 1 from public.tasks t where t.company_id = p_company and t.done_at is null);
+$$;
+
+drop function if exists public.set_participant_outcome(uuid, text, uuid, text);
+create or replace function public.set_participant_outcome(
+  p_participant uuid, p_outcome text, p_stage uuid default null, p_note text default null,
+  p_next jsonb default null, p_idempotency_key text default null)
+returns jsonb
+language plpgsql
+as $$
+declare
+  cp public.campaign_participants;
+  v_prev jsonb;
+  v_stopped int := 0;
+  v_move jsonb;
+  v_stage uuid := coalesce(p_stage, nullif(p_next ->> 'stage_id', '')::uuid);
+  v_task uuid;
+  v_task_title text := nullif(btrim(p_next -> 'task' ->> 'title'), '');
+  v_task_due date := nullif(p_next -> 'task' ->> 'due_date', '')::date;
+begin
+  perform public.assert_owner();
+  v_prev := public.idem_begin(p_idempotency_key, jsonb_build_object('p', p_participant, 'o', p_outcome, 's', v_stage, 'n', p_note, 'x', p_next));
+  if v_prev is not null then return v_prev; end if;
+  if p_outcome not in ('replied', 'interested', 'not_interested', 'meeting', 'do_not_contact') then
+    raise exception 'Résultat invalide' using errcode = '22023';
+  end if;
+  select * into cp from public.campaign_participants where id = p_participant for update;
+  if not found then raise exception 'Participant introuvable' using errcode = 'P0002'; end if;
+
+  update public.campaign_participants set outcome = p_outcome, outcome_at = now() where id = cp.id;
+
+  if p_outcome in ('not_interested', 'do_not_contact') then
+    update public.campaign_participants
+       set status = 'arrete', next_due_date = null,
+           stop_reason = case p_outcome when 'not_interested' then 'Pas intéressé' else 'Ne plus contacter' end
+     where company_id = cp.company_id and status in ('a_preparer', 'a_contacter', 'en_cours', 'a_repondu');
+    get diagnostics v_stopped = row_count;
+    update public.companies set prospect_status = 'pas_interesse' where id = cp.company_id;
+  end if;
+  if p_outcome = 'do_not_contact' then
+    update public.companies set do_not_contact = true, do_not_contact_at = now(),
+           do_not_contact_reason = coalesce(nullif(btrim(p_note), ''), do_not_contact_reason)
+     where id = cp.company_id;
+  end if;
+  if p_outcome in ('interested', 'meeting') then
+    update public.companies set prospect_status = 'qualifie'
+     where id = cp.company_id and prospect_status in ('nouveau', 'contacte', 'en_discussion');
+    if v_stage is not null then
+      v_move := public.move_company(cp.company_id, v_stage, true, null);
+    end if;
+    if v_task_title is not null then
+      insert into public.tasks (company_id, person_id, title, due_date, source)
+      values (cp.company_id, cp.person_id, left(v_task_title, 300), coalesce(v_task_due, public.today_paris() + 2),
+              case when public.current_actor() = 'claude' then 'claude' else 'user' end)
+      returning id into v_task;
+    end if;
+    if not public.prospect_has_next(cp.company_id) then
+      raise exception 'Choisissez la suite : une étape du pipeline, un rendez-vous à venir ou une tâche de suivi. Sinon la fiche ne serait plus dans aucune liste.'
+        using errcode = '22023';
+    end if;
+  end if;
+
+  perform public.log_event(cp.company_id, 'prospecting',
+    case p_outcome
+      when 'replied' then 'Résultat : a répondu'
+      when 'interested' then 'Résultat : intéressé'
+      when 'not_interested' then 'Résultat : pas intéressé — prospection arrêtée'
+      when 'meeting' then 'Résultat : rendez-vous obtenu'
+      else 'Ne plus contacter' || coalesce(' : ' || nullif(btrim(p_note), ''), '') end,
+    jsonb_build_object('campaign_id', cp.campaign_id, 'participant_id', cp.id, 'outcome', p_outcome, 'task_id', v_task));
+
+  return public.idem_put(p_idempotency_key, 'set_participant_outcome',
+    jsonb_build_object('status', 'ok', 'stopped', v_stopped, 'moved', v_move is not null, 'task_id', v_task));
+end;
+$$;
+
+-- Réponse reçue (et, en option, son résultat) : une seule opération, une seule entrée d'historique.
+drop function if exists public.record_reply(uuid, text, timestamptz, uuid, text);
+create or replace function public.record_reply(
+  p_participant uuid, p_content text, p_received_at timestamptz default null, p_person uuid default null, p_channel text default null,
+  p_outcome text default null, p_next jsonb default null, p_idempotency_key text default null)
+returns jsonb
+language plpgsql
+as $$
+declare
+  cp public.campaign_participants;
+  st public.campaign_steps;
+  v_prev jsonb;
+  v_res jsonb;
+  v_out jsonb;
+begin
+  perform public.assert_owner();
+  v_prev := public.idem_begin(p_idempotency_key, jsonb_build_object('p', p_participant, 'c', p_content, 'at', p_received_at,
+    'person', p_person, 'ch', p_channel, 'o', p_outcome, 'x', p_next));
+  if v_prev is not null then return v_prev; end if;
+  select * into cp from public.campaign_participants where id = p_participant for update;
+  if not found then raise exception 'Participant introuvable' using errcode = 'P0002'; end if;
+  select * into st from public.campaign_steps
+   where campaign_id = cp.campaign_id and version = cp.sequence_version and position = greatest(cp.current_step - 1, 1);
+  -- add_interaction suspend les relances actives de toute l'entreprise (tous ses contacts)
+  v_res := public.add_interaction(cp.company_id, 'message_in', p_content, p_received_at,
+                                  coalesce(p_person, cp.person_id), coalesce(p_channel, st.channel));
+  update public.interactions set campaign_participant_id = cp.id where id = (v_res ->> 'id')::uuid;
+  update public.campaign_participants set status = 'a_repondu', next_due_date = null
+   where id = cp.id and status not in ('arrete');
+  if p_outcome is not null and p_outcome <> 'none' then
+    v_out := public.set_participant_outcome(cp.id, p_outcome, null, null, p_next, null);
+  end if;
+  return public.idem_put(p_idempotency_key, 'record_reply',
+    jsonb_build_object('status', 'paused', 'paused_followups', (v_res ->> 'paused_followups')::int, 'outcome', v_out));
+end;
+$$;
+
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'public.nav_counters(date)', 'public.prospect_has_next(uuid)',
+    'public.set_participant_outcome(uuid, text, uuid, text, jsonb, text)',
+    'public.record_reply(uuid, text, timestamptz, uuid, text, text, jsonb, text)']
+  loop
+    execute format('revoke execute on function %s from public, anon', f);
+    execute format('grant execute on function %s to authenticated', f);
+  end loop;
+end $$;
+revoke all on public.todo_items from anon;
+grant select on public.todo_items to authenticated;
+
+
+-- ===== 20261115000500_rendez_vous_emails.sql =====
+-- Audit, lot 5 — Rendez-vous et emails fiables (C07, C09, Q02, Q03 ; C08 est côté serveur applicatif).
+-- Migration additive : deux tables de suivi (passages planifiés, limites de réservation), une table d'état de la
+-- synchronisation Gmail, des colonnes sur mail_messages pour les emails REÇUS, des fonctions à clé serveur.
+
+-- ===========================================================================
+-- C07 — passages planifiés : dernière réussite et dernière erreur visibles (Connecteurs)
+-- ===========================================================================
+create table if not exists public.scheduled_jobs (
+  job text primary key check (job in ('agenda', 'rappels', 'gmail', 'fireflies')),
+  last_started_at timestamptz,
+  last_success_at timestamptz,
+  last_error text check (last_error is null or char_length(last_error) <= 2000),
+  last_error_at timestamptz,
+  last_result jsonb,
+  updated_at timestamptz not null default now()
+);
+alter table public.scheduled_jobs enable row level security;
+drop policy if exists scheduled_jobs_owner_read on public.scheduled_jobs;
+create policy scheduled_jobs_owner_read on public.scheduled_jobs for select to authenticated using (public.is_app_owner());
+
+create or replace function public.job_report(p_server_key text, p_job text, p_ok boolean, p_error text default null, p_result jsonb default null)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform appt_private.assert_server(p_server_key);
+  insert into public.scheduled_jobs (job, last_started_at, last_success_at, last_error, last_error_at, last_result, updated_at)
+  values (p_job, now(), case when p_ok then now() end, case when not p_ok then left(p_error, 2000) end,
+          case when not p_ok then now() end, p_result, now())
+  on conflict (job) do update set
+    last_started_at = now(),
+    last_success_at = case when p_ok then now() else scheduled_jobs.last_success_at end,
+    last_error = case when p_ok then null else left(p_error, 2000) end,
+    last_error_at = case when p_ok then scheduled_jobs.last_error_at else now() end,
+    last_result = coalesce(p_result, scheduled_jobs.last_result),
+    updated_at = now();
+end;
+$$;
+
+-- ===========================================================================
+-- C09 — réservation publique : limites par email et par adresse IP (empreinte, jamais l'adresse en clair)
+-- ===========================================================================
+create table if not exists public.appt_rate_hits (
+  bucket text not null check (char_length(bucket) between 3 and 200),
+  at timestamptz not null default now()
+);
+create index if not exists appt_rate_hits_bucket on public.appt_rate_hits (bucket, at desc);
+alter table public.appt_rate_hits enable row level security; -- aucune politique : accès par fonction uniquement
+
+-- null = autorisé ; sinon le message à afficher. Compte la tentative.
+create or replace function public.appt_rate_check(p_server_key text, p_email text, p_ip_hash text)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare v_email text := lower(btrim(coalesce(p_email, ''))); v_ip int; v_mail int;
+begin
+  perform appt_private.assert_server(p_server_key);
+  delete from public.appt_rate_hits where at < now() - interval '2 days';
+  if p_ip_hash is not null then
+    select count(*) into v_ip from public.appt_rate_hits where bucket = 'ip:' || p_ip_hash and at > now() - interval '1 hour';
+    insert into public.appt_rate_hits (bucket) values ('ip:' || left(p_ip_hash, 120));
+    if v_ip >= 10 then return 'Trop de tentatives depuis cette connexion. Réessayez dans une heure.'; end if;
+  end if;
+  select count(*) into v_mail from public.appt_bookings
+   where email_norm = v_email and created_at > now() - interval '1 day' and status in ('pending', 'confirmed');
+  if v_mail >= 3 then return 'Plusieurs rendez-vous sont déjà réservés avec cette adresse aujourd''hui. Utilisez le lien reçu pour les gérer.'; end if;
+  return null;
+end;
+$$;
+
+-- Les informations saisies par un visiteur n'écrasent jamais une fiche : elles ne servent qu'à rattacher ou créer.
+-- La trace sur la fiche le dit explicitement (identité déclarée, non vérifiée).
+create or replace function appt_private.crm_note(p_booking uuid, p_company uuid, p_person uuid, p_text text)
+returns void
+language sql
+set search_path = ''
+as $$
+  insert into public.interactions (company_id, person_id, kind, content, content_origin, source, meta)
+  values (p_company, p_person, 'system',
+          p_text || ' — réservation en ligne : nom, email et entreprise déclarés par le visiteur, à confirmer',
+          'system', 'system', jsonb_build_object('appointment_id', p_booking, 'declared_by_visitor', true));
+$$;
+
+-- ===========================================================================
+-- Q02 — rappels envoyés par Gmail depuis le serveur (passage planifié) : compte, jeton, trace dans l'historique.
+-- Les échéances, versions, révisions, suspension globale et validité existent déjà (appt_mail_*).
+-- ===========================================================================
+create or replace function public.mail_server_account(p_server_key text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform appt_private.assert_server(p_server_key);
+  return (select jsonb_build_object('id', a.id, 'email', a.email, 'display_name', a.display_name, 'scopes', a.scopes, 'signature', a.signature,
+                                    'refresh_token_enc', s.refresh_token_enc, 'access_token_enc', s.access_token_enc,
+                                    'access_token_expires_at', s.access_token_expires_at)
+            from public.mail_accounts a join public.mail_account_secrets s on s.account_id = a.id
+           where a.status = 'connected' order by a.is_default desc, a.connected_at desc limit 1);
+end;
+$$;
+
+create or replace function public.mail_server_store_access(p_server_key text, p_id uuid, p_access_enc text, p_expires timestamptz, p_refresh_enc text default null)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform appt_private.assert_server(p_server_key);
+  update public.mail_account_secrets
+     set access_token_enc = p_access_enc, access_token_expires_at = p_expires, refresh_token_enc = coalesce(p_refresh_enc, refresh_token_enc)
+   where account_id = p_id;
+end;
+$$;
+
+create or replace function public.mail_server_mark_reconnect(p_server_key text, p_id uuid, p_error text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform appt_private.assert_server(p_server_key);
+  update public.mail_accounts set status = 'needs_reconnect', last_error = left(p_error, 1000) where id = p_id;
+end;
+$$;
+
+-- Trace d'un email envoyé par le serveur (rappel) : une ligne dans l'historique des emails, avec la personne (K14).
+-- p : {account_id, status (accepted|failed|uncertain), company_id, person_id, to, subject, body, dedupe_key,
+--      business_type, business_id, provider_message_id, provider_thread_id, rfc_message_id, error}
+create or replace function public.mail_server_record(p_server_key text, p jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare v_id uuid; v_inter uuid; v_status text := p ->> 'status'; v_company uuid := nullif(p ->> 'company_id', '')::uuid;
+begin
+  perform appt_private.assert_server(p_server_key);
+  if v_status not in ('accepted', 'failed', 'uncertain') then raise exception 'Statut invalide' using errcode = '22023'; end if;
+  select id into v_id from public.mail_messages where dedupe_key = p ->> 'dedupe_key';
+  if v_id is not null then return jsonb_build_object('id', v_id, 'duplicate', true); end if;
+  if v_company is not null and not exists (select 1 from public.companies where id = v_company and merged_into_id is null) then v_company := null; end if;
+  if v_status = 'accepted' and v_company is not null then
+    insert into public.interactions (company_id, person_id, kind, channel, content, content_origin, source, meta)
+    values (v_company, nullif(p ->> 'person_id', '')::uuid, 'message_out', 'email',
+            'Email automatique : ' || coalesce(p ->> 'subject', ''), 'system', 'system',
+            jsonb_build_object('business_type', p ->> 'business_type', 'business_id', p ->> 'business_id'))
+    returning id into v_inter;
+  end if;
+  -- même cycle de vie qu'un envoi depuis le CRM : en attente, en cours, puis issue réelle
+  insert into public.mail_messages (account_id, status, origin, company_id, person_id, to_addrs, subject, body_text, dedupe_key,
+                                    business_type, business_id, rfc_message_id, attempts, interaction_id)
+  values (nullif(p ->> 'account_id', '')::uuid, 'pending', 'appointment', v_company, nullif(p ->> 'person_id', '')::uuid,
+          array(select jsonb_array_elements_text(coalesce(p -> 'to', '[]'))), left(coalesce(p ->> 'subject', ''), 500),
+          left(coalesce(p ->> 'body', ''), 200000), p ->> 'dedupe_key', p ->> 'business_type', p ->> 'business_id',
+          p ->> 'rfc_message_id', 1, v_inter)
+  returning id into v_id;
+  if v_status = 'failed' then
+    update public.mail_messages set status = 'failed', error_code = 'failed', last_error = p ->> 'error' where id = v_id;
+  else
+    update public.mail_messages set status = 'sending', claimed_at = now() where id = v_id;
+    update public.mail_messages set status = v_status, provider_message_id = p ->> 'provider_message_id', provider_thread_id = p ->> 'provider_thread_id',
+           sent_at = case when v_status = 'accepted' then now() end,
+           error_code = case when v_status = 'uncertain' then 'uncertain' end, last_error = p ->> 'error'
+     where id = v_id;
+  end if;
+  return jsonb_build_object('id', v_id, 'duplicate', false);
+end;
+$$;
+
+-- ===========================================================================
+-- Q03 — réception Gmail : emails reçus rattachés par contact, conversation conservée, campagnes en pause
+-- ===========================================================================
+alter table public.mail_messages
+  add column if not exists direction text not null default 'out' check (direction in ('out', 'in')),
+  add column if not exists from_addr text check (from_addr is null or char_length(from_addr) <= 320),
+  add column if not exists received_at timestamptz,
+  -- linked : rattaché ; to_link : plusieurs fiches possibles, à résoudre ; ignored : automatique ou hors contacts
+  add column if not exists link_state text check (link_state is null or link_state in ('linked', 'to_link', 'ignored')),
+  add column if not exists link_candidates jsonb,
+  add column if not exists attachments_meta jsonb,
+  add column if not exists linked_manually boolean not null default false;
+alter table public.mail_messages drop constraint if exists mail_messages_status_check;
+alter table public.mail_messages add constraint mail_messages_status_check
+  check (status in ('draft', 'pending', 'sending', 'accepted', 'failed', 'uncertain', 'cancelled', 'received'));
+-- Un email reçu entre directement à l'état « received » (jamais envoyé, jamais modifiable comme un brouillon).
+create or replace function public.tg_mail_messages_guard()
+returns trigger
+language plpgsql
+as $$
+begin
+  if tg_op = 'INSERT' then
+    if new.direction = 'in' then
+      if new.status <> 'received' then raise exception 'Un email reçu est à l''état « reçu ».' using errcode = 'P0001'; end if;
+      return new;
+    end if;
+    if new.status not in ('draft', 'pending') then
+      raise exception 'Un message commence comme brouillon ou en attente.' using errcode = 'P0001';
+    end if;
+    return new;
+  end if;
+  if new.status <> old.status and not (
+       (old.status = 'draft' and new.status in ('pending', 'sending', 'cancelled'))
+    or (old.status = 'pending' and new.status in ('sending', 'cancelled', 'failed'))
+    or (old.status = 'sending' and new.status in ('accepted', 'failed', 'uncertain'))
+    or (old.status = 'uncertain' and new.status in ('accepted', 'failed'))
+    or (old.status = 'failed' and new.status in ('draft', 'cancelled'))
+  ) then
+    raise exception 'Changement d''état interdit : % vers %.', old.status, new.status using errcode = 'P0001';
+  end if;
+  if old.status <> 'draft' and new.status <> 'draft' and (
+       new.to_addrs is distinct from old.to_addrs or new.cc_addrs is distinct from old.cc_addrs
+    or new.bcc_addrs is distinct from old.bcc_addrs or new.subject is distinct from old.subject
+    or new.body_text is distinct from old.body_text or new.body_html is distinct from old.body_html
+  ) then
+    raise exception 'Ce message n''est plus un brouillon : il ne peut pas être modifié.' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+create index if not exists mail_messages_to_link on public.mail_messages (received_at desc) where link_state = 'to_link';
+create index if not exists mail_messages_rfc on public.mail_messages (rfc_message_id) where rfc_message_id is not null;
+
+create table if not exists public.mail_sync_state (
+  account_id uuid primary key references public.mail_accounts (id) on delete cascade,
+  history_id text,
+  initial_done_at timestamptz,
+  last_sync_at timestamptz,
+  last_error text,
+  imported int not null default 0,
+  updated_at timestamptz not null default now()
+);
+alter table public.mail_sync_state enable row level security;
+drop policy if exists mail_sync_state_owner_read on public.mail_sync_state;
+create policy mail_sync_state_owner_read on public.mail_sync_state for select to authenticated using (public.is_app_owner());
+
+create or replace function public.mail_sync_cursor(p_server_key text, p_account uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform appt_private.assert_server(p_server_key);
+  return (select jsonb_build_object('history_id', history_id, 'initial_done_at', initial_done_at) from public.mail_sync_state where account_id = p_account);
+end;
+$$;
+
+-- Un message reçu entre (format préparé par le serveur, voir src/lib/mail/inbound.ts) :
+-- {provider_message_id, provider_thread_id, rfc_message_id, in_reply_to, references, from, to[], subject, text,
+--  received_at, automatic (bool), attachments: [{name, mime_type, size}]}
+-- Règles : déjà vu (même identifiant Gmail ou même Message-ID qu'un email envoyé par le CRM) : ignoré ;
+-- automatique (réponse automatique, liste, noreply) : conservé « ignoré », sans effet ; expéditeur inconnu : rien
+-- n'est conservé ; une seule fiche : rattaché, historique, relances en pause et « Réponses à traiter » ;
+-- plusieurs fiches : « à rattacher » (résolution manuelle). Un rattachement manuel n'est jamais modifié.
+create or replace function public.mail_inbound_ingest(p_server_key text, p_account uuid, p_messages jsonb, p_history_id text default null, p_initial boolean default false)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  m jsonb; v_from text; v_people int; v_person uuid; v_company uuid; v_id uuid; v_inter uuid; v_cands jsonb;
+  v_linked int := 0; v_to_link int := 0; v_ignored int := 0; v_skipped int := 0; v_paused int; v_account_email text;
+begin
+  perform appt_private.assert_server(p_server_key);
+  select lower(email) into v_account_email from public.mail_accounts where id = p_account;
+  if v_account_email is null then raise exception 'Compte Gmail introuvable' using errcode = 'P0002'; end if;
+  for m in select * from jsonb_array_elements(coalesce(p_messages, '[]')) loop
+    v_from := lower(btrim(m ->> 'from'));
+    if v_from is null or v_from = v_account_email
+       or exists (select 1 from public.mail_messages where account_id = p_account and provider_message_id = m ->> 'provider_message_id')
+       or (m ->> 'rfc_message_id' is not null and exists (select 1 from public.mail_messages where rfc_message_id = m ->> 'rfc_message_id' and direction = 'out')) then
+      v_skipped := v_skipped + 1; continue;
+    end if;
+    select count(distinct p.company_id), min(p.id::text)::uuid into v_people, v_person
+      from public.people p join public.companies c on c.id = p.company_id
+     where p.email_norm = v_from and c.merged_into_id is null;
+    if v_people = 0 then v_skipped := v_skipped + 1; continue; end if; -- hors contacts : rien n'est conservé
+    v_company := null; v_cands := null; v_inter := null;
+    if v_people = 1 then
+      select company_id into v_company from public.people where id = v_person;
+    else
+      v_person := null;
+      select jsonb_agg(jsonb_build_object('company_id', c.id, 'name', c.name, 'person_id', p.id) order by c.name) into v_cands
+        from public.people p join public.companies c on c.id = p.company_id where p.email_norm = v_from and c.merged_into_id is null;
+    end if;
+    if coalesce((m ->> 'automatic')::boolean, false) then
+      insert into public.mail_messages (account_id, direction, status, origin, company_id, person_id, from_addr, to_addrs, subject, body_text,
+             provider_message_id, provider_thread_id, rfc_message_id, in_reply_to, references_hdr, received_at, link_state, attachments_meta)
+      values (p_account, 'in', 'received', 'system', v_company, v_person, v_from,
+              array(select jsonb_array_elements_text(coalesce(m -> 'to', '[]'))), left(coalesce(m ->> 'subject', ''), 500),
+              left(coalesce(m ->> 'text', ''), 200000), m ->> 'provider_message_id', m ->> 'provider_thread_id', m ->> 'rfc_message_id',
+              m ->> 'in_reply_to', m ->> 'references', coalesce((m ->> 'received_at')::timestamptz, now()), 'ignored', m -> 'attachments');
+      v_ignored := v_ignored + 1; continue;
+    end if;
+    if v_company is not null then
+      insert into public.interactions (company_id, person_id, kind, channel, occurred_at, content, content_origin, source, meta)
+      values (v_company, v_person, 'message_in', 'email', least(coalesce((m ->> 'received_at')::timestamptz, now()), now()),
+              left(coalesce(nullif(btrim(m ->> 'subject'), ''), '(sans objet)') || E'\n\n' || coalesce(m ->> 'text', ''), 20000),
+              'system', 'system', jsonb_build_object('gmail_message_id', m ->> 'provider_message_id', 'thread_id', m ->> 'provider_thread_id'))
+      returning id into v_inter;
+      -- même règle qu'une réponse saisie à la main : relances de l'entreprise en pause, « Réponses à traiter »
+      -- (seulement pour les messages nouveaux, pas pour l'import initial de l'historique)
+      if not p_initial then
+        update public.campaign_participants cp set status = 'a_repondu', next_due_date = null
+          from public.campaigns ca
+         where ca.id = cp.campaign_id and ca.status = 'active' and cp.company_id = v_company and cp.status in ('a_contacter', 'en_cours');
+        get diagnostics v_paused = row_count;
+        if v_paused > 0 then
+          update public.interactions set campaign_participant_id = (
+            select cp.id from public.campaign_participants cp where cp.company_id = v_company and cp.status = 'a_repondu'
+             order by (cp.person_id = v_person) desc nulls last, cp.updated_at desc limit 1)
+           where id = v_inter;
+        end if;
+        update public.companies set prospect_status = 'en_discussion' where id = v_company and prospect_status in ('nouveau', 'contacte');
+      end if;
+      v_linked := v_linked + 1;
+    else
+      v_to_link := v_to_link + 1;
+    end if;
+    insert into public.mail_messages (account_id, direction, status, origin, company_id, person_id, from_addr, to_addrs, subject, body_text,
+           provider_message_id, provider_thread_id, rfc_message_id, in_reply_to, references_hdr, received_at, link_state, link_candidates,
+           attachments_meta, interaction_id)
+    values (p_account, 'in', 'received', 'manual', v_company, v_person, v_from,
+            array(select jsonb_array_elements_text(coalesce(m -> 'to', '[]'))), left(coalesce(m ->> 'subject', ''), 500),
+            left(coalesce(m ->> 'text', ''), 200000), m ->> 'provider_message_id', m ->> 'provider_thread_id', m ->> 'rfc_message_id',
+            m ->> 'in_reply_to', m ->> 'references', coalesce((m ->> 'received_at')::timestamptz, now()),
+            case when v_company is null then 'to_link' else 'linked' end, v_cands, m -> 'attachments', v_inter)
+    returning id into v_id;
+  end loop;
+  insert into public.mail_sync_state (account_id, history_id, initial_done_at, last_sync_at, last_error, imported, updated_at)
+  values (p_account, p_history_id, case when p_initial then now() end, now(), null, v_linked + v_to_link, now())
+  on conflict (account_id) do update set
+    history_id = coalesce(p_history_id, mail_sync_state.history_id),
+    initial_done_at = coalesce(mail_sync_state.initial_done_at, case when p_initial then now() end),
+    last_sync_at = now(), last_error = null, imported = mail_sync_state.imported + v_linked + v_to_link, updated_at = now();
+  return jsonb_build_object('linked', v_linked, 'to_link', v_to_link, 'ignored', v_ignored, 'skipped', v_skipped);
+end;
+$$;
+
+create or replace function public.mail_sync_error(p_server_key text, p_account uuid, p_error text, p_reset_history boolean default false)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform appt_private.assert_server(p_server_key);
+  insert into public.mail_sync_state (account_id, last_error, updated_at) values (p_account, left(p_error, 1000), now())
+  on conflict (account_id) do update set last_error = left(p_error, 1000), updated_at = now(),
+    history_id = case when p_reset_history then null else mail_sync_state.history_id end;
+end;
+$$;
+
+-- Résolution manuelle d'un email « à rattacher » (ou correction d'un rattachement) : jamais modifié ensuite.
+create or replace function public.mail_inbound_link(p_message uuid, p_company uuid, p_person uuid default null)
+returns jsonb
+language plpgsql
+as $$
+declare mm public.mail_messages; v_inter uuid;
+begin
+  perform public.assert_owner();
+  select * into mm from public.mail_messages where id = p_message and direction = 'in' for update;
+  if mm.id is null then raise exception 'Email introuvable' using errcode = 'P0002'; end if;
+  if not exists (select 1 from public.companies where id = p_company and merged_into_id is null) then
+    raise exception 'Fiche introuvable' using errcode = 'P0002';
+  end if;
+  if p_person is not null and not exists (select 1 from public.people where id = p_person and company_id = p_company) then
+    raise exception 'Cette personne n''appartient pas à la fiche' using errcode = '22023';
+  end if;
+  if mm.interaction_id is not null then
+    update public.interactions set company_id = p_company, person_id = p_person where id = mm.interaction_id;
+    v_inter := mm.interaction_id;
+  else
+    insert into public.interactions (company_id, person_id, kind, channel, occurred_at, content, content_origin, source, meta)
+    values (p_company, p_person, 'message_in', 'email', least(coalesce(mm.received_at, now()), now()),
+            left(coalesce(nullif(btrim(mm.subject), ''), '(sans objet)') || E'\n\n' || mm.body_text, 20000), 'system', 'user',
+            jsonb_build_object('gmail_message_id', mm.provider_message_id))
+    returning id into v_inter;
+  end if;
+  update public.mail_messages set company_id = p_company, person_id = p_person, link_state = 'linked', linked_manually = true,
+         interaction_id = v_inter, link_candidates = null where id = mm.id;
+  return jsonb_build_object('id', mm.id, 'interaction_id', v_inter);
+end;
+$$;
+
+-- ===========================================================================
+-- Droits : fonctions à clé serveur ouvertes au client sans session (elles vérifient la clé), le reste au propriétaire.
+-- ===========================================================================
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'public.job_report(text, text, boolean, text, jsonb)', 'public.appt_rate_check(text, text, text)',
+    'public.mail_server_account(text)', 'public.mail_server_store_access(text, uuid, text, timestamptz, text)',
+    'public.mail_server_mark_reconnect(text, uuid, text)', 'public.mail_server_record(text, jsonb)',
+    'public.mail_sync_cursor(text, uuid)', 'public.mail_inbound_ingest(text, uuid, jsonb, text, boolean)',
+    'public.mail_sync_error(text, uuid, text, boolean)']
+  loop
+    execute format('revoke execute on function %s from public', f);
+    execute format('grant execute on function %s to anon, authenticated', f);
+  end loop;
+end $$;
+revoke execute on function public.mail_inbound_link(uuid, uuid, uuid) from public, anon;
+grant execute on function public.mail_inbound_link(uuid, uuid, uuid) to authenticated;
+grant select on public.scheduled_jobs, public.mail_sync_state to authenticated;
+
+-- Compteur du menu : + emails reçus à rattacher (même source que « Aujourd'hui »).
+create or replace function public.nav_counters(p_today date)
+returns jsonb
+language sql
+stable
+as $$
+  select jsonb_build_object(
+    'todo', (select count(*) from public.todo_items where due_date <= p_today),
+    'due', (select count(*) from public.todo_items where item_type = 'followup' and due_date <= p_today),
+    'replies', (select count(*) from public.campaign_participants where status = 'a_repondu' and outcome in ('none', 'replied')),
+    'calls', (select count(*) from public.fireflies_calls where link_state = 'to_link'),
+    'emails', (select count(*) from public.mail_messages where direction = 'in' and link_state = 'to_link'));
+$$;
+
+
+-- ===== 20261115000600_portail_documents.sql =====
+-- Audit, lot 6 — Portail et documents (C06, Q08, K11). Migration additive.
+
+-- ===========================================================================
+-- C06 — partage d'un document de la fiche avec le projet : jamais visible du client sans confirmation explicite
+-- (dossier choisi, nombre de documents exposés) ; {"confirm": n} sans rien modifier tant que ce n'est pas confirmé.
+-- ===========================================================================
+create or replace function public.project_files_share(p_project uuid, p_files uuid[], p_folder uuid, p_confirm boolean default false)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare p public.projects; v_n int; v_added int;
+begin
+  perform portal_private.assert_owner_user();
+  select * into p from public.projects where id = p_project;
+  if not found then raise exception 'Projet introuvable' using errcode = 'P0002'; end if;
+  if p_folder is not null and not exists (select 1 from public.project_folders where id = p_folder and project_id = p_project) then
+    raise exception 'Dossier introuvable' using errcode = 'P0002';
+  end if;
+  if exists (select 1 from unnest(p_files) f(id) where not exists (
+       select 1 from public.company_files cf where cf.id = f.id and cf.company_id = p.company_id and cf.status = 'ready')) then
+    raise exception 'Un document n''appartient pas à la fiche de ce projet' using errcode = '22023';
+  end if;
+  v_n := case when portal_private.folder_visible(p_folder) and p.portal_published
+              then (select count(*)::int from unnest(p_files) f(id) where not exists (select 1 from public.project_files x where x.project_id = p_project and x.file_id = f.id))
+              else 0 end;
+  if v_n > 0 and not coalesce(p_confirm, false) then return jsonb_build_object('confirm', v_n); end if;
+  if coalesce(p_confirm, false) then perform set_config('cely.confirm_expose', 'on', true); end if;
+  insert into public.project_files (project_id, file_id, folder_id)
+  select p_project, f.id, p_folder from unnest(p_files) f(id)
+  on conflict (project_id, file_id) do nothing;
+  get diagnostics v_added = row_count;
+  perform set_config('cely.confirm_expose', '', true);
+  if v_added > 0 then
+    perform portal_private.log(p_project, 'owner', null, 'files_shared', jsonb_build_object('count', v_added, 'folder_id', p_folder, 'visible', portal_private.folder_visible(p_folder)));
+  end if;
+  return jsonb_build_object('shared', v_added, 'visible', portal_private.folder_visible(p_folder) and p.portal_published);
+end; $$;
+
+-- Commentaires écrits sur une tâche interne : ils restent privés, même si la tâche devient visible ensuite.
+alter table public.project_task_comments add column if not exists internal boolean not null default false;
+create or replace function public.tg_task_comment_internal()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if new.author_kind = 'owner' and not exists (select 1 from public.project_tasks where id = new.task_id and visible_to_client) then
+    new.internal := true;
+  end if;
+  return new;
+end; $$;
+drop trigger if exists task_comment_internal on public.project_task_comments;
+create trigger task_comment_internal before insert on public.project_task_comments
+  for each row execute function public.tg_task_comment_internal();
+
+create or replace function portal_private.task_json(t public.project_tasks, p_person uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object(
+    'id', t.id, 'project_id', t.project_id, 'project_name', (select name from public.projects where id = t.project_id),
+    'title', t.title, 'status', t.status, 'due_date', t.due_date, 'blocked_reason', t.blocked_reason,
+    'assignee', case when t.assignee_kind = 'owner' then jsonb_build_object('kind', 'owner', 'name', 'Cely Growth')
+                     when t.assignee_person_id is null then jsonb_build_object('kind', 'team', 'name', 'Équipe client')
+                     else jsonb_build_object('kind', case when t.assignee_person_id = p_person then 'me' else 'person' end,
+                                             'name', (select btrim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')) from public.people where id = t.assignee_person_id)) end,
+    'meeting', (select jsonb_build_object('id', pm.id, 'title', coalesce(pm.title, b.event_snapshot ->> 'name'), 'starts_at', b.starts_at)
+                  from public.project_meetings pm join public.appt_bookings b on b.id = pm.booking_id
+                 where pm.id = t.meeting_id and pm.visible_to_client and b.status in ('confirmed','cancelled')),
+    'updated_at', t.updated_at, 'can_edit', portal_private.task_editable(t, p_person),
+    'comment_count', (select count(*) from public.project_task_comments c where c.task_id = t.id and not c.internal));
+$$;
+
+
+create or replace function public.portal_task(p_server_key text, p_session_hash text, p_task uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  t public.project_tasks;
+begin
+  select * into t from public.project_tasks where id = p_task and visible_to_client;
+  if not found or not exists (select 1 from portal_private.visible_projects(v_person) where project_id = t.project_id) then
+    raise exception 'Tâche introuvable' using errcode = 'P0002';
+  end if;
+  return portal_private.task_json(t, v_person) || jsonb_build_object(
+    'description', t.description, 'links', t.links,
+    'comments', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', c.id, 'body', c.body, 'created_at', c.created_at, 'mine', c.person_id = v_person,
+        'author', case when c.author_kind = 'owner' then 'Cely Growth'
+                       else (select btrim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')) from public.people where id = c.person_id) end) order by c.created_at)
+      from public.project_task_comments c where c.task_id = t.id and not c.internal), '[]'));
+end; $$;
+
+
+-- Demande d'onboarding : titre visible du client choisi au partage (le libellé interne ne sort pas).
+drop function if exists public.onboarding_share_request(uuid, text, uuid);
+create or replace function public.onboarding_share_request(p_item uuid, p_text text, p_person uuid default null, p_title text default null)
+returns jsonb language plpgsql set search_path = '' as $$
+declare
+  i public.project_onboarding_items;
+  p public.projects;
+  v_text text := nullif(btrim(coalesce(p_text, '')), '');
+  v_task uuid;
+  -- C06 : titre montré au client, distinct du libellé interne (par défaut le libellé, modifiable avant partage)
+  v_title text;
+begin
+  perform public.assert_owner();
+  select * into i from public.project_onboarding_items where id = p_item for update;
+  if not found then raise exception 'Point introuvable' using errcode = 'P0002'; end if;
+  select * into p from public.projects where id = i.project_id;
+  v_title := left(coalesce(nullif(btrim(coalesce(p_title, '')), ''), i.label), 300);
+  if v_text is null then raise exception 'Rédigez la demande avant de la partager' using errcode = '22023'; end if;
+  if char_length(v_text) > 5000 then raise exception '5 000 caractères maximum' using errcode = '22023'; end if;
+  if not p.portal_published then
+    raise exception 'Le projet n''est pas publié sur le portail : publiez-le (onglet Général) avant de partager une demande. Rien n''a été partagé.' using errcode = '22023';
+  end if;
+  if p_person is not null and not exists (select 1 from public.project_members where project_id = p.id and person_id = p_person) then
+    raise exception 'Ce contact n''est pas membre du projet' using errcode = '22023';
+  end if;
+  if i.client_task_id is not null and exists (select 1 from public.project_tasks where id = i.client_task_id) then
+    update public.project_tasks set title = v_title, description = v_text, assignee_person_id = p_person, status = case when status = 'termine' then 'a_faire' else status end,
+           updated_by_kind = 'owner', updated_by_person = null
+     where id = i.client_task_id;
+    v_task := i.client_task_id;
+  else
+    insert into public.project_tasks (project_id, title, description, assignee_kind, assignee_person_id, visible_to_client)
+    values (p.id, v_title, v_text, 'client', p_person, true) returning id into v_task;
+  end if;
+  update public.project_onboarding_items set client_task_id = v_task, request_text = v_text, request_shared_at = now() where id = i.id;
+  return jsonb_build_object('task_id', v_task);
+end; $$;
+
+
+-- Slides d'onboarding : partage atomique (une seule version visible, les autres au dossier interne), une transaction.
+create or replace function public.onboarding_share_deck(p_project uuid, p_deck uuid, p_share boolean, p_internal_folder uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare d public.project_onboarding_decks; v_pf uuid;
+begin
+  perform portal_private.assert_owner_user();
+  select * into d from public.project_onboarding_decks where id = p_deck and project_id = p_project for update;
+  if d.id is null or d.file_id is null or d.status <> 'ready' then raise exception 'Cette version n''est pas prête.' using errcode = '22023'; end if;
+  if not exists (select 1 from public.project_folders where id = p_internal_folder and project_id = p_project and not visible_to_client) then
+    raise exception 'Dossier interne introuvable' using errcode = '22023';
+  end if;
+  select id into v_pf from public.project_files where project_id = p_project and file_id = d.file_id;
+  if v_pf is null then raise exception 'Le fichier de cette version n''est plus dans le projet.' using errcode = 'P0002'; end if;
+  update public.project_files set folder_id = p_internal_folder
+   where project_id = p_project and id <> v_pf and file_id in (select file_id from public.project_onboarding_decks where project_id = p_project and file_id is not null);
+  perform set_config('cely.confirm_expose', 'on', true);
+  update public.project_files set folder_id = case when p_share then null else p_internal_folder end where id = v_pf;
+  perform set_config('cely.confirm_expose', '', true);
+  update public.project_onboarding_decks set shared_at = case when id = d.id and p_share then now() end where project_id = p_project;
+  perform portal_private.log(p_project, 'owner', null, case when p_share then 'deck_shared' else 'deck_unshared' end, jsonb_build_object('deck_id', d.id));
+  return jsonb_build_object('shared', p_share);
+end; $$;
+
+-- ===========================================================================
+-- K11 — un dépôt supprimé par le client disparaît du projet, pas de la fiche CRM (la pièce reste au propriétaire)
+-- ===========================================================================
+create or replace function public.portal_file_delete(p_server_key text, p_session_hash text, p_project_file uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  pf public.project_files;
+  f public.company_files;
+begin
+  select * into pf from public.project_files where id = p_project_file;
+  if not found or not portal_private.folder_visible(pf.folder_id) then raise exception 'Fichier introuvable' using errcode = 'P0002'; end if;
+  perform portal_private.assert_project(v_person, pf.project_id, true);
+  select * into f from public.company_files where id = pf.file_id;
+  if f.uploaded_by_kind <> 'client' or f.uploaded_by_person is distinct from v_person then
+    raise exception 'Vous ne pouvez supprimer que vos propres dépôts' using errcode = '42501';
+  end if;
+  delete from public.project_files where id = pf.id;
+  perform portal_private.log(pf.project_id, 'client', v_person, 'file_removed', jsonb_build_object('name', f.display_name));
+  return jsonb_build_object('path', null, 'file_id', f.id, 'removed_from_project', true);
+end; $$;
+
+-- K11 — limite de connexion au portail : par connexion (empreinte IP) et par code, plus de plafond global qui
+-- permettrait à une personne de bloquer tous les clients.
+alter table public.portal_login_attempts add column if not exists code_hash text;
+create index if not exists portal_login_attempts_code on public.portal_login_attempts (code_hash, created_at desc);
+create or replace function public.portal_login(p_server_key text, p_code_hash text, p_ip_hash text, p_session_hash text, p_user_agent text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  a public.portal_accesses;
+  v_name text;
+begin
+  perform portal_private.assert_server(p_server_key);
+  if (select count(*) from public.portal_login_attempts where ip_hash = p_ip_hash and not success and created_at > now() - interval '15 minutes') >= 8
+     or (select count(*) from public.portal_login_attempts where code_hash = p_code_hash and not success and created_at > now() - interval '15 minutes') >= 8 then
+    return jsonb_build_object('status', 'rate_limited');
+  end if;
+  select * into a from public.portal_accesses where code_hash = p_code_hash;
+  if not found or a.revoked_at is not null or (a.expires_at is not null and a.expires_at <= now())
+     or not exists (select 1 from portal_private.visible_projects(a.person_id)) then
+    insert into public.portal_login_attempts (ip_hash, success, code_hash) values (p_ip_hash, false, p_code_hash);
+    return jsonb_build_object('status', 'invalid');
+  end if;
+  insert into public.portal_login_attempts (ip_hash, success, code_hash) values (p_ip_hash, true, p_code_hash);
+  insert into public.portal_sessions (access_id, token_hash, user_agent, expires_at)
+  values (a.id, p_session_hash, left(p_user_agent, 300),
+          least(now() + interval '30 days', coalesce(a.expires_at, now() + interval '30 days')));
+  update public.portal_accesses set last_used_at = now() where id = a.id;
+  -- ménage : tentatives anciennes et sessions périmées
+  delete from public.portal_login_attempts where created_at < now() - interval '1 day';
+  delete from public.portal_sessions where expires_at < now() - interval '30 days';
+  select btrim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')) into v_name from public.people where id = a.person_id;
+  return jsonb_build_object('status', 'ok', 'name', v_name);
+end;
+$$;
+
+do $$
+declare f text;
+begin
+  foreach f in array array['public.project_files_share(uuid, uuid[], uuid, boolean)', 'public.onboarding_share_deck(uuid, uuid, boolean, uuid)',
+                           'public.onboarding_share_request(uuid, text, uuid, text)']
+  loop
+    execute format('revoke execute on function %s from public, anon', f);
+    execute format('grant execute on function %s to authenticated', f);
+  end loop;
+end $$;
+revoke execute on function public.tg_task_comment_internal() from public, anon;
+
+-- Une tâche créée depuis un récapitulatif encore en brouillon reste privée ; elle devient visible du client (et lui
+-- est attribuée) seulement à la publication du récapitulatif.
+create or replace function public.tg_recap_publish_tasks()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if new.status = 'published' and old.status is distinct from 'published' then
+    update public.project_tasks t set assignee_kind = 'client', visible_to_client = true, updated_by_kind = 'owner'
+     where t.meeting_id = new.meeting_id and not t.visible_to_client
+       and t.id in (select (a ->> 'task_id')::uuid from jsonb_array_elements(coalesce(new.actions, '[]')) a where a ->> 'task_id' is not null);
+  end if;
+  return null;
+end; $$;
+drop trigger if exists recap_publish_tasks on public.meeting_recaps;
+create trigger recap_publish_tasks after update of status on public.meeting_recaps
+  for each row execute function public.tg_recap_publish_tasks();
+revoke execute on function public.tg_recap_publish_tasks() from public, anon;
+
+
+-- ===== 20261115000700_onboarding_temps_appels.sql =====
+-- Audit, lot 7 — préparation réelle de l'onboarding (K10), temps et appels par projet (K09), chrono oublié (Q09).
+-- Migration additive : une table de textes extraits, deux colonnes project_id, deux colonnes de correction.
+
+-- ===========================================================================
+-- K10 — contenu lisible des documents (proposition, contrat, brief) : extrait par le serveur, conservé avec son
+-- statut (lu, vide, format non lu, échec) pour que la préparation et Claude lisent le document, pas seulement son nom.
+-- ===========================================================================
+create table if not exists public.company_file_texts (
+  file_id uuid primary key references public.company_files (id) on delete cascade,
+  status text not null check (status in ('ok', 'empty', 'unsupported', 'failed')),
+  text text check (text is null or char_length(text) <= 200000),
+  chars int not null default 0,
+  error text check (error is null or char_length(error) <= 500),
+  extracted_at timestamptz not null default now()
+);
+alter table public.company_file_texts enable row level security;
+drop policy if exists owner_all on public.company_file_texts;
+create policy owner_all on public.company_file_texts for all to authenticated
+  using ((select public.is_app_owner())) with check ((select public.is_app_owner()));
+
+-- Les sources de la préparation incluent le texte des documents (la proposition retenue en premier : référence des
+-- engagements), avec ce qui n'a pas pu être lu. Fireflies et le diagnostic enrichissent le contexte.
+create or replace function public.onboarding_documents(p_project uuid)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare o public.project_onboarding; v_company uuid;
+begin
+  perform public.assert_owner();
+  select * into o from public.project_onboarding where project_id = p_project;
+  if not found then raise exception 'Préparation introuvable' using errcode = 'P0002'; end if;
+  select company_id into v_company from public.projects where id = p_project;
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+             'file_id', f.id, 'nom', f.display_name, 'categorie', f.category, 'reference_des_engagements', f.id = o.proposal_file_id,
+             'lecture', coalesce(t.status, 'a_lire'), 'erreur', t.error, 'caracteres', coalesce(t.chars, 0),
+             'texte', left(t.text, 60000))
+           order by (f.id = o.proposal_file_id) desc, f.created_at desc)
+      from public.company_files f left join public.company_file_texts t on t.file_id = f.id
+     where f.company_id = v_company and f.status = 'ready' and f.category in ('Proposition', 'Contrat', 'Brief')), '[]');
+end; $$;
+
+-- Fichiers de la fiche à lire (texte absent ou plus ancien que le fichier).
+create or replace function public.onboarding_files_to_read(p_project uuid)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_company uuid;
+begin
+  perform public.assert_owner();
+  select company_id into v_company from public.projects where id = p_project;
+  return coalesce((select jsonb_agg(jsonb_build_object('id', f.id, 'storage_path', f.storage_path, 'mime_type', f.mime_type, 'name', f.display_name))
+    from public.company_files f left join public.company_file_texts t on t.file_id = f.id
+   where f.company_id = v_company and f.status = 'ready' and f.category in ('Proposition', 'Contrat', 'Brief')
+     and (t.file_id is null or (t.status = 'failed' and t.extracted_at < now() - interval '10 minutes'))), '[]');
+end; $$;
+
+-- ===========================================================================
+-- K09 — projet facultatif sur le temps passé et sur un appel Fireflies (même fiche obligatoire)
+-- ===========================================================================
+alter table public.time_entries add column if not exists project_id uuid references public.projects (id) on delete set null;
+alter table public.time_entries add column if not exists corrected_at timestamptz;
+alter table public.time_entries add column if not exists correction_note text check (correction_note is null or char_length(correction_note) <= 300);
+create index if not exists time_entries_project on public.time_entries (project_id, started_at desc) where project_id is not null;
+alter table public.fireflies_calls add column if not exists project_id uuid references public.projects (id) on delete set null;
+
+create or replace function public.tg_project_same_company()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if new.project_id is not null and not exists (select 1 from public.projects p where p.id = new.project_id and p.company_id = new.company_id) then
+    raise exception 'Ce projet appartient à une autre fiche.' using errcode = '22023';
+  end if;
+  return new;
+end; $$;
+drop trigger if exists time_project_same_company on public.time_entries;
+create trigger time_project_same_company before insert or update of project_id, company_id on public.time_entries
+  for each row execute function public.tg_project_same_company();
+drop trigger if exists call_project_same_company on public.fireflies_calls;
+create trigger call_project_same_company before insert or update of project_id, company_id on public.fireflies_calls
+  for each row execute function public.tg_project_same_company();
+-- un appel détaché de sa fiche perd aussi son projet (sinon le contrôle ci-dessus le refuserait)
+create or replace function public.tg_call_clear_project()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if new.company_id is distinct from old.company_id then new.project_id := null; end if;
+  return new;
+end; $$;
+drop trigger if exists call_clear_project on public.fireflies_calls;
+create trigger call_clear_project before update of company_id on public.fireflies_calls
+  for each row execute function public.tg_call_clear_project();
+
+create or replace function public.fireflies_set_project(p_call uuid, p_project uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_company uuid;
+begin
+  perform public.assert_owner();
+  select company_id into v_company from public.fireflies_calls where id = p_call;
+  if v_company is null then raise exception 'Rattachez d''abord l''appel à une fiche.' using errcode = '22023'; end if;
+  update public.fireflies_calls set project_id = p_project where id = p_call;
+  return jsonb_build_object('id', p_call, 'project_id', p_project);
+end; $$;
+
+create or replace function public.time_entry_json(e public.time_entries)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object('id', e.id, 'company_id', e.company_id, 'company_name', c.name, 'label', e.label,
+                            'project_id', e.project_id, 'project_name', (select name from public.projects where id = e.project_id),
+                            'started_at', e.started_at, 'ended_at', e.ended_at, 'source', e.source, 'now', now(),
+                            'corrected_at', e.corrected_at)
+    from public.companies c where c.id = e.company_id;
+$$;
+
+-- ===========================================================================
+-- Q09 — un chrono oublié s'arrête toujours : au-delà de 12 h, une heure de fin raisonnable est PROPOSÉE (début + 8 h,
+-- jamais après maintenant) et confirmée ; la correction est tracée. Le plafond de 7 jours par session reste.
+-- ===========================================================================
+drop function if exists public.time_stop();
+create or replace function public.time_stop(p_ended_at timestamptz default null)
+returns jsonb language plpgsql set search_path = '' as $$
+declare r public.time_entries; v_end timestamptz;
+begin
+  perform public.time_assert_user();
+  perform pg_advisory_xact_lock(hashtext('cely_time_running'));
+  select * into r from public.time_entries where ended_at is null for update;
+  if r.id is null then return jsonb_build_object('status', 'none'); end if;
+  if p_ended_at is null then
+    if now() - r.started_at > interval '12 hours' then
+      return jsonb_build_object('status', 'confirm_end', 'running', public.time_entry_json(r),
+                                'suggested', least(now(), r.started_at + interval '8 hours'));
+    end if;
+    update public.time_entries set ended_at = greatest(now(), started_at + interval '1 second') where id = r.id returning * into r;
+  else
+    v_end := p_ended_at;
+    if v_end <= r.started_at or v_end > now() + interval '1 minute' or v_end - r.started_at > interval '7 days' then
+      raise exception 'Heure de fin invalide : entre le début du chrono et maintenant, 7 jours au plus.' using errcode = '22023';
+    end if;
+    update public.time_entries set ended_at = least(v_end, now()), corrected_at = now(),
+           correction_note = 'Chrono oublié : fin confirmée à ' || to_char(least(v_end, now()) at time zone 'Europe/Paris', 'DD/MM/YYYY HH24:MI')
+     where id = r.id returning * into r;
+  end if;
+  return jsonb_build_object('status', 'stopped', 'stopped', public.time_entry_json(r));
+end; $$;
+
+drop function if exists public.time_start(uuid, text, boolean);
+create or replace function public.time_start(p_company uuid, p_label text default null, p_switch boolean default false, p_project uuid default null)
+returns jsonb language plpgsql set search_path = '' as $$
+declare r public.time_entries; v_stopped public.time_entries; n public.time_entries;
+begin
+  perform public.time_assert_user();
+  perform pg_advisory_xact_lock(hashtext('cely_time_running'));
+  if not exists (select 1 from public.companies where id = p_company and merged_into_id is null) then
+    raise exception 'Fiche client introuvable' using errcode = 'P0002';
+  end if;
+  select * into r from public.time_entries where ended_at is null for update;
+  if r.id is not null then
+    if r.company_id = p_company and r.project_id is not distinct from p_project then
+      return jsonb_build_object('status', 'running', 'running', public.time_entry_json(r));
+    end if;
+    if not coalesce(p_switch, false) then
+      return jsonb_build_object('status', 'conflict', 'running', public.time_entry_json(r));
+    end if;
+    if now() - r.started_at > interval '12 hours' then
+      -- chrono oublié : sa fin se confirme d'abord (Q09)
+      return jsonb_build_object('status', 'confirm_end', 'running', public.time_entry_json(r), 'suggested', least(now(), r.started_at + interval '8 hours'));
+    end if;
+    update public.time_entries set ended_at = greatest(now(), started_at + interval '1 second') where id = r.id returning * into v_stopped;
+  end if;
+  insert into public.time_entries (company_id, project_id, label, started_at, source)
+  values (p_company, p_project, nullif(btrim(coalesce(p_label, '')), ''), now(), 'timer') returning * into n;
+  return jsonb_build_object('status', 'started', 'running', public.time_entry_json(n),
+                            'stopped', case when v_stopped.id is null then null else public.time_entry_json(v_stopped) end);
+end; $$;
+
+do $$
+declare f text;
+begin
+  foreach f in array array['public.time_start(uuid, text, boolean, uuid)', 'public.time_stop(timestamptz)', 'public.time_entry_json(public.time_entries)',
+                           'public.fireflies_set_project(uuid, uuid)', 'public.onboarding_documents(uuid)', 'public.onboarding_files_to_read(uuid)']
+  loop
+    execute format('revoke execute on function %s from public, anon', f);
+    execute format('grant execute on function %s to authenticated', f);
+  end loop;
+end $$;
+revoke execute on function public.tg_project_same_company(), public.tg_call_clear_project() from public, anon;
+
+-- La liste des appels expose le projet (colonne ajoutée en fin de vue)
+do $$
+declare v text; i int;
+begin
+  v := pg_get_viewdef('public.fireflies_call_list'::regclass, false);
+  if position('project_id' in v) > 0 then return; end if;
+  i := position(E'\n   FROM ' in v);
+  if i = 0 then raise exception 'fireflies_call_list : forme inattendue'; end if;
+  execute 'create or replace view public.fireflies_call_list with (security_invoker = true) as '
+          || substr(v, 1, i - 1) || ', c.project_id, (select p.name from public.projects p where p.id = c.project_id) as project_name' || substr(v, i);
+end $$;
+
+
+-- ===== 20261115000800_connecteurs_suppressions.sql =====
+-- Audit, lot 8 — connecteurs, accès et suppressions (K14, C14). Migration additive (contraintes resserrées).
+
+-- ===========================================================================
+-- K14 — un email envoyé apparaît dans l'historique AVEC la personne : celle choisie, sinon l'unique contact de la
+-- fiche dont l'adresse est parmi les destinataires (jamais devinée entre plusieurs).
+-- ===========================================================================
+create or replace function public.mail_log_interaction(p_id uuid)
+returns void
+language plpgsql
+as $$
+declare
+  v public.mail_messages;
+  v_from text;
+  v_interaction uuid;
+  v_person uuid;
+begin
+  select * into v from public.mail_messages where id = p_id;
+  if v.company_id is null or v.interaction_id is not null then return; end if;
+  select email into v_from from public.mail_accounts where id = v.account_id;
+  v_person := v.person_id;
+  if v_person is null then
+    select case when count(*) = 1 then min(p.id::text)::uuid end into v_person
+      from public.people p
+     where p.company_id = v.company_id and p.email_norm = any (array(select lower(btrim(x)) from unnest(v.to_addrs || v.cc_addrs) x));
+  end if;
+  insert into public.interactions (company_id, person_id, kind, channel, occurred_at, content, content_origin, source, meta)
+  values (v.company_id, v_person, 'message_out', 'email', coalesce(v.sent_at, now()),
+          left(case when v.subject = '' then v.body_text else 'Objet : ' || v.subject || E'\n\n' || v.body_text end, 20000),
+          'user', case when v.origin = 'manual' then 'user' else 'system' end,
+          jsonb_build_object(
+            'mail_id', v.id, 'mail_origin', v.origin,
+            'subject', v.subject, 'from', v_from, 'to', v.to_addrs, 'cc', v.cc_addrs,
+            'preview', left(regexp_replace(v.body_text, '\s+', ' ', 'g'), 240),
+            'attachments', (select count(*) from public.mail_attachments a where a.mail_id = v.id),
+            'attachment_names', coalesce((select jsonb_agg(a.name order by a.position) from public.mail_attachments a where a.mail_id = v.id), '[]'::jsonb)))
+  returning id into v_interaction;
+  update public.mail_messages set interaction_id = v_interaction, person_id = coalesce(person_id, v_person) where id = p_id;
+end;
+$$;
+
+-- ===========================================================================
+-- K14 — un contact ajouté (ou dont l'email change) rattache aussitôt les appels Fireflies « à rattacher » où il
+-- figure, sans attendre le passage quotidien. Les choix manuels ne sont jamais modifiés (règle de apply_link).
+-- ===========================================================================
+create or replace function public.tg_people_rematch_calls()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare c uuid;
+begin
+  if new.email_norm is null or (tg_op = 'UPDATE' and new.email_norm is not distinct from old.email_norm) then return null; end if;
+  for c in select f.id from public.fireflies_calls f
+            where f.link_state = 'to_link'
+              and (new.email_norm = any (array(select lower(x) from unnest(f.participants) x))
+                   or f.attendees::text ilike '%' || new.email_norm || '%')
+            limit 50
+  loop
+    begin
+      perform fireflies_private.apply_link(c);
+    exception when others then
+      raise warning 'Fireflies : rattachement reporté (%)', sqlstate;
+    end;
+  end loop;
+  return null;
+end; $$;
+drop trigger if exists people_rematch_calls on public.people;
+create trigger people_rematch_calls after insert or update of email_norm on public.people
+  for each row execute function public.tg_people_rematch_calls();
+revoke execute on function public.tg_people_rematch_calls() from public, anon;
+
+-- ===========================================================================
+-- C14 — une seule règle de suppression : une fiche qui porte des données (temps passé, diagnostic) ne se supprime
+-- pas en silence ; la suppression est refusée avec une explication, comme pour le reste (ventes, finance, emails…).
+-- ===========================================================================
+do $$
+declare r record;
+begin
+  for r in select con.conname, rel.relname from pg_constraint con
+             join pg_class rel on rel.oid = con.conrelid
+             join pg_class ref on ref.oid = con.confrelid
+            where con.contype = 'f' and ref.relname = 'companies' and rel.relname in ('time_entries', 'diagnostics')
+              and con.confdeltype = 'c'
+  loop
+    execute format('alter table public.%I drop constraint %I', r.relname, r.conname);
+    execute format('alter table public.%I add constraint %I foreign key (company_id) references public.companies (id) on delete restrict', r.relname, r.conname);
+  end loop;
+end $$;
+
+-- Toute nouvelle fonction est fermée par défaut : exécutable seulement si sa migration l'accorde explicitement
+-- (plus de fonction ouverte à tous par oubli). Les fonctions existantes gardent leurs droits actuels.
+-- (le droit d'exécution de PUBLIC est un défaut global : il se retire sans « in schema »)
+alter default privileges revoke execute on functions from public;
+alter default privileges in schema public revoke execute on functions from anon;
+
+-- C14 — accès sans connexion resserrés : les fonctions de déclencheur ne sont jamais appelables, les tables récentes
+-- (protégées par RLS) ne sont pas non plus lisibles par le rôle anonyme. Règle vérifiée par test : une fonction ouverte
+-- sans connexion exige la clé serveur (ou sert aux politiques Storage du portail).
+do $$
+declare f text;
+begin
+  for f in select p.oid::regprocedure::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+            where n.nspname = 'public' and p.prorettype = 'trigger'::regtype loop
+    execute format('revoke execute on function %s from public, anon', f);
+  end loop;
+end $$;
+revoke all on public.appt_rate_hits, public.company_file_texts, public.mail_sync_state, public.scheduled_jobs from anon;
+
+
+-- ===== 20261115000900_performance.sql =====
+-- Audit, lot 9 — performance (K12, E6). Migration additive.
+
+-- L'activité d'une campagne lit les interactions par meta->>'campaign_id' : index dédié (partiel, petites entrées).
+create index if not exists interactions_meta_campaign on public.interactions ((meta ->> 'campaign_id'))
+  where meta ? 'campaign_id';
+
+-- Pages Finance : la génération des échéances d'abonnement n'écrit (ni ne verrouille) que si une échéance est due.
+create or replace function public.finance_generate_occurrences(p_until date)
+returns int
+language plpgsql
+as $$
+declare s public.finance_subscriptions; v_date date; v_n int := 0; v_guard int;
+begin
+  perform public.assert_owner();
+  if not exists (select 1 from public.finance_subscriptions where status = 'actif' and next_due_date <= p_until
+                   and (end_date is null or next_due_date <= end_date)) then
+    return 0; -- lecture seule : rien à créer
+  end if;
+  for s in select * from public.finance_subscriptions where status = 'actif' and next_due_date <= p_until order by id for update
+  loop
+    v_date := s.next_due_date;
+    v_guard := 0;
+    while v_date <= p_until and (s.end_date is null or v_date <= s.end_date) and v_guard < 400 loop
+      insert into public.finance_expenses (label, supplier, category_id, amount, amount_ht, planned_date, status, subscription_id)
+      values (s.label, s.supplier, s.category_id, s.amount, s.amount_ht, v_date, 'a_payer', s.id)
+      on conflict (subscription_id, planned_date) do nothing;
+      if found then v_n := v_n + 1; end if;
+      v_date := public.finance_add_frequency(v_date, s.frequency);
+      v_guard := v_guard + 1;
+    end loop;
+    if v_date <> s.next_due_date then
+      update public.finance_subscriptions set next_due_date = v_date where id = s.id;
+    end if;
+  end loop;
+  return v_n;
+end;
+$$;
+
+-- Contrat d'abonnement modifié après une génération : les échéances futures non payées suivent le contrat
+-- (montant, libellé, catégorie) ; une fin avancée retire celles d'après ; une fréquence changée les régénère.
+create or replace function public.tg_subscription_follow_contract()
+returns trigger language plpgsql set search_path = '' as $$
+declare v_first date;
+begin
+  if new.frequency is distinct from old.frequency then
+    select min(planned_date) into v_first from public.finance_expenses
+     where subscription_id = new.id and status = 'a_payer' and planned_date > public.today_paris();
+    delete from public.finance_expenses where subscription_id = new.id and status = 'a_payer' and planned_date > public.today_paris();
+    if v_first is not null then new.next_due_date := v_first; end if;
+    return new;
+  end if;
+  update public.finance_expenses set amount = new.amount, amount_ht = new.amount_ht, label = new.label, category_id = new.category_id, supplier = new.supplier
+   where subscription_id = new.id and status = 'a_payer' and planned_date > public.today_paris();
+  if new.end_date is not null then
+    delete from public.finance_expenses where subscription_id = new.id and status = 'a_payer' and planned_date > new.end_date;
+  end if;
+  return new;
+end; $$;
+drop trigger if exists subscription_follow_contract on public.finance_subscriptions;
+create trigger subscription_follow_contract before update of amount, amount_ht, label, category_id, supplier, frequency, end_date on public.finance_subscriptions
+  for each row execute function public.tg_subscription_follow_contract();
+revoke execute on function public.tg_subscription_follow_contract() from public, anon;
+grant execute on function public.finance_generate_occurrences(date) to authenticated;

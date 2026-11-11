@@ -45,12 +45,26 @@ export type Db = PGlite & {
   one: <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T>;
 };
 
-export async function createDb(): Promise<Db> {
-  const pg = new PGlite({ extensions: { pg_trgm, unaccent, btree_gist } });
-  await pg.exec(SUPABASE_STUB);
-  for (const file of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
+export const migrationFiles = () => readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort();
+export const migrationVersion = (file: string) => file.slice(0, 14);
+
+/** Applique les migrations dont la version est dans ]after, upTo] (mise à niveau d'une base existante). */
+export async function applyMigrations(pg: PGlite, opts: { after?: string; upTo?: string } = {}) {
+  // comme dans le SQL Editor de Supabase : droits d'administration
+  await pg.exec("reset role;");
+  for (const file of migrationFiles()) {
+    const v = migrationVersion(file);
+    if (opts.after && v <= opts.after) continue;
+    if (opts.upTo && v > opts.upTo) continue;
     await pg.exec(readFileSync(join(MIGRATIONS, file), "utf8"));
   }
+}
+
+/** `upTo` : s'arrêter à une version (pour tester une mise à niveau depuis un état antérieur). */
+export async function createDb(opts: { upTo?: string } = {}): Promise<Db> {
+  const pg = new PGlite({ extensions: { pg_trgm, unaccent, btree_gist } });
+  await pg.exec(SUPABASE_STUB);
+  await applyMigrations(pg, { upTo: opts.upTo });
   await pg.exec(`grant usage on schema extensions to anon, authenticated;`);
   await pg.query(`insert into auth.users (id, email) values ($1, 'moi@celygrowth.com'), ($2, 'autre@example.com')`, [
     OWNER,

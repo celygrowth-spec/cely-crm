@@ -13,6 +13,9 @@ import { CrmError } from "@/lib/crm/service";
 export async function apiRead<T>(fn: (sb: SupabaseClient) => Promise<T>) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Session expirée" }, { status: 401 });
+  // défense en profondeur (la base filtre déjà tout par RLS) : un compte autre que le propriétaire est refusé net
+  const { data: owner } = await session.supabase.rpc("is_app_owner");
+  if (owner !== true) return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
   try {
     return NextResponse.json(await fn(session.supabase), { headers: { "Cache-Control": "private, no-store" } });
   } catch (e) {

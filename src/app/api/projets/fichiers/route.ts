@@ -18,7 +18,7 @@ const body = z.discriminatedUnion("op", [
   z.object({ op: z.literal("move"), project: id, ids: z.array(id).min(1).max(100), folder: id.nullable(), confirm: z.boolean().default(false) }),
   z.object({ op: z.literal("unshare"), id }),
   z.object({ op: z.literal("delete"), id }),
-  z.object({ op: z.literal("share"), project: id, files: z.array(id).max(50), folder: id.nullable() }),
+  z.object({ op: z.literal("share"), project: id, files: z.array(id).max(50), folder: id.nullable(), confirm: z.boolean().default(false) }),
   z.object({
     op: z.literal("folder-save"), project: id, id: id.nullable(), name: z.string().trim().min(1).max(80), parent: id.nullable(),
     visible: z.boolean(), upload: z.boolean(), confirm: z.boolean().default(false),
@@ -69,8 +69,7 @@ export async function POST(req: NextRequest) {
         return reply({ ok: true });
       }
       case "share":
-        await svc.shareFiles(sb, b.project, b.files, b.folder);
-        return reply({ ok: true });
+        return reply(await svc.shareFiles(sb, b.project, b.files, b.folder, b.confirm));
       case "folder-save":
         return reply(await svc.saveFolder(sb, b.project, { id: b.id, name: b.name, parent: b.parent, visible: b.visible, upload: b.upload, confirm: b.confirm }));
       case "folder-delete":

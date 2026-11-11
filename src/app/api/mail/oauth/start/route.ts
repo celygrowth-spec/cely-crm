@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/appointments/config";
 import { createHash, randomBytes } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireAppOwner } from "@/lib/auth";
@@ -8,7 +9,8 @@ import { mailConfig } from "@/lib/mail/service";
 export async function GET(req: NextRequest) {
   await requireAppOwner();
   const c = mailConfig();
-  const origin = req.nextUrl.origin;
+  // K14 : adresse de retour fixée par la configuration (APP_URL), jamais déduite d'un en-tête Host modifiable
+  const origin = appUrl(req.nextUrl.origin);
   if (!c) return NextResponse.redirect(`${origin}/mail?error=config`);
   const state = randomBytes(24).toString("base64url");
   const verifier = randomBytes(48).toString("base64url");

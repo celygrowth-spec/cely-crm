@@ -18,6 +18,16 @@ export function GoogleView({ connection: c, config, outOfSync, error, justConnec
   const [busy, setBusy] = useState(false);
   const dirty = c && (JSON.stringify([...check].sort()) !== JSON.stringify([...c.check_calendar_ids].sort()) || dest !== c.destination_calendar_id);
 
+  async function disconnect() {
+    setBusy(true);
+    const r = await attempt(disconnectGoogleAction);
+    setBusy(false);
+    if (!r.ok) return toast.error(r.error);
+    if (r.data.revoked) toast.success("Agenda déconnecté, accès révoqué chez Google. Réservation en ligne suspendue.");
+    else toast.warning("Agenda déconnecté, mais Google n'a pas confirmé la révocation : retirez l'accès depuis votre compte Google (Sécurité › Applications tierces). Réservation en ligne suspendue.");
+    sync();
+  }
+
   async function act<T>(fn: () => Promise<{ ok: true; data: T } | { ok: false; error: string }>, msg: string) {
     setBusy(true);
     const r = await attempt(fn);
@@ -73,7 +83,7 @@ export function GoogleView({ connection: c, config, outOfSync, error, justConnec
             )}
             <div className="flex flex-wrap gap-2 pt-1">
               <Button size="sm" disabled={busy} onClick={() => act(refreshGoogleCalendarsAction, "Agendas actualisés")}><RefreshCw size={13} /> Actualiser la liste</Button>
-              <Button size="sm" variant="danger" disabled={busy} onClick={() => confirm("Déconnecter Google Agenda ? Les événements déjà créés restent dans Google.") && act(disconnectGoogleAction, "Agenda déconnecté")}>Déconnecter</Button>
+              <Button size="sm" variant="danger" disabled={busy} onClick={() => confirm("Déconnecter Google Agenda ?\n\nLa page de réservation publique sera suspendue (disponibilités invérifiables), les reports en ligne aussi. Les événements déjà créés restent dans Google ; une annulation sera répercutée à la reconnexion.") && void disconnect()}>Déconnecter</Button>
             </div>
           </Card>
 

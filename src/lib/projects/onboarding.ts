@@ -3,13 +3,14 @@ import "server-only";
 // partagée par les routes de l'application, la préparation de Ventes et le connecteur Claude. Les règles
 // (corrections conservées, rien de visible du client sans action explicite) sont appliquées en base
 // (migration 20261114000100_projet_onboarding.sql).
+import { extractDocument } from "@/lib/documents/extract";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { CrmError, friendlyError } from "@/lib/crm/service";
 import { confirmUpload, fileUrl, startUpload } from "@/lib/crm/files";
 import { PPTX_TYPE } from "@/lib/crm/diagnostic-rules";
 import { fireRoutine, routineConfig } from "@/lib/crm/diagnostic-trigger";
-import { idv, moveFiles, rpc, v } from "./service";
+import { idv, rpc, v } from "./service";
 import { SECTION_KEYS, routineText, type Onboarding, type OnboardingDeck, type OnboardingItem, type Section, type SectionKey } from "./onboarding-rules";
 
 const COMPANY_BUCKET = "company-files";
@@ -22,8 +23,33 @@ function check<T>(res: { data: T; error: { message: string; code?: string } | nu
 // Préparation ---------------------------------------------------------------------------------
 
 /** Préparation depuis les sources du CRM ; un échec est enregistré et relançable, la vente et le projet restent. */
+/**
+ * K10 : lit le contenu des propositions, contrats et briefs de la fiche pas encore lus (ou en échec ancien) et le
+ * conserve avec son statut. Une erreur de lecture n'empêche jamais la préparation : elle est affichée.
+ */
+export async function readDocuments(sb: SupabaseClient, projectId: string) {
+  const files = await rpc<{ id: string; storage_path: string; mime_type: string; name: string }[]>(sb, "onboarding_files_to_read", { p_project: idv(projectId) });
+  for (const f of files ?? []) {
+    const { data, error } = await sb.storage.from("company-files").download(f.storage_path);
+    const r = error || !data
+      ? { status: "failed" as const, text: null, error: "Fichier introuvable dans le stockage" }
+      : await extractDocument(new Uint8Array(await data.arrayBuffer()), f.mime_type, f.name);
+    await sb.from("company_file_texts").upsert({ file_id: f.id, status: r.status, text: r.text, chars: r.text?.length ?? 0, error: r.error, extracted_at: new Date().toISOString() });
+  }
+  return files?.length ?? 0;
+}
+
+/** Statut de lecture de chaque document (K10). */
+async function withReading(sb: SupabaseClient, docs: Onboarding["documents"]) {
+  if (!docs.length) return docs;
+  const { data } = await sb.from("company_file_texts").select("file_id, status, error, chars").in("file_id", docs.map((d) => d.id));
+  const by = new Map(((data ?? []) as { file_id: string; status: string; error: string | null; chars: number }[]).map((r) => [r.file_id, r]));
+  return docs.map((d) => ({ ...d, reading: by.get(d.id) ?? null }));
+}
+
 export async function prepare(sb: SupabaseClient, projectId: string) {
   const id = idv(projectId);
+  await readDocuments(sb, id).catch(() => 0);
   const { data, error } = await sb.rpc("onboarding_prepare", { p_project: id });
   if (!error) return data as { status: string };
   const message = friendlyError(error);
@@ -76,7 +102,7 @@ export async function getOnboarding(sb: SupabaseClient, projectId: string): Prom
     deck_auto: !!routineConfig("ONBOARDING"),
     items: check(items) as OnboardingItem[],
     decks: check(decks) as OnboardingDeck[],
-    documents: check(docs) as Onboarding["documents"],
+    documents: await withReading(sb, check(docs) as Onboarding["documents"]),
     contacts: ppl,
     members: ppl.filter((p) => memberIds.has(p.id)).map((p) => ({ id: p.id, name: p.name })),
     start_date: pr.start_date,
@@ -115,8 +141,9 @@ export const answerItem = (sb: SupabaseClient, itemId: string, action: AnswerAct
     p_file: fileId ? idv(fileId) : null,
   });
 
-export const shareRequest = (sb: SupabaseClient, itemId: string, text: string, personId: string | null) =>
-  rpc<{ task_id: string }>(sb, "onboarding_share_request", { p_item: idv(itemId), p_text: text, p_person: personId ? idv(personId) : null });
+/** `title` : titre montré au client (par défaut, le libellé interne) — C06. */
+export const shareRequest = (sb: SupabaseClient, itemId: string, text: string, personId: string | null, title?: string | null) =>
+  rpc<{ task_id: string }>(sb, "onboarding_share_request", { p_item: idv(itemId), p_text: text, p_person: personId ? idv(personId) : null, p_title: title?.trim() || null });
 
 /** Document importé depuis le bloc : il devient la réponse du point (la pièce reste dans la fiche et le projet, en interne). */
 export async function attachAnswerFile(sb: SupabaseClient, projectId: string, itemId: string, fileId: string) {
@@ -172,19 +199,8 @@ export async function requestDeck(sb: SupabaseClient, projectId: string, fetcher
  */
 export async function shareDeck(sb: SupabaseClient, projectId: string, deckId: string, share: boolean) {
   const pid = idv(projectId);
-  const decks = check(await sb.from("project_onboarding_decks").select("id, file_id, status").eq("project_id", pid)) as { id: string; file_id: string | null; status: string }[];
-  const target = decks.find((d) => d.id === idv(deckId));
-  if (!target?.file_id || target.status !== "ready") throw new CrmError("Cette version n'est pas prête.");
-  const files = check(await sb.from("project_files").select("id, file_id").eq("project_id", pid).in("file_id", decks.map((d) => d.file_id).filter((x): x is string => !!x))) as { id: string; file_id: string }[];
-  const folder = await internalFolder(sb, pid);
-  const others = files.filter((f) => f.file_id !== target.file_id).map((f) => f.id);
-  if (others.length) await moveFiles(sb, pid, others, folder, false);
-  const mine = files.find((f) => f.file_id === target.file_id);
-  if (!mine) throw new CrmError("Le fichier de cette version n'est plus dans le projet.");
-  const r = await moveFiles(sb, pid, [mine.id], share ? null : folder, share);
-  if (r.confirm) throw new CrmError("Partage non confirmé : rien n'a été partagé.");
-  check(await sb.from("project_onboarding_decks").update({ shared_at: null }).eq("project_id", pid).neq("id", target.id));
-  check(await sb.from("project_onboarding_decks").update({ shared_at: share ? new Date().toISOString() : null }).eq("id", target.id));
+  // K11 : une seule opération en base (versions précédentes au dossier interne, celle-ci partagée ou retirée)
+  await rpc(sb, "onboarding_share_deck", { p_project: pid, p_deck: idv(deckId), p_share: share, p_internal_folder: await internalFolder(sb, pid) });
 }
 
 // Claude (connecteur) ------------------------------------------------------------------------
@@ -192,12 +208,18 @@ export async function shareDeck(sb: SupabaseClient, projectId: string, deckId: s
 export async function openForClaude(sb: SupabaseClient, projectId: string) {
   const o = await getOnboarding(sb, projectId);
   if (!o) throw new CrmError("Ce projet n'est lié à aucune vente : pas de préparation.");
-  const sources = await rpc<Record<string, unknown>>(sb, "onboarding_sources", { p_project: o.project_id });
+  await readDocuments(sb, o.project_id).catch(() => 0);
+  const [sources, documents] = await Promise.all([
+    rpc<Record<string, unknown>>(sb, "onboarding_sources", { p_project: o.project_id }),
+    rpc<unknown[]>(sb, "onboarding_documents", { p_project: o.project_id }),
+  ]);
   const library = check(await sb.from("diagnostic_library_files").select("id, display_name, category").eq("status", "ready").in("category", ["brand", "example"])) as unknown[];
   return {
     projet: { id: o.project_id, etat: o.status, date_de_demarrage: o.start_date, publie_sur_le_portail: o.portal_published },
     proposition_retenue: o.documents.find((d) => d.id === o.proposal_file_id) ?? null,
     documents_de_la_fiche: o.documents,
+    // contenu lu des documents : la proposition retenue fait référence pour les engagements (K10)
+    contenu_des_documents: documents,
     sections: o.sections,
     points: o.items.filter((i) => i.status !== "resolved").map((i) => ({ key: i.key, label: i.label, statut: i.status, obligatoire: i.required, reponse: i.answer, repondu_par: i.answered_by })),
     slides: o.decks.map((d) => ({ version: d.version, statut: d.status })),

@@ -10,7 +10,7 @@ export function TemplateEditor({ id, name, steps }: { id: string | null; name: s
   const router = useRouter();
   return (
     <div>
-      <Link href="/prospection/modeles" className="mb-2 inline-block text-sm text-muted hover:text-ink">← Modèles</Link>
+      <Link href="/prospection/modeles" className="mb-2 inline-block text-sm text-muted hover:text-ink">← Modèles de séquence</Link>
       <SequenceEditor
         title="Modèle"
         initialName={name}

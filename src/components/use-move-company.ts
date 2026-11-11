@@ -12,6 +12,11 @@ export function useMoveCompany(ctx: RecordCtx) {
   const activeFollowups = ctx.detail.participants.filter((p) => ["a_contacter", "en_cours", "a_repondu"].includes(p.status)).length;
 
   return async function move(stageId: string) {
+    // une fiche gagnée ou perdue reste clôturée : seule « Rouvrir l'opportunité » la rouvre (C01)
+    if (c.deal_status !== "open") {
+      toast.error(`Opportunité ${c.deal_status === "won" ? "gagnée" : "perdue"} : utilisez « Rouvrir l'opportunité » avant de changer d'étape.`);
+      return;
+    }
     const entering = !c.pipeline_id && stageId;
     let stop = true;
     if (entering && activeFollowups > 0) {
@@ -28,7 +33,6 @@ export function useMoveCompany(ctx: RecordCtx) {
         pipeline_id: pipeline?.id ?? null,
         stage: stage ? { id: stage.id, name: stage.name } : null,
         pipeline: pipeline ? { id: pipeline.id, name: pipeline.name } : null,
-        deal_status: "open",
       },
       async () => {
         const res = await moveCompanyAction(c.id, stageId || null, stop);

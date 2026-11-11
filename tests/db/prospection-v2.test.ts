@@ -246,7 +246,7 @@ describe("exécution", () => {
     await db.rpc("complete_step", { p_participant: participant, p_content: "inv" });
     await db.rpc("complete_step", { p_participant: participant, p_content: "msg" });
     await db.rpc("record_reply", { p_participant: participant, p_content: "Oui" });
-    await db.rpc("set_participant_outcome", { p_participant: participant, p_outcome: "meeting" });
+    await db.rpc("set_participant_outcome", { p_participant: participant, p_outcome: "meeting", p_next: { task: { title: "Préparer le rendez-vous" } } });
     const s = await one<Record<string, number>>(`select enrolled, contacted, replied, interested, meetings from campaign_overview where id = $1`, [campaign]);
     expect(s).toEqual({ enrolled: 1, contacted: 1, replied: 1, interested: 1, meetings: 1 });
   });

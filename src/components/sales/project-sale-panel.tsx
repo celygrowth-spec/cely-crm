@@ -1,14 +1,14 @@
 "use client";
 
-// Dans un projet issu d'une vente : suivi de la vente (même état que la carte Ventes). Le détail de la
-// préparation, les points à compléter et les slides d'onboarding sont dans « Préparer l'onboarding » (onglet Général).
+// Dans un projet issu d'une vente : où en est le suivi (même état que la carte Ventes). La préparation de
+// l'onboarding (éléments, demandes au client, slides) est juste en dessous, dans « Préparer l'onboarding » :
+// une seule source, project_onboarding (K10).
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Loader2, RotateCcw } from "lucide-react";
-import { retryPrepAction, setSaleStageAction } from "@/app/sales-actions";
+import { setSaleStageAction } from "@/app/sales-actions";
 import { attempt } from "@/lib/client/query";
-import { STAGES, STAGE_LABELS, missingItems, type SaleRow, type SaleStage } from "@/lib/sales/rules";
+import { STAGES, STAGE_LABELS, type SaleRow, type SaleStage } from "@/lib/sales/rules";
 import { Button, cn } from "@/components/ui";
 import { useSaleSync, useSale } from "./win-sale";
 
@@ -16,64 +16,47 @@ export function ProjectSalePanel({ projectId, companyId }: { projectId: string; 
   const sale = useSale(companyId);
   const r = sale.data;
   if (!r || !r.sale_id || r.project_id !== projectId || r.sale_state !== "won" || !r.stage || r.stage === "termine") return null;
-  return <Panel r={r} projectId={projectId} />;
+  return <Panel r={r} />;
 }
 
-function Panel({ r, projectId }: { r: SaleRow; projectId: string }) {
+/** Recul d'un projet en cours : la base le refuse sans confirmation explicite (Q11). null = annulé. */
+export async function moveSaleStage(saleId: string, stage: SaleStage): Promise<{ ok: true } | { ok: false; error: string } | null> {
+  const r = await attempt(() => setSaleStageAction(saleId, stage));
+  if (r.ok) return { ok: true };
+  if (!/demande votre confirmation/.test(r.error)) return r;
+  if (!window.confirm(`${r.error}\n\nConfirmer ?`)) return null;
+  const again = await attempt(() => setSaleStageAction(saleId, stage, true));
+  return again.ok ? { ok: true } : again;
+}
+
+function Panel({ r }: { r: SaleRow }) {
   const saleSync = useSaleSync();
   const [busy, setBusy] = useState(false);
-  const items = r.prep?.items ?? [];
-  const missing = missingItems(r);
-  const preparing = r.prep_state === "pending" || r.prep_state === "running";
-
-  async function act(fn: () => Promise<{ ok: true; data: unknown } | { ok: false; error: string }>, done: string) {
+  async function stage(s: SaleStage) {
     setBusy(true);
-    const res = await attempt(fn);
+    const res = await moveSaleStage(r.sale_id!, s);
     setBusy(false);
+    if (!res) return;
     if (!res.ok) return void toast.error(res.error);
     saleSync(r.company_id);
-    toast.success(done);
+    toast.success(`Suivi : ${STAGE_LABELS[s]}`);
   }
-  const stage = (s: SaleStage) => act(() => setSaleStageAction(r.sale_id!, s), `Suivi : ${STAGE_LABELS[s]}`);
-
   return (
-    <section className="mb-4 rounded-xl border border-violet-line bg-violet-soft/40 p-3" aria-label="Onboarding de la vente" data-project-sale>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <ol className="flex flex-wrap items-center gap-1" aria-label="Suivi de la vente">
-          {STAGES.map((s, i) => (
-            <li key={s.key} className="flex items-center gap-1">
-              {i > 0 && <span className="text-xs text-muted" aria-hidden>›</span>}
-              <span aria-current={r.stage === s.key ? "step" : undefined} className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", r.stage === s.key ? "bg-ink text-white" : "text-muted")}>{s.label}</span>
-            </li>
-          ))}
-        </ol>
-        <Link href="/ventes" className="ml-auto text-xs font-semibold text-violet-strong hover:underline">Voir dans Ventes</Link>
-      </div>
-
-      {preparing ? (
-        <p className="mt-2 flex items-center gap-1.5 text-sm text-muted"><Loader2 size={14} className="animate-spin" /> Préparation à partir de la proposition, de Fireflies et du diagnostic…</p>
-      ) : r.prep_state === "failed" ? (
-        <p className="mt-2 text-sm text-danger">Préparation interrompue{r.prep_error ? ` : ${r.prep_error}` : ""}. La vente et le projet sont enregistrés.</p>
-      ) : (
-        <p className="mt-2 text-sm" data-prep-items>
-          {missing.length
-            ? <>{missing.length === 1 ? "1 point bloque" : `${missing.length} points bloquent`} le démarrage : <Link href={`/projets/${projectId}`} className="font-semibold text-violet-strong hover:underline">Préparer l&apos;onboarding</Link></>
-            : <>Prêt à démarrer · <Link href={`/projets/${projectId}`} className="font-semibold text-violet-strong hover:underline">Préparer l&apos;onboarding</Link></>}
-          {items.length > 0 && <span className="text-muted"> ({items.filter((i) => i.done).length}/{items.length} points traités)</span>}
-        </p>
-      )}
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        {r.stage === "devis_contrat" && <Button size="sm" variant="primary" disabled={busy} onClick={() => void stage("onboarding")}>Documents validés : passer en Onboarding</Button>}
-        {r.stage !== "en_mission" && <Button size="sm" disabled={busy} onClick={() => void stage("en_mission")}>Démarrer la mission</Button>}
+    <section className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-violet-line bg-violet-soft/40 px-3 py-2" aria-label="Suivi de la vente" data-project-sale>
+      <ol className="flex flex-wrap items-center gap-1" aria-label="Étapes du suivi">
+        {STAGES.map((s, i) => (
+          <li key={s.key} className="flex items-center gap-1">
+            {i > 0 && <span className="text-xs text-muted" aria-hidden>›</span>}
+            <span aria-current={r.stage === s.key ? "step" : undefined} className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", r.stage === s.key ? "bg-ink text-white" : "text-muted")}>{s.label}</span>
+          </li>
+        ))}
+      </ol>
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        {r.stage === "devis_contrat" && <Button size="sm" variant="primary" disabled={busy} onClick={() => void stage("onboarding")}>Documents confirmés : Onboarding</Button>}
+        {r.stage === "onboarding" && <Button size="sm" disabled={busy} onClick={() => void stage("en_mission")}>Démarrer la mission</Button>}
         {r.stage === "en_mission" && <Button size="sm" disabled={busy} onClick={() => void stage("termine")}>Terminer la mission</Button>}
-        {!preparing && (
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act(() => retryPrepAction(r.sale_id!), "Préparation mise à jour")}>
-            <RotateCcw size={12} /> {r.prep_state === "failed" ? "Reprendre la préparation" : "Actualiser"}
-          </Button>
-        )}
+        <Link href="/ventes" className="text-xs font-semibold text-violet-strong hover:underline">Voir dans Ventes</Link>
       </div>
-      <p className="mt-2 text-xs text-muted">Les contenus préparés restent privés (note interne) : rien n&apos;est visible du client avant votre partage.</p>
     </section>
   );
 }

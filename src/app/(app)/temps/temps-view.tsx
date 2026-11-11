@@ -32,7 +32,9 @@ function toLocalInput(iso: string) {
 }
 const fromLocalInput = (v: string) => zonedToUtc(v.slice(0, 10), v.slice(11, 16), TZ).toISOString();
 
-export function TempsView({ period, today, entries, focus, openClient }: { period: Period; today: string; entries: TimeEntry[]; focus: TimeEntry | null; openClient: string | null }) {
+export function TempsView({ period, today, entries, focus, openClient, projects = [], project = null }: {
+  period: Period; today: string; entries: TimeEntry[]; focus: TimeEntry | null; openClient: string | null; projects?: { id: string; name: string }[]; project?: string | null;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -86,6 +88,20 @@ export function TempsView({ period, today, entries, focus, openClient }: { perio
           </form>
         ) : <span className="text-sm font-semibold text-muted">{period.label}</span>}
       </div>
+
+      {(projects.length > 0 || project) && (
+        <label className="mb-3 flex items-center gap-2 text-sm" data-project-filter>
+          <span className="text-muted">Projet</span>
+          <select value={project ?? ""} className="h-8 rounded-lg border border-line px-2 text-sm" onChange={(e) => {
+            const q = new URLSearchParams(params.toString());
+            if (e.target.value) q.set("projet", e.target.value); else q.delete("projet");
+            router.push(`${pathname}?${q.toString()}`);
+          }}>
+            <option value="">Tous (chaque session comptée une fois)</option>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </label>
+      )}
 
       {running && <RunningCard running={running} onStop={stop} />}
 
@@ -175,7 +191,7 @@ function ClientRows({ name, ms, share, pct, count, open, onToggle, sessions, per
                 return (
                   <li key={e.id} className="flex items-center gap-3 py-2 text-sm">
                     <span className="w-24 shrink-0 text-muted sm:w-28">{dayFmt.format(new Date(e.started_at))}</span>
-                    <span className="min-w-0 flex-1 truncate">{e.label ?? <span className="text-muted">Sans libellé</span>}
+                    <span className="min-w-0 flex-1 truncate">{e.label ?? <span className="text-muted">Sans libellé</span>}{e.project_name && <span className="ml-1 rounded bg-violet-soft px-1.5 text-[11px] text-violet-strong">{e.project_name}</span>}{e.corrected_at && <span className="ml-1 text-[11px] text-warning" title="Fin confirmée après un chrono oublié">fin corrigée</span>}
                       <span className="block text-xs text-muted">{e.source === "manual" ? "Saisie manuelle" : `${timeFmt.format(new Date(e.started_at))} → ${timeFmt.format(new Date(e.ended_at!))}`}{inside < full ? ` · ${formatDuration(inside)} sur la période (session de ${formatDuration(full)})` : ""}</span>
                     </span>
                     <span className="font-semibold tabular-nums">{formatDuration(inside)}</span>

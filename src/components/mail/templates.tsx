@@ -2,13 +2,21 @@
 
 // Modèles d'email côté navigateur : liste (cache partagé), écriture, formulaire d'édition.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { apiGet } from "@/lib/client/query";
 import { mailCall } from "@/lib/client/mail";
 import { Button, Field, Input, Modal, Spinner } from "@/components/ui";
 import type { MailTemplate } from "@/lib/mail/templates";
-import { MailEditor, type MailEditorHandle } from "./editor";
+import type { MailEditorHandle } from "./editor";
+
+// Éditeur Tiptap (≈ 120 kB gzip) chargé à l'ouverture du formulaire, pas avec la liste des modèles.
+// Il ne s'affiche de toute façon que côté navigateur (immediatelyRender: false).
+const MailEditor = dynamic(() => import("./editor").then((m) => m.MailEditor), {
+  ssr: false,
+  loading: () => <div className="min-h-40 flex-1 animate-pulse rounded-lg border border-line bg-surface" aria-hidden />,
+});
 
 export type { MailTemplate };
 

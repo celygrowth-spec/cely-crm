@@ -10,7 +10,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Check, Play, Square, Timer } from "lucide-react";
-import { startTimerAction, stopTimerAction, type StartResult } from "@/app/temps-actions";
+import { companyProjectsAction, startTimerAction, stopTimerAction, type StartResult } from "@/app/temps-actions";
 import { apiGet } from "@/lib/client/query";
 import { CompanyPicker, type ClientOption } from "@/components/finance/forms";
 import { Button, Field, Input, Modal, Spinner, cn } from "@/components/ui";
@@ -83,8 +83,15 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
   const stop = useCallback(() => {
     startStop(async () => {
-      const r = await stopTimerAction();
+      let r = await stopTimerAction();
       if (!r.ok) return void toast.error(r.error);
+      if (r.data.status === "confirm_end") {
+        // Q09 : chrono oublié — une heure de fin raisonnable est proposée, à confirmer ou corriger
+        const ended = confirmEnd(r.data.running.company_name, r.data.running.started_at, r.data.suggested);
+        if (!ended) return;
+        r = await stopTimerAction(ended);
+        if (!r.ok) return void toast.error(r.error);
+      }
       if (r.data.status === "stopped") announceStopped(r.data.stopped as Running & { ended_at: string });
       else toast.info("Le chrono était déjà arrêté.");
       changed();
@@ -161,15 +168,30 @@ function StartModal({ open, initial, recent, running, offset, onClose, onDone }:
 function StartBody({ initial, recent, running, offset, onClose, onDone }: { initial: ClientOption | null; recent: ClientOption[]; running: Running | null; offset: React.RefObject<number>; onClose: () => void; onDone: (r: StartResult) => void }) {
   const [company, setCompany] = useState<ClientOption | null>(initial);
   const [label, setLabel] = useState("");
+  // K09 : projet facultatif (projets actifs de la fiche)
+  const [projectId, setProjectId] = useState("");
+  const projects = useQuery({ queryKey: ["company-projects-time", company?.id], enabled: !!company, queryFn: async () => {
+    const r = await companyProjectsAction(company!.id);
+    return r.ok ? r.data : [];
+  } });
   const [conflict, setConflict] = useState<Running | null>(null);
   const [pending, start] = useTransition();
   const elapsed = useElapsed(conflict?.started_at ?? null, offset);
   const go = (switchRunning: boolean) => {
     if (!company) return void toast.error("Choisissez le client");
     start(async () => {
-      const r = await startTimerAction(company.id, label || null, switchRunning);
+      let r = await startTimerAction(company.id, label || null, switchRunning, projectId || null);
       if (!r.ok) return void toast.error(r.error);
+      if (r.data.status === "confirm_end") {
+        const ended = confirmEnd(r.data.running.company_name, r.data.running.started_at, r.data.suggested);
+        if (!ended) return;
+        const s = await stopTimerAction(ended);
+        if (!s.ok) return void toast.error(s.error);
+        r = await startTimerAction(company.id, label || null, false, projectId || null);
+        if (!r.ok) return void toast.error(r.error);
+      }
       if (r.data.status === "conflict") return setConflict(r.data.running);
+      if (r.data.status === "confirm_end") return;
       onDone(r.data);
     });
   };
@@ -177,8 +199,16 @@ function StartBody({ initial, recent, running, offset, onClose, onDone }: { init
   return (
     <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); go(!!other); }}>
       <Field label="Client">
-        <CompanyPicker value={company} onChange={(c) => { setCompany(c); setConflict(null); }} suggestions={recent} />
+        <CompanyPicker value={company} onChange={(c) => { setCompany(c); setConflict(null); setProjectId(""); }} suggestions={recent} />
       </Field>
+      {company && !!projects.data?.length && (
+        <Field label="Projet (facultatif)">
+          <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="h-9 w-full rounded-lg border border-line px-2 text-sm" aria-label="Projet">
+            <option value="">Sans projet</option>
+            {projects.data.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </Field>
+      )}
       {!company && recent.length > 0 && <p className="-mt-1 text-xs text-muted">Clients récents en premier ; tapez pour chercher parmi toutes les fiches.</p>}
       <Field label="Libellé (facultatif)">
         <Input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={200} placeholder="Audit SEO, Point client, Préparation du devis…" />
@@ -207,4 +237,14 @@ export function StartTimerButton({ company, variant = "primary", className, comp
       <Timer size={15} /> <span className={compact ? "max-md:hidden" : undefined}>{busy ? "Chrono en cours" : "Démarrer un chrono"}</span>
     </Button>
   );
+}
+
+/** Chrono oublié : heure de fin proposée (début + 8 h), modifiable ; null = annulé. Heure locale « AAAA-MM-JJ HH:MM ». */
+function confirmEnd(company: string, startedAt: string, suggested: string): string | null {
+  const local = (iso: string) => { const d = new Date(iso); const p = (n: number) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+  const v = window.prompt(`Le chrono de ${company} tourne depuis le ${local(startedAt)}.\nHeure de fin à enregistrer (AAAA-MM-JJ HH:MM) :`, local(suggested));
+  if (!v) return null;
+  const m = v.trim().match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/);
+  if (!m) { toast.error("Format attendu : AAAA-MM-JJ HH:MM"); return null; }
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5])).toISOString();
 }

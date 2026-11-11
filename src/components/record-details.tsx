@@ -79,7 +79,7 @@ export function RecordDetails({ ctx }: { ctx: RecordCtx }) {
               <Badge tone={c.deal_status === "won" ? "success" : c.deal_status === "lost" ? "danger" : "violet"}>{DEAL_STATUS_LABELS[c.deal_status]}</Badge>
               {c.deal_status === "lost" && c.lost_reason && <span className="ml-2 text-muted">{c.lost_reason}</span>}
             </Row>
-            <Row label="Montant potentiel">{c.amount != null ? formatAmount(c.amount) : "—"}</Row>
+            <Row label={c.deal_status === "won" ? "Montant confirmé" : "Montant potentiel"}>{c.amount != null ? formatAmount(c.amount, c.amount_recurring) : "—"}</Row>
             <Row label="Signature estimée">{c.expected_close_date ? formatDate(c.expected_close_date) : "—"}</Row>
           </Rows>
         ) : (

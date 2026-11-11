@@ -1,7 +1,7 @@
 import { apiRead } from "@/lib/api";
 import { CrmError, friendlyError } from "@/lib/crm/service";
 
-const COLUMNS = "id, name, stage_id, amount, primary_person_name, next_action_title, next_action_due, deal_status, deal_closed_at, lost_reason";
+const COLUMNS = "id, name, stage_id, amount, amount_recurring, primary_person_name, next_action_title, next_action_due, deal_status, deal_closed_at, lost_reason";
 const STATUSES = ["open", "won", "lost"] as const;
 
 /** Cartes du Kanban par issue (companies.deal_status, la même donnée que la fiche). `?compter=1` : nombre par issue. */

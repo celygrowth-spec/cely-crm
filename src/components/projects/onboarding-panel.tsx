@@ -351,11 +351,14 @@ function ItemRow({ item: i, index, o, run, projectId }: { item: OnboardingItem; 
 function RequestModal({ open, onClose, item: i, o, run }: { open: boolean; onClose: () => void; item: OnboardingItem; o: Onboarding; run: Run }) {
   const [text, setText] = useState(i.request_text ?? [i.label, i.detail].filter(Boolean).join("\n"));
   const [person, setPerson] = useState(o.members[0]?.id ?? "");
+  // C06 : le titre montré au client est choisi ici (le libellé interne ne sort pas tel quel)
+  const [title, setTitle] = useState(i.label);
   const [busy, setBusy] = useState(false);
   return (
     <Modal open={open} onClose={onClose} title="Demande au client">
       <div className="space-y-3 text-sm">
         <p className="text-muted">Relisez la demande. Une fois partagée, elle apparaît comme une tâche dans le portail du client : il pourra y répondre ou déposer le fichier demandé. Rien n&apos;est envoyé par email.</p>
+        <Field label="Titre visible du client"><Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={300} aria-label="Titre visible du client" /></Field>
         <Field label="Texte visible du client"><Textarea value={text} onChange={(e) => setText(e.target.value)} className="min-h-28" maxLength={5000} /></Field>
         {o.members.length > 0 && (
           <Field label="Destinataire">
@@ -370,7 +373,7 @@ function RequestModal({ open, onClose, item: i, o, run }: { open: boolean; onClo
           <Button variant="ghost" onClick={onClose}>Annuler</Button>
           <Button variant="primary" disabled={busy || !text.trim() || !o.portal_published} onClick={async () => {
             setBusy(true);
-            const r = await run({ op: "request", item: i.id, text, person: person || null }, "Demande partagée sur le portail");
+            const r = await run({ op: "request", item: i.id, text, person: person || null, title }, "Demande partagée sur le portail");
             setBusy(false);
             if (r !== null) onClose();
           }}>
@@ -440,7 +443,15 @@ function MissionView({ o, run, projectId }: { o: Onboarding; run: Run; projectId
           <li>Proposition : {proposal ? <button type="button" className="font-semibold text-violet-strong underline" onClick={() => openDocument(projectId, proposal.id)}>{proposal.display_name}</button> : <span className="text-muted">aucune retenue</span>}</li>
           <li>Appels Fireflies : <span className="text-muted">{o.sections.context?.items.filter((x) => x.refs?.some((r) => r.kind === "call")).length || "aucun"} résumé(s)</span></li>
           <li>Diagnostic : <span className="text-muted">{o.diagnostic_id ? "dernier diagnostic avec une version prête" : "aucun"}</span></li>
-          <li className="text-xs text-muted">Le CRM lit les résumés et transcriptions Fireflies et le texte du diagnostic. Le contenu des documents (PDF, Word, PowerPoint) n&apos;est lu que par Claude, lors de l&apos;analyse.</li>
+          {o.documents.filter((d) => d.category === "Proposition" || d.category === "Contrat" || d.category === "Brief").map((d) => (
+            <li key={d.id} className="text-xs" data-doc-reading={d.reading?.status ?? "a_lire"}>
+              {d.display_name} :{" "}
+              {d.reading?.status === "ok" ? <span className="text-success">contenu lu ({d.reading.chars.toLocaleString("fr-FR")} caractères)</span>
+                : d.reading ? <span className="text-warning">{d.reading.error ?? "non lu"}</span>
+                : <span className="text-muted">lecture à la prochaine préparation</span>}
+            </li>
+          ))}
+          <li className="text-xs text-muted">Le CRM lit le texte des PDF, documents Word (.docx) et fichiers texte ; la proposition retenue fait référence pour les engagements. Les résumés Fireflies et le diagnostic complètent le contexte.</li>
         </ul>
       </Card>
       {CONTEXT.map((k) => o.sections[k]?.items.length ? <SectionCard key={k} k={k} o={o} run={run} projectId={projectId} /> : null)}

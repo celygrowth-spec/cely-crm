@@ -99,9 +99,11 @@ export async function accessToken(refreshToken: string): Promise<string> {
   return j.access_token;
 }
 
-export async function revoke(token: string): Promise<void> {
+/** true : Google confirme la révocation (ou le jeton n'était déjà plus valide). false : échec, à dire honnêtement. */
+export async function revoke(token: string): Promise<boolean> {
   accessCache.delete(token);
-  await call(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, { method: "POST" }).catch(() => undefined);
+  const res = await call(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, { method: "POST" }).catch(() => null);
+  return !!res && (res.ok || res.status === 400);
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +174,8 @@ function eventBody(e: CalendarEventInput, withId: boolean) {
     location: e.location ?? undefined,
     start: { dateTime: e.start, timeZone: e.timeZone },
     end: { dateTime: e.end, timeZone: e.timeZone },
-    // invité affiché dans l'événement, sans notification de Google (sendUpdates=none)
+    // invité dans l'événement : Google lui envoie l'invitation, le report et l'annulation (Q02).
+    // L'invitation vient de l'adresse Google de l'organisateur (affichée sur la page de confirmation).
     attendees: e.attendee ? [{ email: e.attendee.email, displayName: e.attendee.name }] : undefined,
     extendedProperties: { private: { celyBookingId: e.bookingId } },
     reminders: { useDefault: true },
@@ -187,7 +190,7 @@ type GEvent = { id: string; status?: string; hangoutLink?: string };
 /** Crée l'événement, ou le met à jour s'il existe déjà (reprise après échec partiel). */
 export async function upsertEvent(token: string, e: CalendarEventInput): Promise<{ id: string; meetUrl: string | null }> {
   const cal = encodeURIComponent(e.calendarId);
-  const res = await call(`${API}/calendars/${cal}/events?sendUpdates=none&conferenceDataVersion=1`, {
+  const res = await call(`${API}/calendars/${cal}/events?sendUpdates=all&conferenceDataVersion=1`, {
     method: "POST",
     token,
     headers: { "content-type": "application/json" },
@@ -207,7 +210,7 @@ export async function patchEvent(token: string, e: CalendarEventInput): Promise<
   const body = eventBody({ ...e, createMeet: false }, false) as Record<string, unknown>;
   // un événement supprimé reste « cancelled » chez Google : on le rétablit explicitement
   body.status = "confirmed";
-  const res = await call(`${API}/calendars/${cal}/events/${id}?sendUpdates=none&conferenceDataVersion=1`, {
+  const res = await call(`${API}/calendars/${cal}/events/${id}?sendUpdates=all&conferenceDataVersion=1`, {
     method: "PATCH",
     token,
     headers: { "content-type": "application/json" },
@@ -220,7 +223,7 @@ export async function patchEvent(token: string, e: CalendarEventInput): Promise<
 
 /** Supprime l'événement ; absent ou déjà supprimé = succès. */
 export async function deleteEvent(token: string, calendarId: string, bookingId: string): Promise<void> {
-  const res = await call(`${API}/calendars/${encodeURIComponent(calendarId)}/events/${eventIdFor(bookingId)}?sendUpdates=none`, {
+  const res = await call(`${API}/calendars/${encodeURIComponent(calendarId)}/events/${eventIdFor(bookingId)}?sendUpdates=all`, {
     method: "DELETE",
     token,
   });

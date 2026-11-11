@@ -72,7 +72,7 @@ describe("revenus", () => {
     const data = await load("2026-11-06");
     const f = forecast(data, 6);
     expect(f.map((x) => eur(x.inEstime))).toEqual([400, 400, 400, 400, 400, 400, 400]);
-    expect(revenueStatus(data.missions.find((x) => x.id === id)!, data.invoices, data.today)).toBe("en_cours");
+    expect(revenueStatus(data.missions.find((x) => x.id === id)!, data.invoices, data.today)).toBe("prevu"); // première échéance à venir
   });
 
   test("3. date de fin : les échéances s'arrêtent ; arrêter puis modifier pour la suite garde l'historique", async () => {

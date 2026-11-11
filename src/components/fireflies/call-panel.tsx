@@ -3,6 +3,9 @@
 // Détail d'un appel : description, note interne, rattachement, transcription chargée à l'ouverture.
 import Link from "next/link";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { companyProjectsAction } from "@/app/temps-actions";
+import { setCallProjectAction } from "@/app/inbox-actions";
 import { toast } from "sonner";
 import { CalendarDays, ExternalLink } from "lucide-react";
 import { useSync } from "@/lib/client/query";
@@ -113,6 +116,31 @@ function NoteBox({ call }: { call: Call }) {
   );
 }
 
+/** K09 : projet facultatif de l'appel (projets actifs de sa fiche). */
+function CallProject({ call }: { call: Call }) {
+  const sync = useSync();
+  const projects = useQuery({ queryKey: ["company-projects-time", call.company_id], queryFn: async () => {
+    const r = await companyProjectsAction(call.company_id!);
+    return r.ok ? r.data : [];
+  } });
+  if (!projects.data?.length && !call.project_id) return null;
+  return (
+    <label className="mt-2 flex items-center gap-2 text-sm" data-call-project>
+      <span className="text-muted">Projet</span>
+      <select defaultValue={call.project_id ?? ""} className="h-8 rounded-lg border border-line px-2 text-sm" onChange={async (e) => {
+        const r = await setCallProjectAction(call.id, e.target.value || null);
+        if (!r.ok) return void toast.error(r.error);
+        toast.success(e.target.value ? "Appel rattaché au projet" : "Appel retiré du projet");
+        sync(...CALL_KEYS);
+      }}>
+        <option value="">Aucun</option>
+        {call.project_id && !projects.data?.some((p) => p.id === call.project_id) && <option value={call.project_id}>{call.project_name ?? "Projet"}</option>}
+        {(projects.data ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+    </label>
+  );
+}
+
 function LinkBox({ call }: { call: Call }) {
   const sync = useSync();
   const [moving, setMoving] = useState(false);
@@ -146,8 +174,9 @@ function LinkBox({ call }: { call: Call }) {
           {call.link_source === "manual" && <Button size="sm" variant="ghost" type="button" disabled={busy} onClick={() => act({ action: "reset" }, "Choix annulé")}>Annuler mon choix</Button>}
         </div>
       </div>
+      {call.company_id && <CallProject call={call} />}
       {call.booking_id && (
-        <Link href={`/rendez-vous/liste?periode=tous&rdv=${call.booking_id}`} className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-violet-strong hover:underline">
+        <Link href={`/rendez-vous/agenda?vue=liste&periode=tous&rdv=${call.booking_id}`} className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-violet-strong hover:underline">
           <CalendarDays size={14} /> Voir le rendez-vous
         </Link>
       )}

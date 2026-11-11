@@ -51,6 +51,8 @@ export type Call = {
   link_reason: string | null;
   link_candidates: LinkCandidate[];
   company_id: string | null;
+  project_id?: string | null;
+  project_name?: string | null;
   company_name: string | null;
   person_id: string | null;
   booking_id: string | null;

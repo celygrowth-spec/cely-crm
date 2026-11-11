@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm run lint && npm test && npm run build",
-    "db:bundle": "node scripts/bundle-sql.mjs"
+    "db:bundle": "node scripts/bundle-sql.mjs",
+    "test-env": "node scripts/test-env/dev.mjs",
+    "test-env:db": "node scripts/test-env/server.mjs",
+    "test-env:hosted": "node scripts/test-env/hosted.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -26,6 +29,7 @@
     "@tiptap/react": "^3.33.0",
     "@tiptap/starter-kit": "^3.33.0",
     "clsx": "^2.1.1",
+    "fflate": "0.8.2",
     "lucide-react": "^1.64.0",
     "mcp-handler": "^2.3.0",
     "next": "16.4.3",
@@ -37,6 +41,7 @@
     "server-only": "^0.0.1",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.7.0",
+    "unpdf": "1.4.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {

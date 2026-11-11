@@ -21,6 +21,8 @@ export type Company = {
   stage_id: string | null;
   deal_status: DealStatus;
   amount: number | null;
+  /** après Gagné en mensuel : montant par mois (Q07) */
+  amount_recurring?: boolean;
   expected_close_date: string | null;
   lost_reason: string | null;
   deal_closed_at: string | null;
@@ -41,7 +43,7 @@ export type CompanyOverview = Company & {
   list_ids: string[];
   next_action_title: string | null;
   next_action_due: string | null;
-  next_action_type: "task" | "followup" | null;
+  next_action_type: "task" | "followup" | "project_task" | null;
   people_search: string;
 };
 
@@ -138,13 +140,15 @@ export type Stage = { id: string; name: string; position: number };
 export type PipelineWithStages = { id: string; name: string; position: number; stages: Stage[] };
 
 export type TodoItem = {
-  item_type: "task" | "followup";
+  /** task : tâche CRM · followup : étape de campagne · project_task : tâche de projet attribuée à moi */
+  item_type: "task" | "followup" | "project_task";
   id: string;
   company_id: string;
   company_name: string;
   person_id: string | null;
   person_name: string | null;
   title: string;
+  /** null seulement pour une tâche de projet sans échéance */
   due_date: string;
   campaign_id: string | null;
   campaign_name: string | null;
@@ -156,6 +160,9 @@ export type TodoItem = {
   step_instructions: string | null;
   sequence_version: number | null;
   step_count: number | null;
+  project_id?: string | null;
+  project_name?: string | null;
+  task_status?: string | null;
 };
 
 export type SourceColor = "slate" | "violet" | "blue" | "green" | "amber" | "red" | "pink" | "teal";

@@ -5,9 +5,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { CrmError, friendlyError } from "@/lib/crm/service";
 import { centsToDb } from "@/lib/finance/money";
-import type { CallSummary } from "@/lib/fireflies/types";
 import * as onboarding from "@/lib/projects/onboarding";
-import type { Prep, PrepItem, SaleRow, SaleStage } from "./rules";
+import type { SaleRow, SaleStage } from "./rules";
 
 const uuid = z.uuid("Identifiant invalide");
 const day = z.iso.date("Date invalide");
@@ -24,34 +23,74 @@ export async function listSales(sb: SupabaseClient): Promise<SaleRow[]> {
   return data as SaleRow[];
 }
 
-export async function getSale(sb: SupabaseClient, companyId: string): Promise<SaleRow | null> {
-  const { data, error } = await sb.from("sales_overview").select("*").eq("company_id", uuid.parse(companyId)).maybeSingle();
+/** Toutes les ventes de la fiche (cycles), la plus récente d'abord. */
+export async function companySales(sb: SupabaseClient, companyId: string): Promise<SaleRow[]> {
+  const { data, error } = await sb.from("sales_overview").select("*").eq("company_id", uuid.parse(companyId))
+    .order("cycle", { ascending: false, nullsFirst: false }).order("closed_on", { ascending: false, nullsFirst: false });
   if (error) throw new CrmError(friendlyError(error));
-  return data as SaleRow | null;
+  return data as SaleRow[];
 }
+
+/** La vente qui correspond à l'issue actuelle de la fiche (suivie, perdue ou ancien dossier), ou null. */
+export async function getSale(sb: SupabaseClient, companyId: string): Promise<SaleRow | null> {
+  const rows = await companySales(sb, companyId);
+  return rows.find((r) => r.sale_state === "won") ?? rows.find((r) => r.deal_status === r.company_deal_status && r.sale_state !== "completed") ?? null;
+}
+
+/** Ce que rouvrir ou perdre la vente active toucherait : projet, revenu, accès client (décisions à prendre). */
+export type DealLinks = {
+  sale_id: string; cycle: number; state: string;
+  project: { id: string; name: string; status: string; published: boolean } | null;
+  mission: { id: string; label: string; kind: "ponctuel" | "recurrent"; amount: number | string | null; status: string; end_date: string | null; invoiced: boolean } | null;
+  portal_people: { person_id: string; name: string; other_projects: number }[];
+} | null;
+export const dealLinks = (sb: SupabaseClient, companyId: string) => rpc<DealLinks>(sb, "deal_links", { p_company: uuid.parse(companyId) });
+
+export const transitionSchema = z.object({
+  project: z.enum(["continue", "en_attente", "archive"]).optional(),
+  revenue: z.enum(["continue", "stop"]).optional(),
+  revenue_stop_on: day.optional(),
+  portal: z.enum(["keep", "revoke"]).optional(),
+  lost_reason: z.string().trim().max(500, "Motif trop long (500 caractères au plus)").nullish(),
+});
+export type TransitionOptions = z.input<typeof transitionSchema>;
+export type TransitionResult = { status: string; deal_status: string; effects: string[]; portal_kept_other_projects: number };
+
+/** Rouvrir ou perdre avec les décisions sur les éléments liés, en une opération (C03). */
+export async function dealTransition(sb: SupabaseClient, companyId: string, status: "open" | "lost", options: TransitionOptions, key: string) {
+  const o = transitionSchema.safeParse(options);
+  if (!o.success) throw new CrmError(o.error.issues.map((i) => i.message).join(" · "));
+  return rpc<TransitionResult>(sb, "deal_transition", { p_company: uuid.parse(companyId), p_status: status, p_options: o.data, p_idempotency_key: z.string().min(8).max(200).parse(key) });
+}
+
+/** Client qui revient : la vente actuelle se termine, une nouvelle opportunité s'ouvre sur la même fiche (Q05). */
+export const newOpportunity = (sb: SupabaseClient, companyId: string, stageId: string, key: string) =>
+  rpc<{ status: string; previous_sale_id: string | null }>(sb, "deal_new_opportunity", { p_company: uuid.parse(companyId), p_stage: uuid.parse(stageId), p_idempotency_key: z.string().min(8).max(200).parse(key) });
 
 /** Ce qu'on peut lier ou préremplir dans « Marquer comme gagné ». */
 export async function saleContext(sb: SupabaseClient, companyId: string) {
   const id = uuid.parse(companyId);
   const [company, sale, missions, invoices, projects, files, linked] = await Promise.all([
     sb.from("companies").select("id, name, amount, expected_close_date, deal_status, deal_closed_at").eq("id", id).maybeSingle(),
-    sb.from("sales").select("id, mission_id, project_id, documents_ready, signed_on, state").eq("company_id", id).maybeSingle(),
+    sb.from("sales").select("id, cycle, mission_id, project_id, project_removed_at, documents_ready, signed_on, state").eq("company_id", id).in("state", ["won", "reopened"]).maybeSingle(),
     sb.from("finance_mission_overview").select("id, label, kind, amount, start_date, end_date, status, invoiced_ttc, received").eq("company_id", id).order("created_at", { ascending: false }),
     sb.from("finance_invoice_overview").select("id, reference, issue_date, amount_ht, amount_ttc, mission_id, mission_label, status").eq("company_id", id).eq("kind", "facture").is("cancelled_at", null).order("issue_date", { ascending: false }),
-    sb.from("projects").select("id, name, status").eq("company_id", id).neq("status", "archive").order("created_at", { ascending: false }),
+    sb.from("projects").select("id, name, status").eq("company_id", id).not("status", "in", "(termine,archive)").order("created_at", { ascending: false }),
     sb.from("company_files").select("id, display_name, category, created_at").eq("company_id", id).in("category", ["Proposition", "Contrat"]).eq("status", "ready").order("created_at", { ascending: false }),
-    sb.from("sales").select("mission_id").not("mission_id", "is", null),
+    sb.from("sales").select("id, mission_id, project_id").eq("company_id", id),
   ]);
   for (const r of [company, sale, missions, invoices, projects, files, linked]) if (r.error) throw new CrmError(friendlyError(r.error));
   if (!company.data) throw new CrmError("Fiche introuvable");
-  const own = sale.data?.mission_id ?? null;
-  const taken = new Set((linked.data ?? []).map((x) => x.mission_id as string).filter((m) => m !== own));
+  // revenus et projets déjà portés par une autre vente (même passée) : jamais proposés
+  const others = (linked.data ?? []).filter((x) => x.id !== sale.data?.id);
+  const taken = new Set(others.map((x) => x.mission_id as string | null).filter(Boolean) as string[]);
+  const takenProjects = new Set(others.map((x) => x.project_id as string | null).filter(Boolean) as string[]);
   return {
     company: company.data,
     sale: sale.data,
     missions: (missions.data ?? []).filter((m) => !taken.has(m.id)),
     invoices: (invoices.data ?? []).filter((i) => !i.mission_id || !taken.has(i.mission_id)),
-    projects: projects.data ?? [],
+    projects: (projects.data ?? []).filter((p) => !takenProjects.has(p.id)),
     files: files.data ?? [],
   };
 }
@@ -74,9 +113,11 @@ export const confirmSchema = z.object({
   link_invoice_id: uuid.nullish(),
   link_project_id: uuid.nullish(),
   project_name: z.string().trim().max(160).nullish(),
-});
+  /** projet de la vente supprimé : le recréer seulement sur demande explicite */
+  create_project: z.boolean().optional(),
+}).refine((v) => v.revenue.mode !== "mensuel" || !v.revenue.end_date || v.revenue.end_date >= v.revenue.date, { message: "La date de fin précède la première échéance" });
 export type ConfirmInput = z.input<typeof confirmSchema>;
-export type ConfirmResult = { sale_id: string; project_id: string | null; mission_id: string | null; created: { sale?: boolean; revenue?: boolean; project?: boolean } };
+export type ConfirmResult = { sale_id: string; cycle: number; project_id: string | null; mission_id: string | null; created: { sale?: boolean; revenue?: boolean; project?: boolean }; project_removed: boolean };
 
 export async function confirmSale(sb: SupabaseClient, companyId: string, input: ConfirmInput, key: string): Promise<ConfirmResult> {
   const r = confirmSchema.safeParse(input);
@@ -89,96 +130,21 @@ export async function confirmSale(sb: SupabaseClient, companyId: string, input: 
     p_data: {
       closed_on: v.closed_on, signed_on: v.signed_on ?? null, documents_ready: v.documents_ready, revenue,
       link_mission_id: v.link_mission_id ?? null, link_invoice_id: v.link_invoice_id ?? null, link_project_id: v.link_project_id ?? null,
-      project_name: v.project_name || null,
+      project_name: v.project_name || null, create_project: v.create_project ?? false,
     },
     p_idempotency_key: z.string().min(8).max(200).parse(key),
   });
 }
 
-export const setSaleStage = (sb: SupabaseClient, saleId: string, stage: SaleStage) =>
-  rpc<{ sale_id: string; stage: SaleStage }>(sb, "sale_set_stage", { p_sale: uuid.parse(saleId), p_stage: stage });
+/** Faire avancer le suivi ; reculer un projet en cours demande `confirm` (Q11). */
+export const setSaleStage = (sb: SupabaseClient, saleId: string, stage: SaleStage, confirm = false) =>
+  rpc<{ sale_id: string; stage: SaleStage }>(sb, "sale_set_stage", { p_sale: uuid.parse(saleId), p_stage: stage, p_confirm: confirm });
 
 // ---------------------------------------------------------------------------
-// Préparation du projet (arrière-plan) : proposition, Fireflies, diagnostic
+// Préparation de l'onboarding : une seule source, project_onboarding (K10)
 // ---------------------------------------------------------------------------
 
-export const PREP_MARK = "[Préparation automatique de l'onboarding]";
-const asText = (v: string | string[] | undefined) => (Array.isArray(v) ? v.join(" ") : v ?? "").trim();
-
-/**
- * Rassemble ce qui existe déjà sur la fiche et l'inscrit dans la note interne du projet (jamais visible du
- * client), puis liste ce qui manque pour démarrer. Rien n'est publié ni partagé. Rejouable sans effet de bord.
- */
-export async function prepareSale(sb: SupabaseClient, saleId: string): Promise<void> {
-  const id = uuid.parse(saleId);
-  if (!(await rpc<boolean>(sb, "sale_prep_claim", { p_sale: id }))) return; // déjà en cours
-  try {
-    const { data: s, error } = await sb.from("sales").select("id, company_id, project_id, mission_id, documents_ready").eq("id", id).single();
-    if (error || !s) throw new CrmError("Vente introuvable");
-    const [project, files, calls, diag, members, mission] = await Promise.all([
-      s.project_id ? sb.from("projects").select("id, name, start_date, end_date, internal_note").eq("id", s.project_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
-      sb.from("company_files").select("display_name, category, created_at").eq("company_id", s.company_id).in("category", ["Proposition", "Contrat"]).eq("status", "ready").order("created_at", { ascending: false }),
-      sb.from("fireflies_calls").select("title, occurred_at, summary, summary_state").eq("company_id", s.company_id).order("occurred_at", { ascending: false, nullsFirst: false }).limit(3),
-      sb.from("diagnostics").select("id, status, created_at, diagnostic_versions(version, status)").eq("company_id", s.company_id).order("created_at", { ascending: false }).limit(1),
-      s.project_id ? sb.from("project_members").select("person_id").eq("project_id", s.project_id) : Promise.resolve({ data: [], error: null }),
-      s.mission_id ? sb.from("finance_missions").select("kind, amount, start_date, end_date").eq("id", s.mission_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
-    ]);
-    for (const r of [project, files, calls, diag, members, mission]) if (r.error) throw new CrmError(friendlyError(r.error));
-    const props = (files.data ?? []).filter((f) => f.category === "Proposition");
-    const contracts = (files.data ?? []).filter((f) => f.category === "Contrat");
-    const callList = (calls.data ?? []) as { title: string; occurred_at: string | null; summary: CallSummary; summary_state: string }[];
-    const d = (diag.data ?? [])[0] as { id: string; status: string; diagnostic_versions?: { version: number; status: string }[] } | undefined;
-    const lastVersion = (d?.diagnostic_versions ?? []).filter((x) => x.status === "ready").sort((a, b) => b.version - a.version)[0];
-    const memberIds = ((members.data ?? []) as { person_id: string }[]).map((m) => m.person_id);
-    const emails = memberIds.length ? await sb.from("people").select("email").in("id", memberIds).not("email", "is", null) : { data: [], error: null };
-    if (emails.error) throw new CrmError(friendlyError(emails.error));
-    const withEmail = (emails.data ?? []).length > 0;
-    const p = project.data as { id: string; name: string; start_date: string | null; end_date: string | null; internal_note: string | null } | null;
-    const fiche = `/fiches/${s.company_id}`;
-    const items: PrepItem[] = [
-      { key: "proposition", label: "Proposition acceptée sur la fiche", done: props.length > 0, required: true, href: fiche, hint: "Ajoutez-la dans les documents de la fiche, catégorie « Proposition »." },
-      { key: "contrat", label: "Devis ou contrat signé", done: !!s.documents_ready || contracts.length > 0, required: false, href: fiche, hint: "Catégorie « Contrat » dans les documents de la fiche." },
-      { key: "contact", label: "Contact client avec un email dans le projet", done: withEmail, required: true, href: p ? `/projets/${p.id}/acces` : null, hint: "Pour l'invitation au portail, quand vous le déciderez." },
-      { key: "dates", label: "Date de démarrage du projet", done: !!p?.start_date, required: true, href: p ? `/projets/${p.id}` : null, hint: null },
-      { key: "contexte", label: "Compte rendu Fireflies ou diagnostic", done: callList.length > 0 || !!lastVersion, required: false, href: fiche, hint: "Facultatif : enrichit la préparation." },
-    ];
-    const prep: Prep = { items, sources: { propositions: props.length, contracts: contracts.length, calls: callList.length, diagnostic: !!lastVersion } };
-
-    // Note interne du projet : uniquement si elle est vide ou si elle vient d'une préparation précédente
-    if (p && (!p.internal_note?.trim() || p.internal_note.startsWith(PREP_MARK))) {
-      const m = mission.data as { kind: string; amount: string | number | null; start_date: string | null; end_date: string | null } | null;
-      const lines = [
-        PREP_MARK,
-        "Contenu privé : rien n'est visible du client avant votre partage.",
-        "",
-        "Périmètre — proposition acceptée",
-        ...(props.length ? props.map((f) => `• ${f.display_name}`) : ["• À ajouter sur la fiche (catégorie « Proposition »)."]),
-        ...(contracts.length ? ["", "Devis / contrat", ...contracts.map((f) => `• ${f.display_name}`)] : []),
-        ...(m ? ["", "Revenu prévu", `• ${m.kind === "recurrent" ? "Mensuel" : "Ponctuel"} : ${m.amount ?? "?"} € HT${m.start_date ? `, à partir du ${m.start_date}` : ""}${m.end_date ? ` jusqu'au ${m.end_date}` : ""}`] : []),
-        ...(callList.length ? ["", "Appels Fireflies", ...callList.map((c) => {
-          const sum = asText(c.summary?.overview) || asText(c.summary?.short_summary) || asText(c.summary?.gist);
-          const actions = asText(c.summary?.action_items);
-          return `• ${c.title}${c.occurred_at ? ` (${c.occurred_at.slice(0, 10)})` : ""}${sum ? ` — ${sum.slice(0, 600)}` : ""}${actions ? `\n  Actions : ${actions.slice(0, 400)}` : ""}`;
-        })] : []),
-        ...(lastVersion ? ["", "Diagnostic", `• Version ${lastVersion.version} disponible sur la fiche (onglet Diagnostic).`] : []),
-      ];
-      const note = lines.join("\n").slice(0, 10000);
-      const up = await sb.from("projects").update({ internal_note: note }).eq("id", p.id);
-      if (up.error) throw new CrmError(friendlyError(up.error));
-    }
-    if (p) {
-      // préparation détaillée du projet (points à compléter, sources, analyse par Claude) : elle tient aussi
-      // à jour sales.prep et sales.prep_state, pour que Ventes et Projets affichent le même état
-      await rpc(sb, "onboarding_ensure", { p_project: p.id });
-      await onboarding.prepare(sb, p.id);
-      await onboarding.requestAnalysis(sb, p.id);
-      return;
-    }
-    const missing = items.filter((i) => i.required && !i.done).length;
-    await rpc(sb, "sale_prep_save", { p_sale: id, p_state: missing ? "incomplete" : "ready", p_prep: prep, p_error: null });
-  } catch (e) {
-    const message = e instanceof CrmError ? e.message : "Préparation interrompue.";
-    if (!(e instanceof CrmError)) console.error(e);
-    await sb.rpc("sale_prep_save", { p_sale: id, p_state: "failed", p_prep: null, p_error: message });
-  }
+/** Lance (ou relance) la préparation du projet de la vente ; vos corrections manuelles sont conservées. */
+export async function prepareProject(sb: SupabaseClient, projectId: string): Promise<void> {
+  await onboarding.prepare(sb, uuid.parse(projectId));
 }

@@ -3,15 +3,16 @@
 // Mode Focus : traiter les actions dues à la chaîne.
 // Gauche : file de travail. Centre : l'action et son message. Droite : le contexte.
 // Copier ou ouvrir LinkedIn ne valide jamais rien : seul le bouton de validation enregistre.
+import { NextStepFields, defaultNext, toNextStep, type NextChoice } from "@/components/prospection/next-step";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertTriangle, ArrowLeft, Ban, Check, ChevronDown, Copy, ExternalLink, Globe, Inbox, Keyboard, Mail, Phone, SkipForward, X,
 } from "lucide-react";
 import {
-  completeStepAction, recordReplyAction, saveDraftAction, setOutcomeAction, skipStepAction, undoActionAction, updateParticipantsAction,
+  completeStepAction, recordReplyAction, saveDraftAction, skipStepAction, undoActionAction, updateParticipantsAction,
 } from "@/app/prospection-actions";
 import { useCrm } from "@/components/app-shell";
 import { useSync } from "@/lib/client/query";
@@ -201,7 +202,7 @@ export function FocusSession({ items, campaignName }: { items: FocusItem[]; camp
       <div className="mx-auto max-w-lg py-16 text-center">
         <p className="font-display text-2xl font-extrabold">Rien à traiter</p>
         <p className="mt-2 text-sm text-muted">Aucune action due {campaignName ? `dans « ${campaignName} »` : "dans vos campagnes actives"}. Les actions des campagnes en pause ne sont pas proposées.</p>
-        <Link href="/prospection/aujourdhui" className="mt-4 inline-block font-semibold text-violet-strong">← Retour à Aujourd&apos;hui</Link>
+        <Link href="/" className="mt-4 inline-block font-semibold text-violet-strong">← Retour à Aujourd&apos;hui</Link>
       </div>
     );
   }
@@ -212,7 +213,7 @@ export function FocusSession({ items, campaignName }: { items: FocusItem[]; camp
     <div className="-mx-4 -mt-5 -mb-24 flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden md:-mx-8 md:-mt-7 md:-mb-10 md:h-dvh">
       {/* En-tête de session */}
       <div className="flex items-center gap-3 border-b border-line bg-white px-4 py-2">
-        <Link href="/prospection/aujourdhui" className="flex items-center gap-1 text-sm text-muted hover:text-ink"><ArrowLeft size={15} /> Quitter</Link>
+        <Link href="/" className="flex items-center gap-1 text-sm text-muted hover:text-ink"><ArrowLeft size={15} /> Quitter</Link>
         <p className="font-display text-base font-bold">Session de prospection{campaignName ? ` · ${campaignName}` : ""}</p>
         <div className="ml-4 flex min-w-40 flex-1 items-center gap-2">
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface">
@@ -264,7 +265,7 @@ export function FocusSession({ items, campaignName }: { items: FocusItem[]; camp
                 {Object.values(results).filter((r) => r === "done").length} réalisée(s) · {Object.values(results).filter((r) => r === "skipped").length} ignorée(s) ·{" "}
                 {Object.values(results).filter((r) => r === "postponed").length} reportée(s) · {Object.values(results).filter((r) => r === "replied").length} réponse(s)
               </p>
-              <Button className="mt-4" variant="primary" onClick={() => { router.push("/prospection/aujourdhui"); router.refresh(); }}>Retour à Aujourd&apos;hui</Button>
+              <Button className="mt-4" variant="primary" onClick={() => { router.push("/"); router.refresh(); }}>Retour à Aujourd&apos;hui</Button>
             </div>
           ) : item && edit && meta ? (
             <div className="mx-auto max-w-3xl">
@@ -489,26 +490,29 @@ function ContextPanel({ item }: { item: FocusItem }) {
 }
 
 function ReplyDialog({ open, onClose, item, personId, onDone }: { open: boolean; onClose: () => void; item: FocusItem; personId: string | null; onDone: () => void }) {
-  const { pipelines } = useCrm();
   const [text, setText] = useState("");
   const [at, setAt] = useState(nowLocalInput());
   const [next, setNext] = useState<"none" | "interested" | "meeting" | "not_interested">("none");
-  const [stage, setStage] = useState("");
+  const [suite, setSuite] = useState<NextChoice>(() => defaultNext("interested", item.participant.company.name));
   const [busy, setBusy] = useState(false);
-  const stageOptions = useMemo(() => pipelines.flatMap((p) => p.stages.map((s) => ({ id: s.id, label: `${p.name} › ${s.name}` }))), [pipelines]);
+  // une clé par saisie : double clic ou reprise réseau = une seule réponse, une seule tâche (K06)
+  const [key, setKey] = useState(() => crypto.randomUUID());
+  const pickOutcome = (k: typeof next) => {
+    setNext(k);
+    if (k === "interested" || k === "meeting") setSuite(defaultNext(k, item.participant.company.name));
+  };
 
   async function save() {
     setBusy(true);
-    const r = await recordReplyAction(item.participant.id, text, localInputToISO(at), personId);
-    if (!r.ok) {
-      setBusy(false);
-      return toast.error(r.error);
-    }
-    if (next !== "none") {
-      const o = await setOutcomeAction(item.participant.id, next, next === "interested" ? stage || null : null);
-      if (!o.ok) toast.error(`Réponse enregistrée, mais le résultat a échoué : ${o.error}`);
-    }
+    // réponse et résultat : une seule opération, tout ou rien
+    const r = await recordReplyAction(item.participant.id, text, localInputToISO(at), personId, {
+      outcome: next === "none" ? null : next,
+      next: next === "interested" || next === "meeting" ? toNextStep(suite) : null,
+      key,
+    });
     setBusy(false);
+    if (!r.ok) return toast.error(r.error);
+    setKey(crypto.randomUUID());
     toast.success(`Réponse enregistrée : relances de ${item.participant.company.name} suspendues${r.data.paused_followups > 1 ? ` (${r.data.paused_followups} suivis)` : ""}`);
     setText("");
     onDone();
@@ -523,15 +527,10 @@ function ReplyDialog({ open, onClose, item, personId, onDone }: { open: boolean;
           <p className="mb-1 font-label text-xs font-semibold text-muted">Résultat (facultatif)</p>
           <div className="flex flex-wrap gap-1">
             {([["none", "À décider plus tard"], ["interested", "Intéressé"], ["meeting", "RDV obtenu"], ["not_interested", "Pas intéressé"]] as const).map(([k, l]) => (
-              <button key={k} onClick={() => setNext(k)} className={cn("rounded-md border px-2 py-1 text-xs", next === k ? "border-violet bg-violet-soft font-semibold" : "border-line")}>{l}</button>
+              <button key={k} onClick={() => pickOutcome(k)} className={cn("rounded-md border px-2 py-1 text-xs", next === k ? "border-violet bg-violet-soft font-semibold" : "border-line")}>{l}</button>
             ))}
           </div>
-          {next === "interested" && (
-            <Select value={stage} onChange={(e) => setStage(e.target.value)} className="mt-2 h-8 text-xs" aria-label="Pipeline">
-              <option value="">Sans pipeline pour l&apos;instant</option>
-              {stageOptions.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </Select>
-          )}
+          {(next === "interested" || next === "meeting") && <div className="mt-2"><NextStepFields value={suite} onChange={setSuite} outcome={next} /></div>}
         </div>
         <p className="text-xs text-muted">Les relances de cette entreprise sont suspendues dans toutes ses campagnes, pour tous ses contacts.</p>
         <div className="flex justify-end gap-2">

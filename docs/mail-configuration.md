@@ -70,3 +70,15 @@ Page **Mail** › **Connecter Gmail** › **Envoyer le test** vers une adresse �
 Google Workspace : 2 000 messages par jour et par utilisateur, 500 sur un compte d'essai. La limite dépassée bloque
 l'envoi jusqu'à 24 h, et le CRM affiche alors un échec « Limite d'envoi Gmail atteinte ». Les limites d'un compte Gmail
 personnel sont plus basses : consultez l'aide Google.
+
+## Réception (audit, lot 5 — Q03)
+- La connexion Gmail demande désormais **l'envoi et la lecture** (`gmail.readonly`). Un compte connecté avant cette
+  version doit être **reconnecté** pour activer la réception (Paramètres › Passages planifiés l'indique).
+- Lecture planifiée (`/api/cron`, tâche « gmail ») : initiale bornée (30 jours, 150 messages), puis incrémentale
+  (historique Gmail) ; reprise sur 3 jours si l'historique a expiré.
+- Rattachement : seuls les emails d'une adresse présente dans le CRM sont conservés. Une seule fiche : rattaché,
+  ajouté à l'historique, relances de l'entreprise en pause et réponse dans « Aujourd'hui ». Plusieurs fiches :
+  « Emails à rattacher » (Mail › à rattacher), résolu à la main, jamais modifié ensuite. Messages automatiques
+  (réponse d'absence, liste, noreply, promotions) : conservés « ignorés », sans effet. Un email déjà vu ou envoyé par le
+  CRM n'est jamais importé deux fois. Pièces jointes : noms et tailles seulement, à ouvrir dans Gmail.
+- Testé avec des messages Gmail simulés uniquement : la lecture réelle demande votre reconnexion.

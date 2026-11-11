@@ -13,6 +13,11 @@ export type TimeEntry = {
   started_at: string;
   ended_at: string | null;
   source: "timer" | "manual";
+  /** projet facultatif de la même fiche (K09) */
+  project_id?: string | null;
+  project_name?: string | null;
+  /** fin corrigée après un chrono oublié (Q09) */
+  corrected_at?: string | null;
 };
 
 export type PeriodKind = "jour" | "semaine" | "mois" | "perso";

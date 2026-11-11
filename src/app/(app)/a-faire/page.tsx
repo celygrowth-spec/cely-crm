@@ -1,9 +1,6 @@
-import { requireOwner } from "@/lib/auth";
-import { listTodo } from "@/lib/crm/service";
-import { TodoView } from "./todo-view";
+import { redirect } from "next/navigation";
 
-export default async function AFairePage() {
-  const { supabase } = await requireOwner();
-  const items = await listTodo(supabase);
-  return <TodoView items={items} />;
+// Ancienne adresse : « À faire » est regroupé dans « Aujourd'hui » (vue complète, échéances futures comprises).
+export default function AFairePage() {
+  redirect("/?vue=tout");
 }

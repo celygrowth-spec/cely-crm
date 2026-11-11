@@ -68,9 +68,9 @@ afterEach(() => {
 });
 
 describe("connexion", () => {
-  test("la demande Google ne contient que l'envoi, jamais la lecture, et exige l'accès durable", () => {
+  test("la demande Google contient l'envoi et la lecture (réception, Q03), et exige l'accès durable", () => {
     const u = new URL(authorizeUrl({ clientId: "c", clientSecret: "s" }, { redirectUri: "https://x/cb", state: "st", challenge: "ch" }));
-    expect(u.searchParams.get("scope")).toBe(`openid email profile ${GMAIL_SEND_SCOPE}`);
+    expect(u.searchParams.get("scope")).toBe(`openid email profile ${GMAIL_SEND_SCOPE} https://www.googleapis.com/auth/gmail.readonly`);
     expect(u.searchParams.get("access_type")).toBe("offline");
     expect(u.searchParams.get("prompt")).toContain("consent");
     expect(u.searchParams.get("code_challenge_method")).toBe("S256");

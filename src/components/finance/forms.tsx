@@ -3,6 +3,7 @@
 // Formulaires courts du module Finance (options avancées repliées).
 // Chaque formulaire a sa clé d'idempotence : un double clic n'enregistre qu'une fois.
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, Search } from "lucide-react";
@@ -12,7 +13,6 @@ import {
   recordInvoiceAction,
   recordPaymentAction,
   saveExpenseAction,
-  saveMissionAction,
   saveSubscriptionAction,
   updateInvoiceAction,
 } from "@/app/finance-actions";
@@ -21,7 +21,7 @@ import type { SearchResult } from "@/lib/crm/types";
 import { formatDate, todayISO } from "@/lib/format";
 import { nextOpenDue } from "@/lib/finance/revenues";
 import { addDays } from "@/lib/finance/dates";
-import { FREQUENCY, MISSION_KIND, MISSION_STATUS } from "@/lib/finance/labels";
+import { FREQUENCY } from "@/lib/finance/labels";
 import { eur, mulDiv } from "@/lib/finance/money";
 import type { Category, Expense, Invoice, Mission, Subscription } from "@/lib/finance/types";
 import type { ActionResult } from "@/lib/action";
@@ -29,6 +29,8 @@ import { Advanced, CategorySelect, MoneyInput } from "./bits";
 
 function useSubmit() {
   const router = useRouter();
+  // une écriture Finance se voit aussi dans Ventes et sur la fiche (K14)
+  const qc = useQueryClient();
   const [pending, start] = useTransition();
   const submit = (fn: () => Promise<ActionResult<unknown>>, done: () => void, success: string) =>
     start(async () => {
@@ -40,6 +42,8 @@ function useSubmit() {
       toast.success(success);
       done();
       router.refresh();
+      void qc.invalidateQueries({ queryKey: ["sales"] });
+      void qc.invalidateQueries({ queryKey: ["company"] });
     });
   return { pending, submit };
 }
@@ -116,7 +120,7 @@ export function InvoiceModal(props: {
   /** factures existantes : pour rattacher la facture à la prochaine échéance non couverte du revenu */
   invoices?: Invoice[];
 }) {
-  const title = props.defaults.edit ? "Modifier le revenu" : props.defaults.from ? "Dupliquer le revenu" : "Ajouter un revenu";
+  const title = props.defaults.edit ? "Modifier la facture" : props.defaults.from ? "Dupliquer la facture" : "Enregistrer une facture";
   return (
     <Modal open={props.open} onClose={props.onClose} title={title}>
       <InvoiceBody {...props} />
@@ -175,10 +179,11 @@ function InvoiceBody({ onClose, defaults, missions, vatEnabled, clients, invoice
       vat_rate: vatEnabled ? vatRate || null : null,
       vat_amount: vatValue,
       note,
-      forecast_due_date: coverDate && cover ? coverDate : null,
+      // en modification, l'échéance couverte ne change pas (un champ absent reste inchangé en base)
+      ...(defaults.edit ? {} : { forecast_due_date: coverDate && cover ? coverDate : null }),
     };
-    if (defaults.edit) submit(() => updateInvoiceAction(defaults.edit!.id, input), onClose, "Revenu modifié");
-    else submit(() => recordInvoiceAction(input, key, paidNow ? { paid_on: paidOn } : null), onClose, paidNow ? "Revenu et paiement enregistrés" : "Revenu enregistré");
+    if (defaults.edit) submit(() => updateInvoiceAction(defaults.edit!.id, input), onClose, "Facture modifiée");
+    else submit(() => recordInvoiceAction(input, key, paidNow ? { paid_on: paidOn } : null), onClose, paidNow ? "Facture et paiement enregistrés" : "Facture enregistrée");
   };
 
   return (
@@ -188,10 +193,10 @@ function InvoiceBody({ onClose, defaults, missions, vatEnabled, clients, invoice
         {defaults.edit ? <p className="text-sm font-semibold">{company?.name}</p> : <CompanyPicker value={company} onChange={(c) => { setCompany(c); setMissionId(""); }} suggestions={clients} />}
       </Field>
       {company && companyMissions.length > 0 && (
-        <Field label="Mission (facultatif)">
+        <Field label="Revenu (facultatif)">
           <Select value={missionId} onChange={(e) => pickMission(e.target.value)}>
-            <option value="">Sans mission</option>
-            {companyMissions.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            <option value="">Sans revenu</option>
+            {companyMissions.map((m) => <option key={m.id} value={m.id}>{m.label}{m.kind === "recurrent" ? " (mensuel)" : ""}</option>)}
           </Select>
         </Field>
       )}
@@ -306,6 +311,8 @@ function CreditBody({ invoice, onClose }: { invoice: Invoice; onClose: () => voi
   const [vat, setVat] = useState<number | null>(null);
   const [date, setDate] = useState(todayISO());
   const [reference, setReference] = useState("");
+  // un avoir ne change pas l'engagement ; si le client paiera moins au total, c'est une décision explicite (C05)
+  const [reduce, setReduce] = useState(false);
   const { pending, submit } = useSubmit();
   return (
     <form
@@ -313,7 +320,8 @@ function CreditBody({ invoice, onClose }: { invoice: Invoice; onClose: () => voi
       onSubmit={(e) => {
         e.preventDefault();
         if (!ht) return toast.error("Indiquez le montant HT de l'avoir");
-        submit(() => recordCreditNoteAction(invoice.id, { issue_date: date, amount_ht: ht, vat_amount: vat, reference }, key), onClose, "Avoir enregistré");
+        submit(() => recordCreditNoteAction(invoice.id, { issue_date: date, amount_ht: ht, vat_amount: vat, reference, reduce_revenue: reduce }, key), onClose,
+          reduce ? "Avoir enregistré, montant prévu du revenu réduit" : "Avoir enregistré");
       }}
     >
       <p className="text-xs text-muted">L&apos;avoir réduit ce que doit le client et le chiffre facturé, sans effacer la facture d&apos;origine.</p>
@@ -325,6 +333,12 @@ function CreditBody({ invoice, onClose }: { invoice: Invoice; onClose: () => voi
         <Field label="TVA (facultatif)"><MoneyInput value={vat} onChange={setVat} aria-label="TVA de l'avoir" /></Field>
         <Field label="Référence"><Input value={reference} onChange={(e) => setReference(e.target.value)} /></Field>
       </div>
+      {invoice.mission_id && (
+        <label className="flex items-start gap-2 rounded-lg border border-line px-3 py-2 text-sm" data-reduce-revenue>
+          <input type="checkbox" className="mt-0.5" checked={reduce} onChange={(e) => setReduce(e.target.checked)} />
+          <span>Réduire aussi le montant prévu du revenu « {invoice.mission_label} »<span className="block text-xs text-muted">Sinon, le reste à facturer ne change pas : l&apos;avoir corrige seulement cette facture.</span></span>
+        </label>
+      )}
       <div className="flex justify-end gap-2">
         <Button onClick={onClose}>Annuler</Button>
         <Button type="submit" variant="primary" disabled={pending}>{pending ? <Spinner /> : "Enregistrer l'avoir"}</Button>
@@ -446,92 +460,6 @@ function ExpenseBody({ onClose, defaults, categories, vatEnabled }: Parameters<t
         <Field label="Note"><Textarea value={note} onChange={(e) => setNote(e.target.value)} /></Field>
       </Advanced>
       {recurring && !editing && <p className="text-xs text-muted">Chaque échéance apparaîtra « à payer » dans les charges et ne comptera comme payée qu&apos;après votre validation.</p>}
-      <div className="flex justify-end gap-2">
-        <Button onClick={onClose}>Annuler</Button>
-        <Button type="submit" variant="primary" disabled={pending}>{pending ? <Spinner /> : "Enregistrer"}</Button>
-      </div>
-    </form>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Mission
-// ---------------------------------------------------------------------------
-
-export function MissionModal(props: { open: boolean; onClose: () => void; mission: Mission | null; company: ClientOption | null; clients: ClientOption[] }) {
-  return (
-    <Modal open={props.open} onClose={props.onClose} title={props.mission ? "Modifier la mission" : "Nouvelle mission"}>
-      <MissionBody {...props} />
-    </Modal>
-  );
-}
-
-function MissionBody({ onClose, mission, company: c0, clients }: Parameters<typeof MissionModal>[0]) {
-  const [key] = useState(() => crypto.randomUUID());
-  const [company, setCompany] = useState<ClientOption | null>(mission ? { id: mission.company_id, name: mission.company_name } : c0);
-  const [label, setLabel] = useState(mission?.label ?? "");
-  const [kind, setKind] = useState<keyof typeof MISSION_KIND>(mission?.kind ?? "recurrent");
-  const [status, setStatus] = useState<keyof typeof MISSION_STATUS>(mission?.status ?? "actif");
-  const [amount, setAmount] = useState<number | null>(mission?.amount ?? null);
-  const [frequency, setFrequency] = useState<keyof typeof FREQUENCY>(mission?.frequency ?? "mensuel");
-  const [start, setStart] = useState(mission?.start_date ?? todayISO());
-  const [next, setNext] = useState(mission?.next_due_date ?? "");
-  const [end, setEnd] = useState(mission?.end_date ?? "");
-  const [note, setNote] = useState(mission?.note ?? "");
-  const { pending, submit } = useSubmit();
-  return (
-    <form
-      className="space-y-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!company) return toast.error("Choisissez le client (fiche CRM)");
-        submit(
-          () =>
-            saveMissionAction(
-              mission?.id ?? null,
-              { company_id: company.id, label, kind, status, amount, frequency: kind === "recurrent" ? frequency : null, start_date: start || null, next_due_date: next || null, end_date: end || null, note },
-              mission ? undefined : key,
-            ),
-          onClose,
-          mission ? "Mission modifiée" : "Mission créée",
-        );
-      }}
-    >
-      <Field label="Client (fiche CRM)">
-        <CompanyPicker value={company} onChange={setCompany} suggestions={clients} />
-      </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Mission"><Input required value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Accompagnement growth" /></Field>
-        <Field label="Statut">
-          <Select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
-            {Object.entries(MISSION_STATUS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-          </Select>
-        </Field>
-      </div>
-      <div className="grid grid-cols-3 gap-3">
-        <Field label="Type">
-          <Select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
-            {Object.entries(MISSION_KIND).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-          </Select>
-        </Field>
-        <Field label={kind === "recurrent" ? "Montant HT par échéance" : "Montant HT total"}><MoneyInput value={amount} onChange={setAmount} aria-label="Montant de la mission" /></Field>
-        {kind === "recurrent" ? (
-          <Field label="Facturation">
-            <Select value={frequency} onChange={(e) => setFrequency(e.target.value as typeof frequency)}>
-              {Object.entries(FREQUENCY).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </Select>
-          </Field>
-        ) : <div />}
-      </div>
-      <div className="grid grid-cols-3 gap-3">
-        <Field label="Début"><Input type="date" value={start} onChange={(e) => setStart(e.target.value)} /></Field>
-        <Field label="Prochaine échéance" hint="Date de facturation prévue"><Input type="date" value={next} onChange={(e) => setNext(e.target.value)} /></Field>
-        <Field label="Fin"><Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></Field>
-      </div>
-      <Advanced>
-        <Field label="Note"><Textarea value={note} onChange={(e) => setNote(e.target.value)} /></Field>
-      </Advanced>
-      <p className="text-xs text-muted">Une mission sert aux prévisions. Elle ne crée jamais de facture ni d&apos;encaissement.</p>
       <div className="flex justify-end gap-2">
         <Button onClick={onClose}>Annuler</Button>
         <Button type="submit" variant="primary" disabled={pending}>{pending ? <Spinner /> : "Enregistrer"}</Button>

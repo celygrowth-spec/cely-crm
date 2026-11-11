@@ -307,12 +307,32 @@ export const completeStep = (
 export const skipStep = (sb: SupabaseClient, participantId: string, idempotencyKey: string) =>
   rpc<{ action_id: string; finished: boolean }>(sb, "skip_step", { p_participant: uuid.parse(participantId), p_idempotency_key: idempotencyKey });
 export const undoAction = (sb: SupabaseClient, actionId: string) => rpc<{ status: string }>(sb, "undo_participant_action", { p_action: uuid.parse(actionId) });
-export const recordReply = (sb: SupabaseClient, participantId: string, content: string, receivedAt: string | null, personId: string | null) => {
+/**
+ * Suite après « Intéressé » ou « RDV obtenu » (Q04) : une étape du pipeline, ou une tâche de suivi. La base refuse
+ * le résultat s'il ne reste aucune suite (étape, rendez-vous à venir ou tâche ouverte).
+ */
+export type NextStep = { stage_id?: string | null; task?: { title: string; due_date: string } | null };
+const nextSchema = z.object({
+  stage_id: uuid.nullish(),
+  task: z.object({ title: z.string().trim().min(1, "Indiquez la tâche de suivi").max(300), due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide") }).nullish(),
+}).nullish();
+const keySchema = z.string().min(8).max(200);
+
+/** Réponse reçue et, en option, son résultat : UNE opération (tout ou rien), protégée par une clé (K06). */
+export const recordReply = (sb: SupabaseClient, participantId: string, content: string, receivedAt: string | null, personId: string | null,
+  opts: { outcome?: Exclude<Outcome, "none"> | null; next?: NextStep | null; key?: string | null } = {}) => {
   if (!content.trim()) throw new CrmError("Le contenu de la réponse est obligatoire.");
-  return rpc<{ paused_followups: number }>(sb, "record_reply", { p_participant: uuid.parse(participantId), p_content: content, p_received_at: receivedAt, p_person: personId });
+  return rpc<{ paused_followups: number }>(sb, "record_reply", {
+    p_participant: uuid.parse(participantId), p_content: content, p_received_at: receivedAt, p_person: personId,
+    p_outcome: opts.outcome ?? null, p_next: nextSchema.parse(opts.next) ?? null, p_idempotency_key: opts.key ? keySchema.parse(opts.key) : null,
+  });
 };
-export const setOutcome = (sb: SupabaseClient, participantId: string, outcome: Exclude<Outcome, "none">, stageId?: string | null, note?: string | null) =>
-  rpc<{ stopped: number; moved: boolean }>(sb, "set_participant_outcome", { p_participant: uuid.parse(participantId), p_outcome: outcome, p_stage: stageId ?? null, p_note: note ?? null });
+export const setOutcome = (sb: SupabaseClient, participantId: string, outcome: Exclude<Outcome, "none">, stageId?: string | null, note?: string | null,
+  next?: NextStep | null, key?: string | null) =>
+  rpc<{ stopped: number; moved: boolean }>(sb, "set_participant_outcome", {
+    p_participant: uuid.parse(participantId), p_outcome: outcome, p_stage: stageId ?? null, p_note: note ?? null,
+    p_next: nextSchema.parse(next) ?? null, p_idempotency_key: key ? keySchema.parse(key) : null,
+  });
 export const setDoNotContact = (sb: SupabaseClient, companyId: string, value: boolean, reason?: string | null) =>
   rpc<null>(sb, "set_do_not_contact", { p_company: uuid.parse(companyId), p_value: value, p_reason: reason ?? null });
 export const updateParticipant = (sb: SupabaseClient, id: string, action: "postpone" | "resume" | "stop" | "finish" | "set_person" | "unprepare", opts: { due?: string | null; reason?: string | null } = {}) =>
@@ -335,13 +355,6 @@ export async function saveView(sb: SupabaseClient, v: { id?: string | null; scop
 }
 export async function deleteView(sb: SupabaseClient, id: string) {
   check(await sb.from("saved_views").delete().eq("id", uuid.parse(id)));
-}
-export async function getPreference<T>(sb: SupabaseClient, key: string): Promise<T | null> {
-  const r = check(await sb.from("user_preferences").select("value").eq("key", key).maybeSingle()) as { value: T } | null;
-  return r?.value ?? null;
-}
-export async function setPreference(sb: SupabaseClient, key: string, value: unknown) {
-  check(await sb.from("user_preferences").upsert({ key, value }));
 }
 
 export type { StepType };

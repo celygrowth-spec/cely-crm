@@ -3,8 +3,8 @@
 // Briques d'interface du module Finance.
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useId, useState, type ReactNode } from "react";
-import { AlertTriangle, CheckCircle2, Circle, CircleDashed, Clock, Info, Ban, FileMinus, CircleDot } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { AlertTriangle, CheckCircle2, Circle, CircleDashed, Clock, Ban, FileMinus, CircleDot } from "lucide-react";
 import { Badge, cn, Input, Select } from "@/components/ui";
 import { centsToInput, eur, parseEuroInput, type KnownSum } from "@/lib/finance/money";
 import { EXPENSE_STATUS, INVOICE_STATUS, URSSAF_STATE } from "@/lib/finance/labels";
@@ -62,51 +62,6 @@ export function UrssafBadge({ state }: { state: UrssafState }) {
     paye: ["success", <CheckCircle2 key="i" size={11} aria-hidden />],
   };
   return <Badge tone={map[state][0]}>{map[state][1]}{URSSAF_STATE[state]}</Badge>;
-}
-
-/** Indicateur avec définition accessible et lien vers les lignes concernées. */
-export function Kpi({
-  title,
-  value,
-  sub,
-  definition,
-  href,
-  tone,
-}: {
-  title: string;
-  value: ReactNode;
-  sub?: ReactNode;
-  definition: string;
-  href?: string;
-  tone?: "warning" | "danger";
-}) {
-  const [open, setOpen] = useState(false);
-  const id = useId();
-  return (
-    <div className={cn("flex flex-col rounded-xl border bg-white p-3", tone === "danger" ? "border-danger/30" : tone === "warning" ? "border-amber-200" : "border-line")}>
-      <div className="flex items-start justify-between gap-2">
-        <p className="font-label text-xs font-semibold text-muted">{title}</p>
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          aria-controls={id}
-          aria-label={`Définition : ${title}`}
-          className="rounded p-0.5 text-muted hover:bg-surface hover:text-ink"
-        >
-          <Info size={14} />
-        </button>
-      </div>
-      <p className="mt-1 font-display text-xl font-extrabold tracking-tight text-ink">{value}</p>
-      {sub && <div className="mt-0.5 text-xs text-muted">{sub}</div>}
-      <p id={id} hidden={!open} className="mt-2 rounded-md bg-surface px-2 py-1.5 text-xs text-muted">{definition}</p>
-      {href && (
-        <Link href={href} className="mt-auto pt-2 text-xs font-semibold text-violet-strong hover:underline">
-          Voir les lignes →
-        </Link>
-      )}
-    </div>
-  );
 }
 
 /** Sélecteur de période (mois, trimestre, année, personnalisée) dans l'URL. */

@@ -1,5 +1,5 @@
 // Libellés français et formats d'affichage.
-import type { Channel, InteractionKind, ParticipantStatus, ProspectStatus } from "@/lib/crm/types";
+import type { Channel, InteractionKind, ProspectStatus } from "@/lib/crm/types";
 
 export const TZ = "Europe/Paris";
 
@@ -9,15 +9,6 @@ export const PROSPECT_STATUS_LABELS: Record<ProspectStatus, string> = {
   en_discussion: "En discussion",
   qualifie: "Qualifié",
   pas_interesse: "Pas intéressé",
-};
-
-export const PARTICIPANT_STATUS_LABELS: Record<ParticipantStatus, string> = {
-  a_preparer: "À préparer",
-  a_contacter: "À contacter",
-  en_cours: "En cours",
-  a_repondu: "A répondu",
-  termine: "Terminé",
-  arrete: "Arrêté",
 };
 
 export const CHANNEL_LABELS: Record<Channel, string> = {
@@ -85,9 +76,10 @@ export function relativeDay(iso?: string | null): string {
   return formatDate(day);
 }
 
-export function formatAmount(v?: number | null): string {
+/** Montant d'une fiche : estimé (total) avant la clôture ; après Gagné en mensuel, « X € / mois » (Q07). */
+export function formatAmount(v?: number | null, recurring = false): string {
   if (v == null) return "";
-  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(v);
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(v) + (recurring ? " / mois" : "");
 }
 
 export function personName(p?: { first_name?: string | null; last_name?: string | null; email?: string | null } | null): string {

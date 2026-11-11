@@ -67,11 +67,11 @@ describe("marquer comme gagné", () => {
     expect(await n("interactions", "kind = 'deal_status'")).toBe(1);
   });
 
-  test("facture déjà enregistrée : rattachée (revenu créé depuis elle si besoin), état « facturé » puis « encaissé »", async () => {
+  test("facture déjà enregistrée : rattachée (revenu créé depuis elle si besoin), état « à encaisser » puis « encaissé »", async () => {
     const inv = (await db.rpc<{ id: string }>("finance_record_invoice", { p_data: { company_id: co, issue_date: today(), amount_ht: 1200, amount_ttc: 1200 } })).id;
     await confirm({ revenue: { mode: "plus_tard" }, link_invoice_id: inv });
     const o = await overview();
-    expect(o).toMatchObject({ mission_kind: "ponctuel", mission_amount: "1200.00", billing: "facture" });
+    expect(o).toMatchObject({ mission_kind: "ponctuel", mission_amount: "1200.00", billing: "a_encaisser" });
     expect((await db.one<{ mission_id: string }>(`select mission_id from finance_invoices where id = $1`, [inv])).mission_id).toBe(o.mission_id);
     await db.rpc("finance_record_payment", { p_invoice: inv, p_paid_on: today(), p_amount: 1200 });
     expect((await overview()).billing).toBe("encaisse");
@@ -111,7 +111,8 @@ describe("suivi après-vente", () => {
 
   test("réouverture : liens conservés ; regagnée, la même vente reprend avec le même projet et le même revenu", async () => {
     const r = await confirm({ revenue: { mode: "mensuel", amount: 1000, date: today() } });
-    await db.rpc("set_deal_status", { p_company: co, p_status: "open" });
+    await expect(db.rpc("set_deal_status", { p_company: co, p_status: "open" })).rejects.toThrow(/choisissez/);
+    await db.rpc("deal_transition", { p_company: co, p_status: "open", p_options: { project: "continue", revenue: "continue" } });
     expect(await db.one(`select state, project_id, mission_id from sales`)).toEqual({ state: "reopened", project_id: r.project_id, mission_id: r.mission_id });
     await expect(db.rpc("sale_set_stage", { p_sale: r.sale_id, p_stage: "en_mission" })).rejects.toThrow(/rouverte/);
     const again = await confirm({ revenue: { mode: "mensuel", amount: 1000, date: today() } });
@@ -120,15 +121,13 @@ describe("suivi après-vente", () => {
     expect(await n("finance_missions")).toBe(1);
   });
 
-  test("préparation : une seule à la fois, résultat enregistré, échec reprenable", async () => {
+  test("K10 : l'état de préparation affiché par Ventes est celui de Projets (project_onboarding)", async () => {
     const r = await confirm({});
-    expect(await db.rpc("sale_prep_claim", { p_sale: r.sale_id })).toBe(true);
-    expect(await db.rpc("sale_prep_claim", { p_sale: r.sale_id })).toBe(false);
-    await db.rpc("sale_prep_save", { p_sale: r.sale_id, p_state: "failed", p_prep: null, p_error: "Fireflies indisponible" });
-    expect(await overview()).toMatchObject({ prep_state: "failed", prep_error: "Fireflies indisponible" });
-    expect(await db.rpc("sale_prep_claim", { p_sale: r.sale_id })).toBe(true);
-    await db.rpc("sale_prep_save", { p_sale: r.sale_id, p_state: "incomplete", p_prep: { missing: ["contact"] } });
-    expect(await overview()).toMatchObject({ prep_state: "incomplete", prep: { missing: ["contact"] }, prep_error: null });
+    expect((await overview()).prep_status).toBe("preparing");
+    await db.rpc("onboarding_prepare", { p_project: r.project_id });
+    const o = await overview();
+    const p = await db.one<{ status: string; open_required: number }>(`select status, open_required from project_onboarding_status where project_id = $1`, [r.project_id]);
+    expect(o).toMatchObject({ prep_status: p.status, prep_missing: p.open_required });
   });
 });
 

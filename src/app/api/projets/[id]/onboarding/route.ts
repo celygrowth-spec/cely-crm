@@ -15,7 +15,7 @@ const body = z.discriminatedUnion("op", [
   z.object({ op: z.literal("answer"), item: id, action: z.enum(["text", "date", "file", "choice", "not_applicable", "reopen"]), value: z.string().max(5000).nullable().optional(), file: id.nullable().optional() }),
   z.object({ op: z.literal("upload_start"), item: id, name: z.string().min(1).max(200), type: z.string().max(150), size: z.number().int().positive() }),
   z.object({ op: z.literal("upload_confirm"), item: id, file: id }),
-  z.object({ op: z.literal("request"), item: id, text: z.string().max(5000), person: id.nullable().optional() }),
+  z.object({ op: z.literal("request"), item: id, text: z.string().max(5000), person: id.nullable().optional(), title: z.string().max(300).optional() }),
   z.object({ op: z.literal("deck") }),
   z.object({ op: z.literal("deck_share"), deck: id, share: z.boolean() }),
   z.object({ op: z.literal("document_url"), file: id }),
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       case "upload_confirm":
         return ob.attachAnswerFile(sb, pid, b.item, b.file);
       case "request":
-        return ob.shareRequest(sb, b.item, b.text, b.person ?? null);
+        return ob.shareRequest(sb, b.item, b.text, b.person ?? null, b.title ?? null);
       case "deck":
         return ob.requestDeck(sb, pid);
       case "deck_share":

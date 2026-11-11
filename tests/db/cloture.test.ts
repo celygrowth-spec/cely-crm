@@ -95,7 +95,9 @@ describe("rouvrir", () => {
 
   test("sans étape enregistrée : première étape du pipeline", async () => {
     await db.rpc("set_deal_status", { p_company: id, p_status: "lost" });
-    await db.exec(`update companies set stage_id = null where id = '${id}'`);
+    // étape disparue (cas historique) : simulée en administrateur, hors garde-fou
+    await db.exec(`reset role; alter table companies disable trigger companies_closed_guard; update companies set stage_id = null where id = '${id}'; alter table companies enable trigger companies_closed_guard;`);
+    await db.as("owner");
     await db.rpc("set_deal_status", { p_company: id, p_status: "open" });
     expect((await row()).stage_id).toBe(stages[0]);
   });
@@ -109,10 +111,18 @@ describe("rouvrir", () => {
     expect((await db.one<{ n: number }>(`select count(*)::int n from projects where company_id = $1`, [id])).n).toBe(1);
   });
 
-  test("déplacer une fiche clôturée la rouvre aussi (même donnée pour le Kanban)", async () => {
-    await db.rpc("set_deal_status", { p_company: id, p_status: "lost" });
+  test("C01 : une fiche clôturée ne change ni d'étape ni de pipeline sans « Rouvrir » (sélecteur, Hors pipeline, campagne, Claude)", async () => {
+    await db.rpc("set_deal_status", { p_company: id, p_status: "won" });
+    await expect(db.rpc("move_company", { p_company: id, p_stage: stages[2] })).rejects.toThrow(/Rouvrir l'opportunité/);
+    await expect(db.rpc("move_company", { p_company: id, p_stage: null })).rejects.toThrow(/Rouvrir l'opportunité/);
+    // la base l'impose aussi à toute écriture directe
+    await expect(db.exec(`update companies set stage_id = '${stages[0]}' where id = '${id}'`)).rejects.toThrow(/Rouvrir/);
+    expect(await row()).toMatchObject({ deal_status: "won", stage_id: stages[1] });
+    // campagne « Intéressé + étape » : refus explicite, rien n'est enregistré à moitié
+    // Claude (MCP) passe par move_company : même refus, même message
+    await db.rpc("set_deal_status", { p_company: id, p_status: "open" });
     await db.rpc("move_company", { p_company: id, p_stage: stages[2] });
-    expect(await row()).toMatchObject({ deal_status: "open", stage_id: stages[2], deal_closed_at: null });
+    expect(await row()).toMatchObject({ deal_status: "open", stage_id: stages[2] });
   });
 });
 

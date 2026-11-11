@@ -59,7 +59,7 @@ async function gmail(sb: SupabaseClient, c: Checks): Promise<Connector> {
       ...accounts.filter((a) => a !== active).map((a) => ({ label: "Autre compte", value: `${a.email} · ${a.status === "disconnected" ? "déconnecté" : a.status === "needs_reconnect" ? "à reconnecter" : "connecté"}`, tone: "muted" as const })),
       { label: "Identifiants Google côté serveur", value: configured ? "Présents" : "Absents (GOOGLE_MAIL_CLIENT_ID, GOOGLE_MAIL_CLIENT_SECRET, MAIL_TOKEN_KEY)", tone: configured ? ("ok" as const) : ("warn" as const) },
     ],
-    disconnect: active ? { label: "Déconnecter Gmail", effect: "Les prochains envois qui dépendent de Gmail sont suspendus (les envois programmés sont annulés) et l'accès est révoqué chez Google. Les emails déjà envoyés restent dans l'historique des fiches." } : null,
+    disconnect: active ? { label: "Déconnecter Gmail", effect: "Les prochains envois qui dépendent de Gmail sont suspendus et l'accès est révoqué chez Google. Les emails déjà envoyés restent dans l'historique des fiches." } : null,
     external: "Le client OAuth et l'écran de consentement se gèrent dans Google Cloud ; les variables dans Vercel.",
     lastSuccess: dated(lastSent, "Dernier envoi réussi"),
     account: active ? String(active.email) : null,
@@ -99,7 +99,7 @@ const fmt = (iso: string) => new Intl.DateTimeFormat("fr-FR", { day: "numeric", 
 const GCAL = {
   key: "google_calendar" as const, name: "Google Agenda", usage: "Rendez-vous et points projet",
   feeds: ["Disponibilités de la page de réservation (agendas vérifiés)", "Événements des rendez-vous et des points projet", "Liens Google Meet des types de rendez-vous qui l'activent", "Signalement des déplacements faits directement dans Google"],
-  links: [{ label: "Ouvrir la connexion agenda", href: "/rendez-vous/agenda-google" }],
+  links: [{ label: "Choisir les agendas et suivre la synchronisation", href: "/parametres/connecteurs/google-agenda" }],
 };
 
 async function calendar(sb: SupabaseClient, c: Checks): Promise<Connector> {
@@ -125,7 +125,7 @@ async function calendar(sb: SupabaseClient, c: Checks): Promise<Connector> {
       { label: "Google Meet", value: (meet.count ?? 0) > 0 ? `Activé sur ${meet.count} type(s) de rendez-vous` : "Activé sur aucun type de rendez-vous" },
       { label: "Rendez-vous à répercuter dans Google", value: out ? String(out) : "Aucun", tone: out ? ("warn" as const) : ("ok" as const) },
     ] : [{ label: "Identifiants Google et secret serveur", value: configured ? "Présents" : "Absents (GOOGLE_CALENDAR_CLIENT_ID / SECRET, APPOINTMENTS_SECRET)", tone: configured ? ("ok" as const) : ("warn" as const) }],
-    disconnect: r ? { label: "Déconnecter Google Agenda", effect: "Plus de vérification des disponibilités ni de création d'événements ou de liens Meet pour les nouveaux rendez-vous. Les événements déjà créés restent dans Google ; les rendez-vous restent dans le CRM." } : null,
+    disconnect: r ? { label: "Déconnecter Google Agenda", effect: "La réservation en ligne est suspendue (disponibilités invérifiables), ainsi que les reports par l'invité. Plus de création d'événements ni de liens Meet. Les événements déjà créés restent dans Google ; une annulation faite entre-temps y sera répercutée à la reconnexion. Les rendez-vous restent dans le CRM." } : null,
     external: "Le projet Google Cloud (API Calendar, URI de redirection) et les variables Vercel se gèrent hors du CRM.",
     account: r ? (r.google_email as string) ?? "Compte Google" : null,
     lastSuccess: dated(r?.events_synced_at as string, "Dernière lecture des changements Google"),
@@ -135,7 +135,7 @@ async function calendar(sb: SupabaseClient, c: Checks): Promise<Connector> {
   if (r.status === "error") {
     const revoked = /invalid_grant|révoqu|401|unauthor/i.test(err);
     return { ...base, state: revoked ? "reconnect" : "sync_error", problem: { at: (r.updated_at as string) ?? null, message: revoked ? "Google a refusé l'accès (révoqué ou expiré)." : readable(err) }, note: null,
-      primary: revoked ? { kind: "link", label: "Reconnecter", href: base.reconnectHref ?? "/rendez-vous/agenda-google" } : { kind: "verify", label: "Vérifier" } };
+      primary: revoked ? { kind: "link", label: "Reconnecter", href: base.reconnectHref ?? "/parametres/connecteurs/google-agenda" } : { kind: "verify", label: "Vérifier" } };
   }
   if (r.events_sync_error || out > 0) {
     return { ...base, state: "sync_error", problem: { at: (r.updated_at as string) ?? null, message: out > 0 ? `${out} rendez-vous pas encore répercuté(s) dans Google.` : readable(String(r.events_sync_error)) }, note: null, primary: { kind: "manage", label: "Gérer" } };
@@ -262,7 +262,8 @@ async function claude(sb: SupabaseClient, c: Checks, mcpUrl: string): Promise<Co
   };
   if (!grants) return { ...base, state: "unknown", problem: { at: null, message: error ?? "Liste des accès indisponible." }, note: "Le serveur MCP est en place ; les accès accordés ne peuvent pas être listés.", primary: { kind: "verify", label: "Vérifier" } };
   if (!grants.length) return { ...base, state: "not_connected", problem: null, note: "Aucun accès accordé à Claude.", primary: { kind: "manage", label: "Connecter" } };
-  return { ...base, state: "connected", problem: null, note: grants.length > 1 ? `${grants.length} accès distincts` : "Un seul accès, partagé par vos usages de Claude", primary: { kind: "manage", label: "Gérer" } };
+  // K14 : seul ce que le serveur vérifie est affiché — un accès accordé, pas la preuve que Claude l'utilise
+  return { ...base, state: "connected", problem: null, note: `${grants.length > 1 ? `${grants.length} accès accordés` : "Accès accordé"} ; l'usage réel se voit à la dernière écriture de Claude`, primary: { kind: "manage", label: "Gérer" } };
 }
 
 // ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@ import * as crm from "@/lib/crm/service";
 import * as files from "@/lib/crm/files";
 import { CrmError } from "@/lib/crm/service";
 import type { CompanyInput, CompanyPatch, InteractionInput, PersonInput, TaskInput } from "@/lib/crm/schemas";
-import { channelSchema, idSchema } from "@/lib/crm/schemas";
+import { idSchema } from "@/lib/crm/schemas";
 
 const name = (max = 120) => z.string().trim().min(1, "Le nom est obligatoire").max(max);
 
@@ -117,8 +117,9 @@ export async function addInteractionAction(input: InteractionInput, idempotencyK
   return run((sb) => crm.addInteraction(sb, input, idempotencyKey));
 }
 
-export async function createTaskAction(input: TaskInput) {
-  return run((sb) => crm.createTask(sb, input));
+/** `key` : une seule tâche malgré un double clic ou une reprise réseau (K06). */
+export async function createTaskAction(input: TaskInput, key?: string) {
+  return run((sb) => crm.createTask(sb, input, key));
 }
 
 export async function postponeTaskAction(taskId: string, dueDate: string) {
@@ -135,10 +136,6 @@ export async function setTaskDoneAction(taskId: string, done: boolean) {
 
 export async function moveCompanyAction(companyId: string, stageId: string | null, stopFollowups = true) {
   return run((sb) => crm.moveCompany(sb, companyId, stageId, { stopFollowups }));
-}
-
-export async function setDealStatusAction(companyId: string, status: crm.DealStatus, closing: crm.DealClosing = {}) {
-  return run((sb) => crm.setDealStatus(sb, companyId, status, closing));
 }
 
 export async function createPipelineAction(pipelineName: string, stageNames: string[]) {
@@ -245,22 +242,8 @@ export async function deleteFileAction(id: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Modèles et campagnes
+// Modèles de séquence (les campagnes passent par prospection-actions.ts)
 // ---------------------------------------------------------------------------
-
-const stepSchema = z.object({
-  name: z.string().trim().min(1, "Chaque étape doit avoir un nom").max(120),
-  channel: channelSchema,
-  delay_days: z.number().int().min(0).max(365),
-  message: z.string().max(5000).nullable().optional(),
-});
-
-export async function saveTemplateAction(id: string | null, templateName: string, steps: z.input<typeof stepSchema>[]) {
-  return run(async (sb) => {
-    const parsed = steps.map((s) => v(stepSchema, s));
-    return (await rpc(sb, "save_template", { p_id: id, p_name: v(name(), templateName), p_steps: parsed })) as string;
-  });
-}
 
 export async function duplicateTemplateAction(id: string) {
   return run(async (sb) => (await rpc(sb, "duplicate_template", { p_id: id })) as string);
@@ -273,52 +256,6 @@ export async function deleteTemplateAction(id: string) {
   });
 }
 
-export async function createCampaignAction(campaignName: string, templateId: string, listIds: string[]) {
-  return run(
-    async (sb) =>
-      (await rpc(sb, "create_campaign", { p_name: campaignName, p_template: templateId, p_list_ids: listIds })) as {
-        id: string;
-        added?: number;
-        already_present?: number;
-      },
-  );
-}
-
-export async function addListsToCampaignAction(campaignId: string, listIds: string[]) {
-  return run(
-    async (sb) => (await rpc(sb, "add_lists_to_campaign", { p_campaign: campaignId, p_list_ids: listIds })) as { added: number; already_present: number },
-  );
-}
-
-export async function addCompaniesToCampaignAction(campaignId: string, companyIds: string[]) {
-  return run(
-    async (sb) =>
-      (await rpc(sb, "add_companies_to_campaign", { p_campaign: campaignId, p_company_ids: companyIds })) as { added: number; already_present: number },
-  );
-}
-
-export async function archiveCampaignAction(id: string, archived: boolean) {
-  return run(async (sb) => {
-    ok(await sb.from("campaigns").update({ archived_at: archived ? new Date().toISOString() : null }).eq("id", v(idSchema, id)));
-  });
-}
-
-export async function markStepSentAction(participantId: string, content: string, sentAt: string | null, personId: string | null, idempotencyKey: string) {
-  return run((sb) => crm.markStepSent(sb, participantId, content, sentAt, personId, idempotencyKey));
-}
-
-export async function recordReplyAction(participantId: string, content: string, receivedAt: string | null) {
-  return run((sb) => crm.recordReply(sb, participantId, content, receivedAt));
-}
-
-export async function updateParticipantAction(
-  participantId: string,
-  action: "postpone" | "resume" | "stop" | "finish" | "set_person",
-  opts: { due?: string | null; reason?: string | null } = {},
-) {
-  return run((sb) => crm.updateParticipant(sb, participantId, action, opts));
-}
-
 // ---------------------------------------------------------------------------
 // Doublons, fusion, import
 // ---------------------------------------------------------------------------
@@ -328,6 +265,12 @@ export async function dismissDuplicateAction(a: string, b: string) {
     const [x, y] = [v(idSchema, a), v(idSchema, b)].sort();
     ok(await sb.from("duplicate_dismissals").upsert({ company_a: x, company_b: y }, { ignoreDuplicates: true }));
   });
+}
+
+export type MergePreview = { counts: { keep: Record<string, number>; merge: Record<string, number> }; blocking: string[]; warnings: string[]; active_sale: "keep" | "merge" | null };
+/** Ce que chaque fiche apporte, et ce qui bloque ou demande attention (affiché avant confirmation). */
+export async function mergePreviewAction(keepId: string, mergeId: string) {
+  return run(async (sb) => (await rpc(sb, "merge_preview", { p_keep: v(idSchema, keepId), p_merge: v(idSchema, mergeId) })) as MergePreview);
 }
 
 export async function mergeCompaniesAction(keepId: string, mergeId: string, fields: Record<string, "keep" | "merged">, pipelineFrom: "keep" | "merged") {

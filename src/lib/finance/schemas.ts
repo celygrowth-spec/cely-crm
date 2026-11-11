@@ -56,7 +56,7 @@ export const invoiceSchema = z
 export type InvoiceInput = z.input<typeof invoiceSchema>;
 
 export const creditNoteSchema = z
-  .object({ issue_date: date, amount_ht: positive, vat_amount: optCents, reference: optText(100), note: optText(2000) })
+  .object({ issue_date: date, amount_ht: positive, vat_amount: optCents, reference: optText(100), note: optText(2000), reduce_revenue: z.boolean().optional() })
   .transform((a) => ({
     ...a,
     amount_ht: centsToDb(a.amount_ht),

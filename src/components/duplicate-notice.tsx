@@ -9,12 +9,17 @@ type Candidate = { company_id: string; name: string; website?: string | null; ar
 export function DuplicateNotice({
   candidates,
   onOpen,
+  onComplete,
+  completing,
   onForce,
   forceLabel = "Ce n'est pas la même entreprise : créer quand même",
   pending,
 }: {
   candidates: Candidate[];
   onOpen: (id: string) => void;
+  /** création : ajoute la saisie manquante à la fiche existante (sans rien remplacer) */
+  onComplete?: (id: string) => void;
+  completing?: string | null;
   onForce: () => void;
   forceLabel?: string;
   pending?: boolean;
@@ -37,10 +42,20 @@ export function DuplicateNotice({
               </p>
               <p className="text-xs text-muted">{c.reasons.join(" · ")}</p>
             </div>
-            <Button size="sm" onClick={() => onOpen(c.company_id)}>Ouvrir / compléter</Button>
+            {onComplete ? (
+              <div className="flex flex-wrap gap-1.5">
+                <Button size="sm" onClick={() => onOpen(c.company_id)} disabled={pending}>Ouvrir la fiche existante</Button>
+                <Button size="sm" variant="primary" onClick={() => onComplete(c.company_id)} disabled={pending} title="Ajoute à la fiche existante les informations saisies qu'elle n'a pas encore, sans rien remplacer">
+                  {completing === c.company_id ? "Ajout…" : "Compléter la fiche existante"}
+                </Button>
+              </div>
+            ) : (
+              <Button size="sm" onClick={() => onOpen(c.company_id)}>Ouvrir / compléter</Button>
+            )}
           </li>
         ))}
       </ul>
+      {onComplete && <p className="mt-2 text-xs text-muted">Votre saisie est conservée : si vous ouvrez la fiche existante, elle sera reprise à la prochaine « Nouvelle fiche ».</p>}
       <div className="mt-3 flex justify-end">
         <Button size="sm" variant="ghost" onClick={onForce} disabled={pending}>{forceLabel}</Button>
       </div>

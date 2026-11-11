@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/appointments/config";
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireAppOwner } from "@/lib/auth";
@@ -7,7 +8,8 @@ import { mailConfig, saveConnection } from "@/lib/mail/service";
 
 export async function GET(req: NextRequest) {
   const { supabase } = await requireAppOwner();
-  const origin = req.nextUrl.origin;
+  // K14 : adresse de retour fixée par la configuration (APP_URL), jamais déduite d'un en-tête Host modifiable
+  const origin = appUrl(req.nextUrl.origin);
   const done = (q: string) => {
     const res = NextResponse.redirect(`${origin}/mail?${q}`);
     res.cookies.delete({ name: "mail_oauth", path: "/api/mail/oauth" });

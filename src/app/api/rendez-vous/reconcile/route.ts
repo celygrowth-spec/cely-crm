@@ -15,6 +15,8 @@ function cronAuthorized(req: Request) {
 async function handle(req: Request) {
   const session = cronAuthorized(req) ? null : await getSession();
   if (!session && !cronAuthorized(req)) return json({ error: "Non autorisé" }, 401);
+  // une session ne suffit pas : seul le propriétaire déclenche une reprise (la route est publique pour le planificateur)
+  if (session && (await session.supabase.rpc("is_app_owner")).data !== true) return json({ error: "Non autorisé" }, 401);
   try {
     const sb = session?.supabase ?? publicClient();
     const pushed = await reconcileCalendar(sb, requestOrigin(req), 30);

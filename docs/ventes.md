@@ -8,7 +8,8 @@ dans **Ventes** (même fiche, mêmes contacts, même historique).
 | Donnée | Où |
 | --- | --- |
 | Issue commerciale (ouverte / gagnée / perdue), date de clôture, motif | `companies.deal_status`, `deal_closed_at`, `lost_reason` |
-| Vente suivie (une par fiche : référence stable) | `sales` : date de clôture, date de signature (si connue), type de revenu, revenu lié, projet lié, documents validés, préparation |
+| Vente (une par cycle commercial : référence stable) | `sales` : cycle, état (gagnée, rouverte, perdue, terminée), date de clôture, date de signature (si connue), type de revenu, revenu lié, projet lié, documents confirmés |
+| Préparation de l'onboarding (source unique) | `project_onboarding` / `project_onboarding_status`, lue par Ventes et par Projets |
 | Revenu prévu, factures, règlements | Finance : `finance_missions`, `finance_invoices`, `finance_payments` (jamais recopiés) |
 | Avancement après-vente | `sales.documents_ready` + `projects.status` (un seul état, partagé avec Projets) |
 
@@ -28,7 +29,10 @@ apparaissent dès la mise en ligne, sans migration de données ni création en m
   | En mission | projet en cours ou en attente | Ouvrir le projet |
 
   Un projet terminé ou archivé fait quitter le tableau ; la vente reste dans Gagnées.
-- **Gagnées** : client, date de clôture, montant et type, projet, facturation (à renseigner / prévu / facturé / encaissé).
+- **Gagnées** : client, date de clôture, montant et type, projet, et l'état d'encaissement **commun avec Finance**
+  (`finance_revenue_state`) : ponctuel — Prévu, Date passée, À encaisser, En retard, Partiellement encaissé, Encaissé
+  (seulement quand tout le montant prévu est facturé et réglé) ; mensuel — Prévu, À jour, Partiellement réglé, En retard,
+  Terminé. « Facturation à renseigner » s'il n'y a pas encore de revenu.
 - **Perdues** : client, date, dernière étape, motif.
 
 ## « Marquer comme gagné » (fiche, Kanban, Ventes)
@@ -39,7 +43,7 @@ Un seul formulaire : date de clôture (aujourd'hui), date de signature si connue
 pour être liés. « Confirmer la vente » appelle `sale_confirm`, en une transaction :
 
 1. la fiche passe Gagné (trace datée dans l'activité, `set_deal_status`) ;
-2. la vente suivie est créée ou retrouvée (une par fiche) ;
+2. la vente active de la fiche est retrouvée, sinon une nouvelle vente (cycle suivant) est créée ;
 3. le revenu est lié ou créé via `finance_add_revenue` (clé stable `sale-revenue:<vente>`) ; une facture existante
    est rattachée au revenu ;
 4. le projet est lié ou créé une seule fois (`project_create`, statut « à préparer ») ;
@@ -76,11 +80,21 @@ Depuis `20261114000100_projet_onboarding.sql`, la liste des éléments vient de 
 (bloc « Préparer l'onboarding », voir `docs/projets-depuis-gagne.md`) : réponses, demandes au client, analyse et
 slides par Claude.
 
-## Réouverture
+## Réouverture, perte et client qui revient
 
-Rouvrir une vente gagnée demande une décision explicite si un projet ou un revenu est lié : ils restent liés
-(`sales.state = 'reopened'`) et sont réutilisés si la fiche est regagnée. Un revenu mensuel peut être arrêté au
-passage, seulement sur demande. Un projet n'est jamais supprimé.
+- **Rouvrir** (correction d'une clôture) et **Perdu** après une réouverture passent par `deal_transition` : la
+  fenêtre montre le projet, le revenu et les accès client liés, et vous décidez de chacun (projet continue, en
+  attente ou archivé ; échéances futures continuent ou s'arrêtent à une date ; accès maintenus ou révoqués). Les
+  factures et règlements gardent leur historique. Sans décision, la base refuse.
+- Regagnée, la même vente reprend avec ses liens ; la fiche signale un revenu arrêté ou un projet archivé.
+- **Nouvelle opportunité** (client qui revient) : la vente actuelle passe « terminée » (consultable dans Gagnées),
+  une opportunité s'ouvre sur la même fiche ; le prochain Gagné crée une nouvelle vente, un nouveau revenu et un
+  nouveau projet. Un projet terminé ou archivé n'est jamais relié à une nouvelle vente.
+- Un projet supprimé n'est jamais recréé en silence : le formulaire demande s'il faut le recréer.
+- Ventes ne fait pas reculer un projet en cours ou en attente sans confirmation explicite.
+- Un fichier « Contrat » ajouté sur la fiche est une pièce à examiner ; seule votre confirmation (« Finaliser le
+  dossier ») fait passer la vente en Onboarding. Une proposition ou un contrat ajouté relance la préparation (vos
+  corrections sont conservées).
 
 ## Anciens dossiers
 
@@ -89,3 +103,9 @@ Une fiche gagnée avant cette version apparaît dans Gagnées avec « Compléter
 client dont le projet est encore en cours reste visible dans « En mission ».
 
 Migration : `supabase/migrations/20261113000100_ventes.sql` (additive).
+
+## Montant affiché (Q07)
+Avant la clôture, la fiche porte un montant **estimé** (total). Après Gagné, elle porte le montant du **revenu
+confirmé** : « X € / mois » pour un mensuel (`companies.amount_recurring`), et il suit les modifications du revenu
+dans Finance. L'estimation d'origine reste dans l'historique (« Montant confirmé : 1 000 € / mois (estimé avant
+clôture : 12 000 €) »). Une nouvelle opportunité repart d'une estimation.
