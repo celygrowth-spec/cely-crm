@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { CalendarDays, CheckSquare, FolderKanban, Columns3, LogOut, Mail, PhoneCall, Plus, Search, Settings, Timer, Trophy, Users, Wallet } from "lucide-react";
+import { CalendarDays, CheckSquare, FolderKanban, Columns3, LayoutGrid, LogOut, Mail, PhoneCall, Plus, Search, Settings, Timer, Trophy, Users, Wallet, X } from "lucide-react";
 import type { LeadSource, List, PipelineWithStages } from "@/lib/crm/types";
 import { signOutAction } from "@/app/actions";
 import { QueryProvider, apiGet, useFlushRouterOnNavigate } from "@/lib/client/query";
@@ -40,7 +40,7 @@ export const PROSPECTION_NAV = [
   { href: "/prospection/campagnes", label: "Campagnes" },
   { href: "/prospection/base", label: "Base de prospects" },
   { href: "/prospection/listes", label: "Listes" },
-  { href: "/prospection/modeles", label: "Modèles" },
+  { href: "/prospection/modeles", label: "Modèles de séquence" },
   { href: "/prospection/doublons", label: "Doublons" },
   { href: "/prospection/import", label: "Import / export" },
 ];
@@ -58,10 +58,8 @@ export const FINANCE_NAV = [
 export const RDV_NAV = [
   { href: "/rendez-vous", label: "Vue d'ensemble", exact: true },
   { href: "/rendez-vous/agenda", label: "Agenda" },
-  { href: "/rendez-vous/liste", label: "Liste" },
   { href: "/rendez-vous/types", label: "Types de rendez-vous" },
   { href: "/rendez-vous/disponibilites", label: "Disponibilités" },
-  { href: "/rendez-vous/agenda-google", label: "Connexion agenda" },
 ];
 
 const NAV = [
@@ -77,6 +75,10 @@ const NAV = [
   { href: "/appels", label: "Appels", icon: PhoneCall },
   { href: "/parametres", label: "Paramètres", icon: Settings },
 ];
+
+// Barre du bas sur téléphone : cinq entrées fixes, le reste dans « Plus » (jamais de défilement horizontal)
+const MOBILE_MAIN = ["/", "/prospection", "/pipelines", "/ventes", "/projets"];
+const isActive = (pathname: string, href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/"));
 
 export function AppShell(props: {
   sources: LeadSource[];
@@ -184,26 +186,26 @@ function Shell({
             <Plus size={16} />
             <span className="hidden md:inline">Nouvelle fiche</span>
           </button>
-          <nav className="fixed inset-x-0 bottom-0 z-20 flex justify-around overflow-x-auto border-t border-line bg-white py-1 md:static md:overflow-visible md:flex-col md:justify-start md:gap-0.5 md:border-0 md:py-0">
+          <nav className="hidden md:flex md:flex-col md:justify-start md:gap-0.5" aria-label="Navigation principale">
             {NAV.map(({ href, label, icon: Icon }) => {
               const active = pathname === href || pathname.startsWith(href + "/");
               return (
-                <div key={href} className="contents md:block">
+                <div key={href}>
                   <Link
                     href={href}
                     className={cn(
-                      "flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold md:flex-row md:gap-2.5 md:py-1.5 md:text-sm",
+                      "flex flex-row items-center gap-2.5 rounded-lg px-3 py-1.5 text-sm font-semibold",
                       active ? "bg-violet-soft text-ink" : "text-muted hover:bg-surface hover:text-ink",
                     )}
                   >
                     <Icon size={17} className={active ? "text-violet-strong" : undefined} />
                     <span className="flex-1">{label}</span>
                     {href === "/" && todoCount > 0 && (
-                      <span className="hidden rounded-full bg-violet px-1.5 font-label text-[10px] text-white md:inline">{todoCount}</span>
+                      <span className="rounded-full bg-violet px-1.5 font-label text-[10px] text-white">{todoCount}</span>
                     )}
                   </Link>
                   {href === "/prospection" && active && (
-                    <div className="mt-0.5 mb-1 ml-[22px] hidden border-l border-line pl-2 md:block">
+                    <div className="mt-0.5 mb-1 ml-[22px] border-l border-line pl-2">
                       {PROSPECTION_NAV.map((n) => {
                         const on = pathname === n.href || pathname.startsWith(n.href + "/") || (n.href.endsWith("campagnes") && pathname.startsWith("/prospection/focus"));
                         return (
@@ -228,7 +230,7 @@ function Shell({
                     </div>
                   )}
                   {href === "/rendez-vous" && active && (
-                    <div className="mt-0.5 mb-1 ml-[22px] hidden border-l border-line pl-2 md:block">
+                    <div className="mt-0.5 mb-1 ml-[22px] border-l border-line pl-2">
                       {RDV_NAV.map((n) => {
                         const on = n.exact ? pathname === n.href : pathname === n.href || pathname.startsWith(n.href + "/");
                         return (
@@ -244,7 +246,7 @@ function Shell({
                     </div>
                   )}
                   {href === "/finance" && active && (
-                    <div className="mt-0.5 mb-1 ml-[22px] hidden border-l border-line pl-2 md:block">
+                    <div className="mt-0.5 mb-1 ml-[22px] border-l border-line pl-2">
                       {FINANCE_NAV.map((n) => {
                         const on = n.exact ? pathname === n.href : pathname === n.href || pathname.startsWith(n.href + "/");
                         return (
@@ -269,9 +271,10 @@ function Shell({
             </button>
           </form>
         </aside>
+        <MobileNav pathname={pathname} todoCount={todoCount} onSignOut={() => qc.clear()} />
         <main className="min-w-0 flex-1 px-4 pt-5 pb-36 md:px-8 md:pt-7 md:pb-24">{children}</main>
       </div>
-      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} onPick={(id) => { setSearchOpen(false); openCompany(id); }} />
+      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} onPick={(id) => { setSearchOpen(false); openCompany(id); }} onCreate={() => setCreateDefaults({})} />
       <CompanySheet id={ficheId} onClose={closeCompany} />
       <CreateCompanyModal
         defaults={createDefaults}
@@ -283,5 +286,73 @@ function Shell({
       />
       </TimerProvider>
     </Ctx.Provider>
+  );
+}
+
+/** Téléphone : cinq entrées en bas et « Plus », qui ouvre un panneau avec toutes les autres (dont Mail et Appels). */
+function MobileNav({ pathname, todoCount, onSignOut }: { pathname: string; todoCount: number; onSignOut: () => void }) {
+  const [open, setOpen] = useState(false);
+  const main = NAV.filter((n) => MOBILE_MAIN.includes(n.href));
+  const more = NAV.filter((n) => !MOBILE_MAIN.includes(n.href));
+  const moreActive = more.some((n) => isActive(pathname, n.href));
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+  const item = "flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg py-1.5 text-[10.5px] font-semibold tracking-tight";
+  return (
+    <div className="md:hidden">
+      {open && (
+        <>
+          <button type="button" aria-label="Fermer le menu" className="fixed inset-0 z-30 bg-ink/30" onClick={() => setOpen(false)} />
+          <div id="menu-plus" role="dialog" aria-label="Autres rubriques" className="fade-in fixed inset-x-0 bottom-0 z-40 rounded-t-2xl border-t border-line bg-white px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-xl">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="font-display text-base font-bold text-ink">Autres rubriques</p>
+              <button type="button" onClick={() => setOpen(false)} className="rounded-md p-1 text-muted hover:bg-surface" aria-label="Fermer"><X size={18} /></button>
+            </div>
+            <ul className="grid grid-cols-3 gap-2">
+              {more.map(({ href, label, icon: Icon }) => {
+                const active = isActive(pathname, href);
+                return (
+                  <li key={href}>
+                    <Link href={href} onClick={() => setOpen(false)} aria-current={active ? "page" : undefined}
+                      className={cn("flex flex-col items-center gap-1 rounded-xl border px-2 py-3 text-xs font-semibold", active ? "border-violet-line bg-violet-soft text-ink" : "border-line text-muted hover:text-ink")}>
+                      <Icon size={19} className={active ? "text-violet-strong" : undefined} />
+                      {label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+            <form action={signOutAction} onSubmit={onSignOut} className="mt-3 border-t border-line pt-3">
+              <button className="flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm text-muted hover:bg-surface hover:text-ink">
+                <LogOut size={16} /> Déconnexion
+              </button>
+            </form>
+          </div>
+        </>
+      )}
+      <nav aria-label="Navigation principale" className="fixed inset-x-0 bottom-0 z-20 flex border-t border-line bg-white px-1 pt-1 pb-[calc(env(safe-area-inset-bottom)+0.25rem)]">
+        {main.map(({ href, label, icon: Icon }) => {
+          const active = isActive(pathname, href);
+          return (
+            <Link key={href} href={href} aria-current={active ? "page" : undefined} className={cn(item, "relative", active ? "bg-violet-soft text-ink" : "text-muted")}>
+              <Icon size={18} className={active ? "text-violet-strong" : undefined} />
+              <span className="max-w-full truncate">{label}</span>
+              {href === "/" && todoCount > 0 && (
+                <span className="absolute top-0.5 right-[calc(50%-1.25rem)] rounded-full bg-violet px-1 font-label text-[9px] leading-tight text-white">{todoCount}</span>
+              )}
+            </Link>
+          );
+        })}
+        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="menu-plus"
+          className={cn(item, moreActive || open ? "bg-violet-soft text-ink" : "text-muted")}>
+          <LayoutGrid size={18} className={moreActive ? "text-violet-strong" : undefined} />
+          <span>Plus</span>
+        </button>
+      </nav>
+    </div>
   );
 }

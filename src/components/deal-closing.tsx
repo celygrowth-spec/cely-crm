@@ -11,10 +11,9 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { ArrowRight, MoreHorizontal, Plus, RotateCcw, Trophy, X } from "lucide-react";
-import { setDealStatusAction } from "@/app/actions";
 import { dealLinksAction, dealTransitionAction, newOpportunityAction } from "@/app/sales-actions";
 import { attempt, useSync } from "@/lib/client/query";
-import type { DealClosing, DealResult, DealStatus } from "@/lib/crm/service";
+import type { DealStatus } from "@/lib/crm/service";
 import { todayISO } from "@/lib/format";
 import { STAGE_LABELS, amountLine, needsCompletion } from "@/lib/sales/rules";
 import type { TransitionOptions } from "@/lib/sales/service";
@@ -32,25 +31,8 @@ export type ClosingTarget = {
   lost_reason?: string | null;
 };
 
-/** Où ouvrir la préparation de l'onboarding (point de raccordement avec le module Projets). */
-export const onboardingHref = (companyId: string) => `/projets?nouveau=1&client=${companyId}`;
-
 export const closedOnLabel = (iso: string | null | undefined) =>
   iso ? new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Paris" }).format(new Date(iso)) : null;
-
-/**
- * Envoie la clôture et resynchronise tout ce qui lit deal_status : fiche, activité, Kanban, listes.
- * `send` peut être enveloppé par l'appelant (la fiche y ajoute sa mise à jour immédiate et son indicateur).
- */
-export function useDealStatus() {
-  const sync = useSync();
-  return async (target: ClosingTarget, status: DealStatus, closing: DealClosing = {}) => {
-    const r = await attempt(() => setDealStatusAction(target.id, status, closing));
-    if (!r.ok) return r;
-    sync(["company", target.id], ["company-timeline", target.id], ["companies"], ["pipeline-cards"], ["company-projects", target.id], ["sales"]);
-    return r as { ok: true; data: DealResult };
-  };
-}
 
 /** Ferme au clic extérieur et à Échap (sans fermer le panneau de la fiche derrière). */
 function useDismiss(open: boolean, close: () => void) {

@@ -16,6 +16,18 @@ function minutesOfDay(iso: string) {
   return h * 60 + m;
 }
 
+/** Sélecteur de vue de l'Agenda : Jour, Semaine, Liste (même page, ?vue=). */
+export function ViewSwitch({ view, date, showCancelled }: { view: "jour" | "semaine" | "liste"; date?: string; showCancelled?: boolean }) {
+  const href = (v: string) => `/rendez-vous/agenda?${v === "liste" ? "vue=liste" : `${date ? `date=${date}&` : ""}vue=${v}${showCancelled ? "&annules=1" : ""}`}`;
+  return (
+    <nav aria-label="Vue de l'agenda" className="flex rounded-lg border border-line p-0.5">
+      {([["jour", "Jour"], ["semaine", "Semaine"], ["liste", "Liste"]] as const).map(([v, label]) => (
+        <Link key={v} href={href(v)} aria-current={view === v ? "page" : undefined} className={cn("rounded-md px-3 py-1 text-sm font-semibold", view === v ? "bg-ink text-white" : "text-muted hover:text-ink")}>{label}</Link>
+      ))}
+    </nav>
+  );
+}
+
 export function AgendaView({ bookings, start, days, view, today, showCancelled }: {
   bookings: Booking[]; start: string; days: number; view: "jour" | "semaine"; today: string; showCancelled: boolean;
 }) {
@@ -40,10 +52,7 @@ export function AgendaView({ bookings, start, days, view, today, showCancelled }
         description={title}
         actions={
           <>
-            <div className="flex rounded-lg border border-line p-0.5">
-              <Link href={href(start, "jour")} className={cn("rounded-md px-3 py-1 text-sm font-semibold", view === "jour" ? "bg-ink text-white" : "text-muted")}>Jour</Link>
-              <Link href={href(start, "semaine")} className={cn("rounded-md px-3 py-1 text-sm font-semibold", view === "semaine" ? "bg-ink text-white" : "text-muted")}>Semaine</Link>
-            </div>
+            <ViewSwitch view={view} date={start} showCancelled={showCancelled} />
             <ButtonLink href={href(addDaysKey(start, -step))} aria-label="Précédent"><ChevronLeft size={16} /></ButtonLink>
             <ButtonLink href={href(today)}>Aujourd&apos;hui</ButtonLink>
             <ButtonLink href={href(addDaysKey(start, step))} aria-label="Suivant"><ChevronRight size={16} /></ButtonLink>

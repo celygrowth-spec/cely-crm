@@ -14,7 +14,7 @@ export function BookingCard({ b }: { b: Booking }) {
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold text-ink">{b.event_snapshot.name}</span>
         <StatusBadge s={b.display_status} />
-        <Link href={`/rendez-vous/liste?periode=tous&rdv=${b.id}`} className="ml-auto text-xs font-semibold text-violet-strong underline">Détail</Link>
+        <Link href={`/rendez-vous/agenda?vue=liste&periode=tous&rdv=${b.id}`} className="ml-auto text-xs font-semibold text-violet-strong underline">Détail</Link>
       </div>
       <p className="text-xs text-muted">{formatRange(b.starts_at, b.ends_at, DEFAULT_TZ)} · {b.first_name} {b.last_name}</p>
       {b.meeting_url && (

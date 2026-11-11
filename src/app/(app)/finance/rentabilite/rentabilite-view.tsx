@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Card, Field, Input, Select, cn } from "@/components/ui";
 import { Legend3, Money, MoneyInput } from "@/components/finance/bits";
-import { ForecastChart } from "@/components/finance/charts";
+import { ForecastChart } from "@/components/finance/charts-lazy";
 import { ebitda, estimatedBalanceAt, forecast, periodCash, cashOut, simulate, subscriptionActive } from "@/lib/finance/calc";
 import { monthLongLabel } from "@/lib/finance/dates";
 import { eur, formatRate } from "@/lib/finance/money";

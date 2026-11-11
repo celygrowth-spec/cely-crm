@@ -147,7 +147,7 @@ function LinkBox({ call }: { call: Call }) {
         </div>
       </div>
       {call.booking_id && (
-        <Link href={`/rendez-vous/liste?periode=tous&rdv=${call.booking_id}`} className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-violet-strong hover:underline">
+        <Link href={`/rendez-vous/agenda?vue=liste&periode=tous&rdv=${call.booking_id}`} className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-violet-strong hover:underline">
           <CalendarDays size={14} /> Voir le rendez-vous
         </Link>
       )}

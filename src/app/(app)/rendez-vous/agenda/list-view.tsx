@@ -26,9 +26,9 @@ export function ListView({ bookings, types, initial }: { bookings: Booking[]; ty
   }, [f.q]);
 
   function apply(next: Filters) {
-    const sp = new URLSearchParams();
+    const sp = new URLSearchParams({ vue: "liste" }); // la liste est une vue de l'Agenda
     for (const [k, v] of Object.entries(next)) if (v && !(k === "periode" && v === "a-venir")) sp.set(k, v);
-    start(() => router.replace(sp.size ? `${pathname}?${sp.toString()}` : pathname, { scroll: false }));
+    start(() => router.replace(`${pathname}?${sp.toString()}`, { scroll: false }));
   }
   const set = (patch: Partial<Filters>) => {
     const next = { ...f, ...patch };

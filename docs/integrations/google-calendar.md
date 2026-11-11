@@ -3,7 +3,7 @@
 Le module Rendez-vous fonctionne **sans Google** (créneaux calculés à partir de vos disponibilités et des
 rendez-vous enregistrés). Google Calendar ajoute la vérification de vos occupations et la création des
 événements. Rien n'est simulé : tant qu'une variable manque, la fonction concernée est désactivée et
-l'écran « Rendez-vous › Connexion agenda » l'indique.
+l'écran « Paramètres › Connecteurs › Google Agenda » l'indique.
 
 ## 1. Variables d'environnement (Vercel › Settings › Environment Variables, et `.env.local`)
 
@@ -43,7 +43,7 @@ Le même projet que la connexion Gmail du module Mail peut servir ; les deux con
    les jetons de rafraîchissement après 7 jours : passez l'application en *In production* (pour un usage
    personnel, l'écran « application non vérifiée » peut être accepté ; `calendar.events.owned` est une
    portée sensible).
-5. Dans Cely : Rendez-vous › Connexion agenda › **Connecter Google Agenda**, puis choisir les agendas
+5. Dans Cely : Paramètres › Connecteurs › Google Agenda › **Connecter Google Agenda**, puis choisir les agendas
    à vérifier et l'agenda de destination.
 
 ### Interaction avec le module Mail (Gmail)
@@ -64,7 +64,7 @@ Le même projet que la connexion Gmail du module Mail peut servir ; les deux con
   l'événement Google (identifiant déterministe : une nouvelle tentative ne crée pas de doublon). En cas
   d'échec, le créneau est libéré et l'événement éventuellement créé est supprimé.
 - **Reprise** : toute divergence (annulation ou report non répercuté) est reprise automatiquement
-  à chaque réservation, depuis « Connexion agenda › Relancer », ou par tâche planifiée sur
+  à chaque réservation, depuis « Paramètres › Connecteurs › Google Agenda › Relancer maintenant », ou par tâche planifiée sur
   `/api/rendez-vous/reconcile`. La base fait foi.
 - **Sens unique** : un événement déplacé ou supprimé directement dans Google n'est pas reporté dans Cely ;
   le créneau reste réservé. Reporter/annuler depuis Cely.

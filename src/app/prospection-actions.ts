@@ -5,7 +5,6 @@ import { run } from "@/lib/action";
 import * as p from "@/lib/prospection/service";
 import type { CampaignStatus, Outcome } from "@/lib/prospection/service";
 import type { SequenceStep } from "@/lib/prospection/steps";
-import { todayISO } from "@/lib/format";
 
 export async function createCampaignAction(name: string, templateId: string | null) {
   return run((sb) => p.createCampaignDraft(sb, name, templateId));
@@ -76,15 +75,9 @@ export async function updateParticipantsAction(
     return { ok, errors };
   });
 }
-export async function getFocusQueueAction(campaignId: string | null) {
-  return run((sb) => p.getFocusQueue(sb, { campaignId, today: todayISO() }));
-}
 export async function saveViewAction(v: { id?: string | null; scope: string; name: string; config: Record<string, unknown> }) {
   return run((sb) => p.saveView(sb, v));
 }
 export async function deleteViewAction(id: string) {
   return run((sb) => p.deleteView(sb, id));
-}
-export async function setPreferenceAction(key: string, value: unknown) {
-  return run((sb) => p.setPreference(sb, key, value));
 }

@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
-import { createCompanyAction } from "@/app/actions";
+import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { addToListAction, createCompanyAction, getCompanyAction, moveCompanyAction, updateCompanyAction, upsertPersonAction } from "@/app/actions";
 import type { DuplicateCandidate } from "@/lib/crm/types";
+import { planCompletion, type PersonDraft } from "@/lib/crm/complete-existing";
 import { attempt, useSync } from "@/lib/client/query";
 import { useCrm } from "./app-shell";
 import { SourcePicker } from "./source-picker";
@@ -13,7 +14,6 @@ import { Button, Field, Input, Modal, Select, Textarea } from "./ui";
 
 export type CreateDefaults = { listId?: string; stageId?: string };
 
-type PersonDraft = { first_name: string; last_name: string; title: string; email: string; phone: string; linkedin_url: string };
 const emptyPerson = (): PersonDraft => ({ first_name: "", last_name: "", title: "", email: "", phone: "", linkedin_url: "" });
 
 export function CreateCompanyModal({
@@ -32,17 +32,26 @@ export function CreateCompanyModal({
   );
 }
 
-// monté à chaque ouverture : formulaire vierge et nouvelle clé d'idempotence
+type Draft = { name: string; website: string; description: string; sourceId: string; tags: string; people: PersonDraft[]; listId: string; stageId: string };
+// Saisie mise de côté quand on part ouvrir la fiche existante signalée comme doublon : elle est reprise à la
+// prochaine ouverture de « Nouvelle fiche » (même onglet), jusqu'à création, complétion ou « Effacer ».
+let kept: Draft | null = null;
+const keepDraft = (d: Draft | null) => { kept = d; };
+
+// monté à chaque ouverture : nouvelle clé d'idempotence ; formulaire vierge, ou saisie mise de côté
 function CreateForm({ defaults, onClose, onCreated }: { defaults: CreateDefaults; onClose: () => void; onCreated: (id: string, name: string) => void }) {
   const { sources, lists, pipelines, openCompany } = useCrm();
-  const [name, setName] = useState("");
-  const [website, setWebsite] = useState("");
-  const [description, setDescription] = useState("");
-  const [sourceId, setSourceId] = useState("");
-  const [tags, setTags] = useState("");
-  const [people, setPeople] = useState<PersonDraft[]>([emptyPerson()]);
-  const [listId, setListId] = useState(defaults.listId ?? "");
-  const [stageId, setStageId] = useState(defaults.stageId ?? "");
+  const [restored] = useState(() => kept);
+  const [name, setName] = useState(restored?.name ?? "");
+  const [website, setWebsite] = useState(restored?.website ?? "");
+  const [description, setDescription] = useState(restored?.description ?? "");
+  const [sourceId, setSourceId] = useState(restored?.sourceId ?? "");
+  const [tags, setTags] = useState(restored?.tags ?? "");
+  const [people, setPeople] = useState<PersonDraft[]>(restored?.people ?? [emptyPerson()]);
+  const [listId, setListId] = useState(defaults.listId ?? restored?.listId ?? "");
+  const [stageId, setStageId] = useState(defaults.stageId ?? restored?.stageId ?? "");
+  const [more, setMore] = useState(!!(restored && (restored.description || restored.sourceId || restored.tags)));
+  const [completing, setCompleting] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<DuplicateCandidate[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -60,7 +69,7 @@ function CreateForm({ defaults, onClose, onCreated }: { defaults: CreateDefaults
         website,
         description,
         source_id: sourceId || null,
-        tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+        tags: tagList(),
       },
       filledPeople,
       { force, idempotencyKey: force ? `${idemKey}-force` : idemKey, listId: listId || null, stageId: stageId || null },
@@ -68,10 +77,63 @@ function CreateForm({ defaults, onClose, onCreated }: { defaults: CreateDefaults
     setPending(false);
     if (!res.ok) return setError(res.error);
     if (res.data.status === "duplicates") return setCandidates(res.data.candidates);
+    keepDraft(null);
     sync(["companies"], ["pipeline-cards"]);
     if (res.data.warning) toast.warning(res.data.warning);
     else toast.success("Fiche créée");
     onCreated(res.data.id, name);
+  }
+
+  const tagList = () => tags.split(",").map((t) => t.trim()).filter(Boolean);
+
+  /** Part ouvrir la fiche existante : la saisie est gardée pour la prochaine « Nouvelle fiche ». */
+  function openExisting(id: string) {
+    keepDraft({ name, website, description, sourceId, tags, people, listId, stageId });
+    onClose();
+    openCompany(id);
+  }
+
+  /** Ajoute à la fiche existante ce qu'elle n'a pas encore (aucune valeur remplie n'est remplacée), puis l'ouvre. */
+  async function completeExisting(id: string) {
+    setCompleting(id);
+    setError(null);
+    const fail = (msg: string) => { setCompleting(null); setError(msg); };
+    const detail = await attempt(() => getCompanyAction(id));
+    if (!detail.ok) return fail(detail.error);
+    if (!detail.data) return fail("Fiche introuvable.");
+    const { company, people: existing, lists: memberOf } = detail.data;
+    const plan = planCompletion(company, existing, { website, description, source_id: sourceId, tags: tagList() }, filledPeople);
+    const done: string[] = [];
+    if (Object.keys(plan.patch).length) {
+      const r = await attempt(() => updateCompanyAction(id, plan.patch));
+      if (!r.ok) return fail(r.error);
+      if (r.data.status === "duplicates") return fail(`Le site web saisi correspond aussi à ${r.data.candidates.map((c) => c.name).join(", ")} : fiche non modifiée.`);
+    }
+    done.push(...plan.summary);
+    for (const p of plan.add) {
+      const r = await attempt(() => upsertPersonAction(id, p));
+      if (!r.ok) return fail(`Ajout de ${[p.first_name, p.last_name].filter(Boolean).join(" ") || p.email || "la personne"} : ${r.error}`);
+    }
+    for (const f of plan.fill) {
+      const r = await attempt(() => upsertPersonAction(id, f.person, f.id));
+      if (!r.ok) return fail(r.error);
+    }
+    if (listId && !memberOf.some((l) => l.id === listId)) {
+      const r = await attempt(() => addToListAction(listId, [id]));
+      if (!r.ok) return fail(r.error);
+      done.push("liste");
+    }
+    let stageNote = "";
+    if (stageId && !company.stage_id && company.deal_status === "open") {
+      const r = await attempt(() => moveCompanyAction(id, stageId));
+      if (!r.ok) return fail(r.error);
+      done.push("pipeline");
+    } else if (stageId && company.stage_id !== stageId) stageNote = " L'étape de pipeline existante n'a pas été changée.";
+    keepDraft(null);
+    sync(["companies"], ["pipeline-cards"], ["company", id], ["company-timeline", id]);
+    toast.success(done.length ? `${company.name} complétée : ${done.join(", ")}.${stageNote}` : `Rien à ajouter : ${company.name} contient déjà ces informations.${stageNote}`);
+    onClose();
+    openCompany(id);
   }
 
   const update = (i: number, k: keyof PersonDraft, v: string) => setPeople((ps) => ps.map((p, j) => (j === i ? { ...p, [k]: v } : p)));
@@ -84,6 +146,16 @@ function CreateForm({ defaults, onClose, onCreated }: { defaults: CreateDefaults
         }}
         className="space-y-4"
       >
+        {restored && (
+          <p className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-violet-soft px-3 py-2 text-sm text-ink" role="status">
+            Saisie précédente reprise.
+            <button type="button" className="font-semibold text-violet-strong hover:underline" onClick={() => {
+              keepDraft(null);
+              setName(""); setWebsite(""); setDescription(""); setSourceId(""); setTags(""); setPeople([emptyPerson()]);
+              setListId(defaults.listId ?? ""); setStageId(defaults.stageId ?? ""); setCandidates(null); setMore(false);
+            }}>Effacer</button>
+          </p>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Entreprise *">
             <Input value={name} onChange={(e) => { setName(e.target.value); setCandidates(null); }} required autoFocus />
@@ -91,16 +163,25 @@ function CreateForm({ defaults, onClose, onCreated }: { defaults: CreateDefaults
           <Field label="Site web / domaine">
             <Input value={website} onChange={(e) => { setWebsite(e.target.value); setCandidates(null); }} placeholder="acme.com" />
           </Field>
-          <Field label="Source du contact">
-            <SourcePicker sources={sources} value={sourceId || null} onChange={(id) => setSourceId(id ?? "")} />
-          </Field>
-          <Field label="Tags" hint="Séparés par des virgules">
-            <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="saas, b2b" />
-          </Field>
-          <Field label="Description / besoin identifié" className="sm:col-span-2">
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
-          </Field>
+          {more && (
+            <>
+              <Field label="Source du contact">
+                <SourcePicker sources={sources} value={sourceId || null} onChange={(id) => setSourceId(id ?? "")} />
+              </Field>
+              <Field label="Tags" hint="Séparés par des virgules">
+                <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="saas, b2b" />
+              </Field>
+              <Field label="Description / besoin identifié" className="sm:col-span-2">
+                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
+              </Field>
+            </>
+          )}
         </div>
+        {!more && (
+          <button type="button" onClick={() => setMore(true)} aria-expanded={false} className="-mt-2 inline-flex items-center gap-1 text-sm font-semibold text-violet-strong hover:underline">
+            <ChevronDown size={14} /> Plus de champs <span className="font-normal text-muted">(source, tags, description)</span>
+          </button>
+        )}
 
         <div>
           <div className="mb-2 flex items-center justify-between">
@@ -153,16 +234,18 @@ function CreateForm({ defaults, onClose, onCreated }: { defaults: CreateDefaults
         {candidates && (
           <DuplicateNotice
             candidates={candidates}
-            onOpen={(id) => { onClose(); openCompany(id); }}
+            onOpen={openExisting}
+            onComplete={(id) => void completeExisting(id)}
+            completing={completing}
             onForce={() => submit(true)}
-            pending={pending}
+            pending={pending || !!completing}
           />
         )}
         {error && <p className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger" role="alert">{error}</p>}
 
         {!candidates && (
           <div className="flex justify-end gap-2">
-            <Button onClick={onClose}>Annuler</Button>
+            <Button onClick={() => { keepDraft(null); onClose(); }}>Annuler</Button>
             <Button type="submit" variant="primary" disabled={pending || !name.trim()}>
               {pending ? "Vérification…" : "Créer la fiche"}
             </Button>
