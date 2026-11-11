@@ -48,3 +48,77 @@ test("le script supprime les données [TEST] et rien d'autre", async () => {
   expect(await db.one(`select count(*)::int n from lists`)).toEqual({ n: 0 });
   expect(await db.one(`select count(*)::int n from people where company_id = $1`, [test2])).toEqual({ n: 1 });
 });
+
+test("une fiche [TEST] gagnée avec projet, fichiers, revenu, facture, avoir, règlement, rendez-vous et temps : tout part, le réel reste", async () => {
+  const db = await createDb();
+  const company = async (name: string, email: string) =>
+    (await db.rpc<{ id: string }>("create_company", { p_force: true, p_company: { name }, p_people: [{ first_name: "Ana", email }] })).id!;
+  const t = await company("[TEST] Client gagné", "ana@client.example.test");
+  const real = await company("Vrai client", "ana@vrai-client.fr");
+  const pl = (await db.one<{ id: string }>(`insert into pipelines (name) values ('Vente') returning id`)).id;
+  const st = (await db.one<{ id: string }>(`insert into stages (pipeline_id, name, position) values ($1, 'Proposition', 0) returning id`, [pl])).id;
+  for (const c of [t, real]) await db.rpc("move_company", { p_company: c, p_stage: st });
+  const won = async (c: string, key: string) => db.rpc<{ sale_id: string; mission_id: string; project_id: string }>("sale_confirm",
+    { p_company: c, p_data: { revenue: { mode: "ponctuel", amount: 3000, date: "2026-11-01" } }, p_idempotency_key: key });
+  const s1 = await won(t, "cle-test-gagne-1");
+  const s2 = await won(real, "cle-vrai-gagne-1");
+  for (const [c, s] of [[t, s1], [real, s2]] as const) {
+    const inv = (await db.rpc<{ id: string }>("finance_record_invoice", { p_data: { company_id: c, mission_id: s.mission_id, issue_date: "2026-11-01", amount_ht: 3000, amount_ttc: 3000 } })).id;
+    await db.rpc("finance_record_payment", { p_invoice: inv, p_paid_on: "2026-11-05", p_amount: 1000 });
+    await db.rpc("finance_record_credit_note", { p_invoice: inv, p_data: { issue_date: "2026-11-06", amount_ht: 500, amount_ttc: 500 } });
+    const file = (await db.one<{ id: string }>(`insert into company_files (company_id, storage_path, display_name, mime_type, size_bytes, status, category) values ($1, $2, 'Proposition.pdf', 'application/pdf', 10, 'ready', 'Proposition') returning id`, [c, `${c}/p.pdf`])).id;
+    const folder = (await db.one<{ id: string }>(`insert into project_folders (project_id, name) values ($1, 'Livrables') returning id`, [s.project_id])).id;
+    await db.query(`insert into project_files (project_id, file_id, folder_id) values ($1, $2, $3)`, [s.project_id, file, folder]);
+    await db.query(`insert into project_tasks (project_id, title) values ($1, 'Kick-off')`, [s.project_id]);
+    await db.query(`insert into time_entries (company_id, started_at, ended_at) values ($1, now() - interval '1 hour', now())`, [c]);
+  }
+  // un vrai rendez-vous rattaché par erreur à la fiche de test, et un rendez-vous de test
+  await db.exec("reset role;");
+  const sched = (await db.one<{ id: string }>(`select id from appt_schedules where is_default`)).id;
+  const type = (await db.one<{ id: string }>(`insert into appt_event_types (name, slug, duration_min, schedule_id) values ('Appel', 'appel', 30, $1) returning id`, [sched])).id;
+  for (const [i, email] of ["invite@example.test", "vrai.invite@gmail.com"].entries()) {
+    await db.query(
+      `insert into appt_bookings (event_type_id, status, starts_at, ends_at, schedule_timezone, invitee_timezone, first_name, last_name, email, email_norm,
+         event_snapshot, company_id, idempotency_key, manage_token_hash)
+       values ($1, 'confirmed', now() + make_interval(days => $2), now() + make_interval(days => $2, mins => 30), 'Europe/Paris', 'Europe/Paris',
+         'In', 'Vité', $3, $3, '{}', $4, $5, $6)`,
+      [type, 2 + i, email, t, `cle-rdv-test-${i}`, String(i).repeat(64)]);
+  }
+  await db.as("owner");
+
+  const script = readFileSync(join(__dirname, "..", "..", "supabase", "maintenance", "delete-test-data.sql"), "utf8");
+  // comme dans le SQL Editor de Supabase : droits d'administration
+  await db.exec("reset role;");
+  // 1. aperçu en lecture seule : rien ne change
+  const preview = script.slice(0, script.indexOf("-- ============================================================ SUPPRESSION"));
+  const res = await db.query<{ element: string; nombre: number }>(preview.replace(/^--.*$/gm, ""));
+  const count = (e: string) => Number(res.rows.find((r) => r.element.startsWith(e))?.nombre);
+  expect(count("fiches [TEST]")).toBe(1);
+  expect(count("ventes")).toBe(1);
+  expect(count("projets")).toBe(1);
+  expect(count("factures et avoirs")).toBe(2);
+  expect(count("règlements")).toBe(1);
+  expect(count("BLOQUANT")).toBe(0);
+  expect(await db.one(`select count(*)::int n from companies`)).toEqual({ n: 2 });
+
+  // 2. suppression
+  await db.exec(script);
+  expect((await db.query(`select name from companies`)).rows).toEqual([{ name: "Vrai client" }]);
+  const left = await db.one(`select (select count(*)::int from sales) s, (select count(*)::int from projects) p, (select count(*)::int from finance_missions) m,
+    (select count(*)::int from finance_invoices) i, (select count(*)::int from finance_payments) r, (select count(*)::int from project_files) pf,
+    (select count(*)::int from project_tasks) pt, (select count(*)::int from time_entries) te, (select count(*)::int from company_files) f`);
+  expect(left).toEqual({ s: 1, p: 1, m: 1, i: 2, r: 1, pf: 1, pt: 1, te: 1, f: 1 });
+  expect((await db.query(`select email, company_id from appt_bookings`)).rows).toEqual([{ email: "vrai.invite@gmail.com", company_id: null }]);
+  expect(count("rendez-vous")).toBe(1);
+});
+
+test("garde-fou : une fiche réelle fusionnée dans une fiche [TEST] bloque tout, rien n'est supprimé", async () => {
+  const db = await createDb();
+  const t = (await db.rpc<{ id: string }>("create_company", { p_force: true, p_company: { name: "[TEST] Garde" }, p_people: [] })).id!;
+  const r = (await db.rpc<{ id: string }>("create_company", { p_force: true, p_company: { name: "Réelle" }, p_people: [] })).id!;
+  await db.exec(`update companies set merged_into_id = '${t}' where id = '${r}'`);
+  const script = readFileSync(join(__dirname, "..", "..", "supabase", "maintenance", "delete-test-data.sql"), "utf8");
+  await db.exec("reset role;");
+  await expect(db.exec(script)).rejects.toThrow(/fusionnée/);
+  expect(await db.one(`select count(*)::int n from companies`)).toEqual({ n: 2 });
+});

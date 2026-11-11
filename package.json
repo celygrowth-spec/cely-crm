@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm run lint && npm test && npm run build",
-    "db:bundle": "node scripts/bundle-sql.mjs"
+    "db:bundle": "node scripts/bundle-sql.mjs",
+    "test-env": "node scripts/test-env/dev.mjs",
+    "test-env:db": "node scripts/test-env/server.mjs",
+    "test-env:hosted": "node scripts/test-env/hosted.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

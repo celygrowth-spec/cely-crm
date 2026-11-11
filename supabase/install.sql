@@ -8787,7 +8787,7 @@ grant execute on function public.finance_due_date(date, text, int), public.finan
   to authenticated;
 
 
--- ===== 20261108000100_fireflies.sql =====
+-- ===== 20261108000150_fireflies.sql =====
 -- Fireflies, phase 1 : import automatique des appels (voir docs/integrations/fireflies.md).
 --
 -- Flux : le webhook enregistre une tâche (fireflies_enqueue) AVANT d'accuser réception ; le serveur
