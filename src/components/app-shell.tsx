@@ -274,7 +274,7 @@ function Shell({
         <MobileNav pathname={pathname} todoCount={todoCount} onSignOut={() => qc.clear()} />
         <main className="min-w-0 flex-1 px-4 pt-5 pb-36 md:px-8 md:pt-7 md:pb-24">{children}</main>
       </div>
-      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} onPick={(id) => { setSearchOpen(false); openCompany(id); }} />
+      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} onPick={(id) => { setSearchOpen(false); openCompany(id); }} onCreate={() => setCreateDefaults({})} />
       <CompanySheet id={ficheId} onClose={closeCompany} />
       <CreateCompanyModal
         defaults={createDefaults}
