@@ -4,11 +4,10 @@
 // toujours accompagnées d'une légende textuelle et d'une vue tableau.
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { eur } from "@/lib/finance/money";
+import { IN_COLOR, OUT_COLOR, PLANNED_IN, PLANNED_OUT } from "./chart-colors";
 import { monthLabel } from "@/lib/finance/dates";
 import type { ForecastMonth } from "@/lib/finance/calc";
 
-export const IN_COLOR = "#682dfe";
-export const OUT_COLOR = "#c2620a";
 const axis = { fontSize: 11, fill: "#6b6178" };
 const euros = (cents: number) => eur(cents, { round: true });
 const tip = { contentStyle: { borderRadius: 8, border: "1px solid #ddd3f0", fontSize: 12 } };
@@ -93,8 +92,6 @@ export function ForecastChart({ months }: { months: ForecastMonth[] }) {
 // Accueil : grand graphique (Réel / Prévisions) et « À encaisser »
 // ---------------------------------------------------------------------------
 
-const PLANNED_IN = "#e9d7ff";
-const PLANNED_OUT = "#fbe3cc";
 
 function HatchDefs() {
   return (
@@ -161,22 +158,6 @@ export function PlanChart({ months }: { months: ForecastMonth[] }) {
         </BarChart>
       </ResponsiveContainer>
     </div>
-  );
-}
-
-/** Légende des prévisions, en texte (lisible sur mobile, sans dépendre des couleurs seules). */
-export function PlanLegend() {
-  const sw = (style: React.CSSProperties) => <span className="inline-block size-3 shrink-0 rounded-sm" style={style} aria-hidden />;
-  const hatch = (c: string) => ({ background: `repeating-linear-gradient(45deg, ${c} 0 2px, #fff 2px 5px)`, border: `1px dashed ${c}` });
-  return (
-    <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted sm:flex sm:flex-wrap">
-      <li className="flex items-center gap-1.5">{sw({ background: IN_COLOR })} Déjà reçu</li>
-      <li className="flex items-center gap-1.5">{sw({ background: PLANNED_IN, border: `1px solid ${IN_COLOR}` })} Factures à encaisser</li>
-      <li className="flex items-center gap-1.5">{sw(hatch(IN_COLOR))} Revenus prévus</li>
-      <li className="flex items-center gap-1.5">{sw({ background: OUT_COLOR })} Déjà payé</li>
-      <li className="flex items-center gap-1.5">{sw({ background: PLANNED_OUT, border: `1px solid ${OUT_COLOR}` })} Charges à payer</li>
-      <li className="flex items-center gap-1.5">{sw(hatch(OUT_COLOR))} Charges prévues</li>
-    </ul>
   );
 }
 
