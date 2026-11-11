@@ -45,12 +45,12 @@ parcours rejoué dans l'application locale reliée à la base de test ; « réel
 | K14 | 3/8 | ✅ | Lot 3 : prévisions en TTC comme les factures (base des cotisations en HT), arrondis identiques base / interface, Ventes et fiche rafraîchis après une action Finance. Lot 8 : personne retrouvée dans l'historique des emails (contact unique parmi les destinataires) ; appel Fireflies rattaché dès l'ajout du contact ; retours OAuth Gmail fixés par `APP_URL` ; état MCP sans affirmation invérifiable ; webhook : signature officielle, rejeu sans effet (documenté) ; déconnexion Fireflies = plus d'import futur (documenté). Limite : les portées OAuth du MCP ne distinguent pas lecture/écriture côté Supabase, l'accès reste celui du compte propriétaire | `tests/unit/finance-coherente.test.ts` (K14) | lot 3 | — |
 | C12 | 8 | ✅ | `APPOINTMENTS_SECRET` documenté comme secret serveur global : usages dérivés, effets d'un changement, procédure de rotation vérifiable ; séparation ultérieure décrite (transition avec ancien et nouveau secret), non faite | `docs/secrets.md` | lot 8 | — |
 | C14 | 8 | ✅ | Une règle : une fiche portant du temps passé ou un diagnostic ne se supprime plus en silence (suppression refusée, comme pour ventes, finance, emails) ; fonctions de déclencheur et tables récentes fermées au rôle anonyme ; nouvelles fonctions fermées par défaut ; test : toute fonction anonyme exige la clé serveur, aucune table lisible sans connexion. Claude : mêmes règles qu'avant (suppressions limitées aux espaces client, avec accord explicite) | `acces-anonymes.test.ts` | lot 8 | — |
-| K03 | 9 | ⏳ | | | | |
-| K04 | 9 | ⏳ | | | | |
-| K07 | 9 | ⏳ | | | | |
-| K08 | 9 | ⏳ | | | | |
-| K12 | 9 | ⏳ | | | | |
-| K13 | 9 | ⏳ | | | | |
+| K03 | 9 | ✅ | Mobile : 5 entrées (Aujourd'hui, Prospection, Pipelines, Ventes, Projets) + « Plus » (Rendez-vous, Finance, Temps, Mail, Appels, Paramètres, Déconnexion) ; Mail et Appels gardés ; desktop inchangé | navigateur 390×844 (pas de défilement horizontal) | lot 9 | — |
+| K04 | 9 | ✅ | Agenda unique Jour / Semaine / Liste ; détail `?rdv=` depuis toutes les vues ; `/rendez-vous/liste?rdv=` (liens déjà écrits dans Google) redirigé ; connexion Google dans Paramètres › Connecteurs (ancienne adresse redirigée) ; nouveaux événements Google pointent vers la vue Liste | navigateur | lot 9 | — |
+| K07 | 9 | ✅ | Doublon à la création : saisie conservée, « Ouvrir la fiche existante » (saisie reprise ensuite) ou « Compléter la fiche existante » (seulement les champs vides, sans rien écraser) ; champs secondaires repliés | `tests/unit/complete-existing.test.ts`, navigateur | lot 9 | — |
+| K08 | 9 | ✅ | Palette ⌘K : « Aller à… » (9 rubriques) et « Créer… » (fiche, revenu), filtrage sans accents, clavier | `tests/unit/palette-commands.test.ts`, navigateur | lot 9 | — |
+| K12 | 9 | ✅ | Graphiques Finance et éditeur d'email chargés à la demande : /finance 372→271 kB, /finance/rentabilite 373→272 kB, /mail/modeles 397→268 kB (JS initial gzip, build de production) ; index `meta->>'campaign_id'` ; pages Finance sans écriture quand rien n'est dû ; échéances d'abonnement qui suivent le contrat modifié | mesure de build, `performance.test.ts` | lot 9 | Temps de réponse non mesuré sur l'hébergement réel |
+| K13 | 9 | ✅ | 23 exports inutilisés retirés après vérification (src, tests, scripts, appels dynamiques) ; adaptateurs Rendez-vous/Mail désormais raccordés (rappels) ou listés | tsc, lint, tests | lot 9 | — |
 
 ## Lot 0 — environnement de test et migrations
 - Environnement local versionné (`scripts/test-env/`) : base aux vraies migrations, comptes `owner` / `stranger`,
@@ -129,3 +129,53 @@ parcours rejoué dans l'application locale reliée à la base de test ; « réel
 - Défaut démontré par l'inventaire et corrigé : des fonctions de déclencheur (dont certaines ajoutées aux lots 1 et 7)
   et quatre tables récentes restaient ouvertes au rôle anonyme (sans effet exploitable : les déclencheurs ne
   s'appellent pas directement et les tables sont sous RLS). Désormais fermées, et toute nouvelle fonction l'est par défaut.
+
+## Lot 9 — ergonomie, performance, nettoyage
+- Interface (K03, K04, K05, K07, K08) et nettoyage (K13) faits par un agent dans une copie séparée, intégrés par fusion
+  (`053f512`) ; performance : chargements à la demande (agent) et migration `20261115000900_performance.sql`.
+- E5 (liens croisés vente ↔ revenu ↔ projet) : liens existants conservés (Ventes → projet, revenu ; Finance → fiche) ;
+  « Revenus par client » renommé. Pas de nouvel écran.
+
+## Recette finale (15 parcours)
+« Navigateur » : rejoué dans l'application locale reliée à la base de test (vraies migrations) ; « base » : test
+automatisé sur PGlite ; « simulé » : intégration externe remplacée par une réponse simulée ; « réel » : rien n'a été
+appelé en réel (Google, Gmail, Fireflies, Claude) — aucune intégration externe n'est vérifiée en réel.
+
+| # | Parcours | Vérification | Où |
+| --- | --- | --- | --- |
+| 1 | Prospect → campagne → réponse → pipeline | navigateur (réponse → « RDV obtenu » → suite) + base (intéressé → étape) | `lot4-aujourdhui.cjs`, `aujourdhui.test.ts`, `parcours-prospection.test.ts` |
+| 2 | Gagné mensuel → Ventes → revenu → projet | navigateur | `lot1-ventes.cjs`, `lot3-finance.cjs` |
+| 3 | Ponctuel → acompte → solde | navigateur | `lot3-finance.cjs` |
+| 4 | Réouverture et perte avec décisions | navigateur | `lot1-ventes.cjs` |
+| 5 | Client existant → nouvelle vente → nouvelle mission | navigateur (3 cycles) | `lot1-ventes.cjs` |
+| 6 | Fusion → relations et historique conservés | navigateur + base | `lot2-fusion.cjs`, `fusion.test.ts` |
+| 7 | Tâche projet → Aujourd'hui → validation reflétée | navigateur | `lot4-aujourdhui.cjs` |
+| 8 | Réservation → notification → report → rappel recalculé | base (rappels recalculés, versions) ; invitation Google et envoi Gmail **simulés** | `rendez-vous-rappels.test.ts`, `rendez-vous-emails.test.ts` |
+| 9 | Agenda déconnecté → réservation suspendue | navigateur (page et API) | `lot5-rendez-vous.cjs` |
+| 10 | Réponse Gmail → conversation et fiche → campagne en pause | base, messages Gmail **simulés** | `rendez-vous-emails.test.ts`, `mail-inbound.test.ts` |
+| 11 | Appel Fireflies → fiche → projet | base | `onboarding-temps-appels.test.ts`, `fireflies-rattachement.test.ts` |
+| 12 | Demande d'onboarding → dépôt client → préparation mise à jour | base (dépôt rattaché, demande « répondue ») ; bouton de dépôt du portail non rejoué (Storage simulé) | `projet-onboarding.test.ts`, `projets-fichiers.test.ts` |
+| 13 | Document privé → partage explicite → accès client | navigateur + base | `lot6-portail.cjs`, `portail-documents.test.ts` |
+| 14 | Chrono → projet → totaux | navigateur | `lot7-temps.cjs` |
+| 15 | Action MCP → mêmes règles que l'interface | base (outils MCP, refus Claude sur temps et suppressions) | `mcp*.test.ts`, `migrations.test.ts` (garde-fou des fonctions) |
+
+**Accès** (`tests/e2e/recette-acces.cjs`, navigateur) : visiteur anonyme renvoyé à la connexion, API 401 ; compte
+connecté non propriétaire refusé (pages : `not_owner` ; API : 403 ; fonctions : « Accès refusé ») ; identifiants
+inexistants : page introuvable ; fonctions publiques avec une mauvaise clé serveur : refusées. Défense en profondeur
+ajoutée pendant la recette : les lectures d'API refusent explicitement un compte non propriétaire (403) au lieu de
+renvoyer une liste vide filtrée par la base.
+
+**Contrôles finaux** : 649 tests (unitaires et base, dont installation complète et mise à niveau des migrations depuis
+la version auditée avec données), TypeScript, lint, build de production : tout passe. Inspection visuelle : Aujourd'hui
+(ordinateur et téléphone 390 px, sans défilement horizontal), Ventes, Revenus, Agenda, Passages planifiés.
+
+## Vérifications encore bloquées
+1. **Projet Supabase de test hébergé** (à créer par vous, `docs/environnement-de-test.md`) : C13 (liens de
+   téléchargement sur Storage réel), dépôt client réel (Q08), politiques Storage.
+2. **Google Agenda réel** : invitations à l'invité (`sendUpdates=all`), suspension et reprise après reconnexion.
+3. **Gmail réel** : reconnexion du compte avec la lecture (Q03), envoi des rappels (Q02).
+4. **Planificateur toutes les 15 minutes** en production (`supabase/maintenance/planificateur.sql`) : sans lui, les
+   rappels ne partent pas (offre Vercel Hobby : un passage par jour).
+5. **Routine Claude d'analyse de l'onboarding** sur un dossier contrôlé (K10).
+6. **Portées OAuth du MCP** : vérifier sur un vrai jeton quelles portées Supabase émet avant de les exiger.
+7. **Rattrapage des fusions passées** et suppression des données [TEST] en production : scripts prêts, sur instruction.

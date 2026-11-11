@@ -131,7 +131,7 @@ function calendarEvent(b: EventData, calendarId: string, origin?: string | null)
     b.event.location_detail ? `Lieu : ${b.event.location_detail}` : null,
     ...(b.answers ?? []).map((a) => `${a.label} : ${a.value}`),
     "",
-    `Rendez-vous géré dans Cely CRM : ${appUrl(origin)}/rendez-vous/liste?rdv=${b.id}`,
+    `Rendez-vous géré dans Cely CRM : ${appUrl(origin)}/rendez-vous/agenda?vue=liste&rdv=${b.id}`,
   ].filter((l): l is string => l !== null);
   return {
     bookingId: b.id,
