@@ -50,6 +50,8 @@ export const migrationVersion = (file: string) => file.slice(0, 14);
 
 /** Applique les migrations dont la version est dans ]after, upTo] (mise à niveau d'une base existante). */
 export async function applyMigrations(pg: PGlite, opts: { after?: string; upTo?: string } = {}) {
+  // comme dans le SQL Editor de Supabase : droits d'administration
+  await pg.exec("reset role;");
   for (const file of migrationFiles()) {
     const v = migrationVersion(file);
     if (opts.after && v <= opts.after) continue;

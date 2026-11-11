@@ -4,12 +4,18 @@ import { eur, toCents } from "@/lib/finance/money";
 
 export type SaleStage = "devis_contrat" | "onboarding" | "en_mission" | "termine";
 export type Billing = "a_renseigner" | "prevu" | "facture" | "encaisse";
-export type PrepState = "pending" | "running" | "ready" | "incomplete" | "failed";
-export type PrepItem = { key: string; label: string; done: boolean; required: boolean; href?: string | null; hint?: string | null };
-export type Prep = { items?: PrepItem[]; sources?: { propositions?: number; contracts?: number; calls?: number; diagnostic?: boolean } };
+/** État de préparation de l'onboarding : une seule source, project_onboarding_status (Ventes et Projets). */
+export type PrepStatus = "preparing" | "to_complete" | "ready";
 
+/** Une ligne par cycle de vente (gagné ou terminé), par fiche perdue, ou par ancien dossier gagné sans vente. */
 export type SaleRow = {
+  row_id: string;
   company_id: string;
+  company_deal_status: "open" | "won" | "lost";
+  cycle: number | null;
+  project_removed_at: string | null;
+  prep_status: PrepStatus | null;
+  prep_missing: number | null;
   name: string;
   deal_status: "won" | "lost";
   deal_closed_at: string | null;
@@ -21,12 +27,10 @@ export type SaleRow = {
   stage_name: string | null;
   primary_person_name: string | null;
   sale_id: string | null;
-  sale_state: "won" | "reopened" | null;
+  sale_state: "won" | "reopened" | "lost" | "completed" | null;
   signed_on: string | null;
   revenue_mode: "mensuel" | "ponctuel" | "plus_tard" | null;
   documents_ready: boolean | null;
-  prep_state: PrepState | null;
-  prep: Prep | null;
   prep_error: string | null;
   mission_id: string | null;
   mission_kind: "ponctuel" | "recurrent" | null;
@@ -114,16 +118,7 @@ export function board(rows: SaleRow[]) {
 export const byClosedDesc = (a: SaleRow, b: SaleRow) => (b.closed_on ?? "").localeCompare(a.closed_on ?? "");
 
 /** Éléments obligatoires encore manquants pour l'onboarding. */
-export const missingItems = (r: Pick<SaleRow, "prep">) => (r.prep?.items ?? []).filter((i) => i.required && !i.done);
+export const missingCount = (r: Pick<SaleRow, "prep_status" | "prep_missing">) => (r.prep_status === "to_complete" ? r.prep_missing ?? 0 : 0);
 
 /** Ancien dossier gagné sans suivi : à compléter (aucun projet ni revenu créé automatiquement). */
 export const needsCompletion = (r: Pick<SaleRow, "deal_status" | "sale_id">) => r.deal_status === "won" && !r.sale_id;
-
-// ---------------------------------------------------------------------------
-// Onboarding : le lien confie la génération à Claude, qui lit le projet avec le connecteur du CRM
-// ---------------------------------------------------------------------------
-
-export const onboardingPrompt = (projectId: string) =>
-  `Onboarding Cely, projet ${projectId}. Avec le connecteur du CRM, appelle get_project avec cet identifiant, puis get_company pour sa fiche. ` +
-  `La note interne du projet contient la préparation (proposition acceptée, appels Fireflies, diagnostic). Génère les slides d'onboarding du client à partir de ce périmètre. ` +
-  `Ne publie rien sur le portail et ne partage aucun fichier avec le client : tout reste privé jusqu'à ma validation.`;

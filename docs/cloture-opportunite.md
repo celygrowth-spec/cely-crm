@@ -28,7 +28,12 @@ cartes du Kanban (`CardClosingMenu`).
 - Une opportunité clôturée doit être rouverte avant de changer d'issue ; répéter la même demande ne change rien.
 - Chaque changement est inscrit dans l'activité de la fiche (`interactions.kind = 'deal_status'`, texte daté et
   détails dans `meta`) et apparaît comme un jalon dans le fil « Tout ».
-- Déplacer une fiche clôturée vers une étape (`move_company`) la rouvre aussi, comme avant.
+- **Une fiche gagnée ou perdue reste clôturée** (audit C01) : changer d'étape, choisir « Hors pipeline », une
+  campagne (« Intéressé + étape ») ou Claude (`move_company`) sont refusés avec une explication ; la base l'impose
+  (déclencheur `companies_closed_guard`). Seules « Rouvrir l'opportunité » et « Nouvelle opportunité » rouvrent.
+- **Rouvrir ou perdre une vente qui a un projet, un revenu ou des accès client** passe par `deal_transition` : vous
+  décidez du sort du projet (continue, en attente, archivé), des échéances futures (continuent ou s'arrêtent à une
+  date) et des accès au portail (maintenus ou révoqués) ; tout s'applique en une opération (audit C03).
 
 ## Raccordement avec Ventes et Projets
 

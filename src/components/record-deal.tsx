@@ -29,7 +29,7 @@ export function RecordDeal({ ctx }: { ctx: RecordCtx }) {
       <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
         <Field label="Pipeline et étape">
           {pipelines.length ? (
-            <Select value={c.stage_id ?? ""} onChange={(e) => move(e.target.value)}>
+            <Select value={c.stage_id ?? ""} onChange={(e) => move(e.target.value)} disabled={c.deal_status !== "open"} title={c.deal_status !== "open" ? "Opportunité clôturée : « Rouvrir l'opportunité » pour changer d'étape" : undefined}>
               <option value="">Hors pipeline</option>
               {pipelines.map((p) => (
                 <optgroup key={p.id} label={p.name}>

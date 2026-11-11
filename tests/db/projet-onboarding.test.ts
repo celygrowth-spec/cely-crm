@@ -68,7 +68,8 @@ describe("vente gagnée → préparation", () => {
     expect(await db.one(`select sale_id from project_onboarding where project_id = $1`, [a.project_id])).toEqual({ sale_id: a.sale_id });
     expect(await status(a.project_id)).toBe("preparing");
     // rouvrir puis regagner : même vente, même projet, même préparation
-    await db.rpc("set_deal_status", { p_company: c, p_status: "open" });
+    await expect(db.rpc("set_deal_status", { p_company: c, p_status: "open" })).rejects.toThrow(/choisissez ce qu'ils deviennent/);
+    await db.rpc("deal_transition", { p_company: c, p_status: "open", p_options: { project: "continue", revenue: "continue" } });
     expect((await win(c)).project_id).toBe(a.project_id);
     expect(await db.one(`select count(*)::int n from project_onboarding`)).toEqual({ n: 1 });
   });

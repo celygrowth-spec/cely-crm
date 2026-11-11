@@ -111,7 +111,8 @@ describe("suivi après-vente", () => {
 
   test("réouverture : liens conservés ; regagnée, la même vente reprend avec le même projet et le même revenu", async () => {
     const r = await confirm({ revenue: { mode: "mensuel", amount: 1000, date: today() } });
-    await db.rpc("set_deal_status", { p_company: co, p_status: "open" });
+    await expect(db.rpc("set_deal_status", { p_company: co, p_status: "open" })).rejects.toThrow(/choisissez/);
+    await db.rpc("deal_transition", { p_company: co, p_status: "open", p_options: { project: "continue", revenue: "continue" } });
     expect(await db.one(`select state, project_id, mission_id from sales`)).toEqual({ state: "reopened", project_id: r.project_id, mission_id: r.mission_id });
     await expect(db.rpc("sale_set_stage", { p_sale: r.sale_id, p_stage: "en_mission" })).rejects.toThrow(/rouverte/);
     const again = await confirm({ revenue: { mode: "mensuel", amount: 1000, date: today() } });
@@ -120,15 +121,13 @@ describe("suivi après-vente", () => {
     expect(await n("finance_missions")).toBe(1);
   });
 
-  test("préparation : une seule à la fois, résultat enregistré, échec reprenable", async () => {
+  test("K10 : l'état de préparation affiché par Ventes est celui de Projets (project_onboarding)", async () => {
     const r = await confirm({});
-    expect(await db.rpc("sale_prep_claim", { p_sale: r.sale_id })).toBe(true);
-    expect(await db.rpc("sale_prep_claim", { p_sale: r.sale_id })).toBe(false);
-    await db.rpc("sale_prep_save", { p_sale: r.sale_id, p_state: "failed", p_prep: null, p_error: "Fireflies indisponible" });
-    expect(await overview()).toMatchObject({ prep_state: "failed", prep_error: "Fireflies indisponible" });
-    expect(await db.rpc("sale_prep_claim", { p_sale: r.sale_id })).toBe(true);
-    await db.rpc("sale_prep_save", { p_sale: r.sale_id, p_state: "incomplete", p_prep: { missing: ["contact"] } });
-    expect(await overview()).toMatchObject({ prep_state: "incomplete", prep: { missing: ["contact"] }, prep_error: null });
+    expect((await overview()).prep_status).toBe("preparing");
+    await db.rpc("onboarding_prepare", { p_project: r.project_id });
+    const o = await overview();
+    const p = await db.one<{ status: string; open_required: number }>(`select status, open_required from project_onboarding_status where project_id = $1`, [r.project_id]);
+    expect(o).toMatchObject({ prep_status: p.status, prep_missing: p.open_required });
   });
 });
 

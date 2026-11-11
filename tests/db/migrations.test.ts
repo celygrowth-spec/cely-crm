@@ -64,6 +64,7 @@ describe("mise à niveau", () => {
       (select count(*)::int from finance_invoices) i, (select count(*)::int from finance_payments) r`);
 
     await applyMigrations(db, { after: AUDITED_UP_TO });
+    await db.as("owner");
 
     expect(await db.one(`select (select count(*)::int from sales) s, (select count(*)::int from projects) p, (select count(*)::int from finance_missions) m,
       (select count(*)::int from finance_invoices) i, (select count(*)::int from finance_payments) r`)).toEqual(before);

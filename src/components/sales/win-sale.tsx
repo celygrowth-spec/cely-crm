@@ -79,6 +79,9 @@ function WinForm({ company, complete, ctx, onClose, onDone }: { company: { id: s
   const [linkInvoice, setLinkInvoice] = useState("");
   const [linkProject, setLinkProject] = useState(ctx.sale?.project_id ?? (ctx.projects.length === 1 ? ctx.projects[0].id : ""));
   const [projectName, setProjectName] = useState(`Mission ${company.name}`);
+  // projet de la vente supprimé : jamais recréé sans votre accord (Q05)
+  const projectRemoved = !!ctx.sale?.project_removed_at && !ctx.sale?.project_id;
+  const [recreate, setRecreate] = useState(false);
   const [key] = useState(() => `sale-${crypto.randomUUID()}`);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +107,7 @@ function WinForm({ company, complete, ctx, onClose, onDone }: { company: { id: s
       closed_on: closedOn, signed_on: signedOn || null, documents_ready: docsReady, revenue,
       link_mission_id: linkMission || null, link_invoice_id: linkInvoice || null,
       link_project_id: ctx.sale?.project_id ? null : linkProject || null, project_name: projectName,
+      ...(projectRemoved ? { create_project: recreate } : {}),
     }, key));
     setBusy(false);
     // la même clé est gardée : « Réessayer » retrouve ce qui a déjà été enregistré, sans doublon
@@ -191,7 +195,13 @@ function WinForm({ company, complete, ctx, onClose, onDone }: { company: { id: s
         )}
       </fieldset>
 
-      {!ctx.sale?.project_id && (
+      {projectRemoved && !linkProject && (
+        <label className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm" data-project-removed>
+          <input type="checkbox" className="mt-0.5 accent-violet-600" checked={recreate} onChange={(e) => setRecreate(e.target.checked)} />
+          <span>Le projet de cette vente a été supprimé. Le recréer ?</span>
+        </label>
+      )}
+      {!ctx.sale?.project_id && (!projectRemoved || recreate || ctx.projects.length > 0) && (
         ctx.projects.length > 0 ? (
           <Field label="Projet">
             <Select value={linkProject} onChange={(e) => setLinkProject(e.target.value)} aria-label="Projet lié">

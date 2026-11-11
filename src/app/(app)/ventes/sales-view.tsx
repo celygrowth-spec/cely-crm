@@ -6,14 +6,15 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, ArrowRight, ExternalLink, FileText, FolderKanban, Loader2, MoreHorizontal, RotateCcw } from "lucide-react";
-import { retryPrepAction, setSaleStageAction } from "@/app/sales-actions";
+import { retryPrepAction } from "@/app/sales-actions";
+import { moveSaleStage } from "@/components/sales/project-sale-panel";
 import { useCrm } from "@/components/app-shell";
 import { WinSaleDialog, useSaleSync, useSales } from "@/components/sales/win-sale";
 import { Badge, Button, EmptyState, Modal, PageHeader, Select, cn } from "@/components/ui";
 import { attempt } from "@/lib/client/query";
 import { todayISO } from "@/lib/format";
 import {
-  BILLING_LABELS, BILLING_TONES, PERIODS, STAGE_LABELS, amountLine, board, byClosedDesc, inPeriod, metrics, missingItems, needsCompletion,
+  BILLING_LABELS, BILLING_TONES, PERIODS, STAGE_LABELS, amountLine, board, byClosedDesc, inPeriod, metrics, missingCount, needsCompletion,
   type Period, type SaleRow, type SaleStage,
 } from "@/lib/sales/rules";
 
@@ -103,7 +104,7 @@ function Board({ rows, toComplete, onShowWon }: { rows: SaleRow[]; toComplete: S
               <p className="text-xs text-muted">{c.hint}</p>
             </header>
             <div className="flex min-h-20 flex-col gap-2">
-              {c.rows.map((r) => <SaleCard key={r.company_id} r={r} />)}
+              {c.rows.map((r) => <SaleCard key={r.row_id} r={r} />)}
             </div>
           </section>
         ))}
@@ -120,23 +121,24 @@ function SaleCard({ r }: { r: SaleRow }) {
   const [complete, setComplete] = useState(false);
   const [busy, setBusy] = useState(false);
   const amount = amountLine(r);
-  const missing = missingItems(r);
+  const missing = missingCount(r);
   const projectHref = r.project_id ? `/projets/${r.project_id}` : null;
 
   async function stage(s: SaleStage) {
     if (!r.sale_id) return;
     setBusy(true);
-    const res = await attempt(() => setSaleStageAction(r.sale_id!, s));
+    const res = await moveSaleStage(r.sale_id!, s);
     setBusy(false);
     setMenu(false);
+    if (!res) return;
     if (!res.ok) return void toast.error(res.error);
     saleSync(r.company_id);
     toast.success(`${r.name} : ${STAGE_LABELS[s]}`);
   }
   async function retry() {
-    if (!r.sale_id) return;
+    if (!r.project_id) return;
     setBusy(true);
-    const res = await attempt(() => retryPrepAction(r.sale_id!));
+    const res = await attempt(() => retryPrepAction(r.project_id!));
     setBusy(false);
     if (!res.ok) return void toast.error(res.error);
     saleSync(r.company_id);
@@ -152,7 +154,7 @@ function SaleCard({ r }: { r: SaleRow }) {
       : <Button size="sm" variant="primary" onClick={() => setComplete(true)}>Lier un projet</Button>;
 
   return (
-    <article className="row-in rounded-lg border border-line bg-white p-2.5 shadow-xs" data-sale-card={r.company_id}>
+    <article className="row-in rounded-lg border border-line bg-white p-2.5 shadow-xs" data-sale-card={r.company_id} data-sale={r.sale_id ?? undefined}>
       <div className="flex items-start gap-1">
         <button type="button" onClick={() => openCompany(r.company_id, { name: r.name })} className="min-w-0 flex-1 text-left">
           <p className="truncate font-semibold">{r.name}</p>
@@ -181,7 +183,7 @@ function SaleCard({ r }: { r: SaleRow }) {
           <button type="button" onClick={() => setComplete(true)} className="text-xs font-semibold text-violet-strong hover:underline" data-fill-billing>Renseigner</button>
         )}
       </div>
-      <PrepLine r={r} missing={missing.length} busy={busy} onRetry={() => void retry()} />
+      <PrepLine r={r} missing={missing} busy={busy} onRetry={() => void retry()} />
       <div className="mt-2 flex items-center justify-between gap-2">
         {primary}
         {projectHref && r.stage !== "onboarding" && r.stage !== "en_mission" && (
@@ -198,40 +200,39 @@ function MenuBtn({ children, onClick, disabled }: { children: React.ReactNode; o
   return <button type="button" role="menuitem" disabled={disabled} onClick={onClick} className="block w-full rounded-lg px-2.5 py-2 text-left hover:bg-surface disabled:opacity-50">{children}</button>;
 }
 
-/** État de la préparation : en cours, éléments à compléter (lien vers le bon écran), interrompue (reprise). */
+/** État de la préparation (même source que Projets) : en cours, éléments à compléter, interrompue. */
 function PrepLine({ r, missing, busy, onRetry }: { r: SaleRow; missing: number; busy: boolean; onRetry: () => void }) {
-  if (!r.sale_id || !r.prep_state) return null;
-  if (r.prep_state === "pending" || r.prep_state === "running")
-    return <p className="mt-1.5 flex items-center gap-1 text-xs text-muted" data-prep="running"><Loader2 size={12} className="animate-spin" /> Préparation du projet…</p>;
-  if (r.prep_state === "failed")
+  if (!r.sale_id || !r.project_id || !r.prep_status) return null;
+  if (r.prep_error)
     return (
       <p className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-danger" data-prep="failed">
-        <AlertTriangle size={12} /> Préparation interrompue{r.prep_error ? ` : ${r.prep_error}` : ""}.
-        <span className="text-muted">Vente{r.mission_id ? ", revenu" : ""}{r.project_id ? " et projet" : ""} déjà enregistrés.</span>
+        <AlertTriangle size={12} /> Préparation interrompue : {r.prep_error}.
+        <span className="text-muted">Vente{r.mission_id ? ", revenu" : ""} et projet déjà enregistrés.</span>
         <button type="button" disabled={busy} onClick={onRetry} className="inline-flex items-center gap-0.5 font-semibold text-violet-strong hover:underline"><RotateCcw size={11} /> Reprendre</button>
       </p>
     );
-  if (missing > 0 && r.project_id)
+  if (r.prep_status === "preparing")
+    return <p className="mt-1.5 flex items-center gap-1 text-xs text-muted" data-prep="running"><Loader2 size={12} className="animate-spin" /> Préparation du projet…</p>;
+  if (missing > 0)
     return <Link href={`/projets/${r.project_id}`} className="mt-1.5 block text-xs font-semibold text-warning hover:underline" data-prep="incomplete">{missing} élément{missing > 1 ? "s" : ""} à compléter</Link>;
-  if (r.prep_state === "ready" && r.stage === "onboarding") return <p className="mt-1.5 text-xs text-success" data-prep="ready">Prêt pour l&apos;onboarding</p>;
+  if (r.prep_status === "ready" && r.stage === "onboarding") return <p className="mt-1.5 text-xs text-success" data-prep="ready">Prêt pour l&apos;onboarding</p>;
   return null;
 }
 
-/** Devis / Contrat : documents de la fiche, puis passage en Onboarding une fois validés. */
+/** Devis / Contrat : un fichier « Contrat » est une pièce à examiner ; seule votre confirmation vaut signature. */
 function FinaliseDialog({ r, open, onClose, onReady }: { r: SaleRow; open: boolean; onClose: () => void; onReady: () => void }) {
-  const contract = (r.prep?.items ?? []).find((i) => i.key === "contrat");
-  const proposition = (r.prep?.items ?? []).find((i) => i.key === "proposition");
+  const [checked, setChecked] = useState(false);
   return (
     <Modal open={open} onClose={onClose} title={`Finaliser le dossier · ${r.name}`}>
       <div className="space-y-3 text-sm">
-        <p className="text-muted">Il reste des formalités après la vente : devis signé, contrat, bon de commande. Rangez-les dans les documents de la fiche (catégories « Proposition » et « Contrat »).</p>
-        <ul className="space-y-1">
-          <li>{proposition?.done ? "✓" : "•"} Proposition acceptée {proposition?.done ? "sur la fiche" : "— à ajouter"}</li>
-          <li>{contract?.done ? "✓" : "•"} Devis ou contrat signé {contract?.done ? "sur la fiche" : "— à ajouter ou à confirmer"}</li>
-        </ul>
+        <p className="text-muted">Formalités après la vente : devis signé, contrat, bon de commande. Rangez les pièces dans les documents de la fiche (catégories « Proposition » et « Contrat ») : elles y sont à examiner ; ajouter un fichier ne vaut pas signature.</p>
+        <label className="flex items-start gap-2">
+          <input type="checkbox" className="mt-0.5 accent-violet-600" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
+          <span>J&apos;ai vérifié : le devis ou le contrat est accepté et signé.</span>
+        </label>
         <div className="flex flex-wrap justify-end gap-2">
           <Link href={`/fiches/${r.company_id}`} className="inline-flex h-9 items-center gap-1 rounded-lg border border-line px-3 font-semibold hover:bg-surface">Documents de la fiche <ExternalLink size={12} /></Link>
-          <Button variant="primary" onClick={onReady} disabled={!r.sale_id}>Documents validés : passer en Onboarding</Button>
+          <Button variant="primary" onClick={onReady} disabled={!r.sale_id || !checked}>Confirmer : passer en Onboarding</Button>
         </div>
       </div>
     </Modal>
@@ -254,10 +255,10 @@ function WonList({ rows }: { rows: SaleRow[] }) {
         </thead>
         <tbody className="divide-y divide-line">
           {rows.map((r) => (
-            <tr key={r.company_id} className="hover:bg-surface/60">
-              <td className="px-3 py-2"><button type="button" onClick={() => openCompany(r.company_id, { name: r.name })} className="font-semibold hover:underline">{r.name}</button></td>
+            <tr key={r.row_id} className="hover:bg-surface/60">
+              <td className="px-3 py-2"><button type="button" onClick={() => openCompany(r.company_id, { name: r.name })} className="font-semibold hover:underline">{r.name}</button>{(r.cycle ?? 1) > 1 && <span className="ml-1 text-xs text-muted">· vente n° {r.cycle}</span>}</td>
               <td className="px-3 py-2 whitespace-nowrap">{dayLabel(r.closed_on)}</td>
-              <td className="px-3 py-2 whitespace-nowrap">{amountLine(r) ?? <span className="text-muted">—</span>}</td>
+              <td className="px-3 py-2 whitespace-nowrap">{amountLine(r) ?? <span className="text-muted">—</span>}{r.mission_status === "termine" && <span className="ml-1 text-xs text-muted">(revenu arrêté)</span>}</td>
               <td className="px-3 py-2">{r.project_id ? <Link href={`/projets/${r.project_id}`} className="hover:underline">{r.project_name}</Link> : <span className="text-muted">—</span>}</td>
               <td className="px-3 py-2"><Badge tone={BILLING_TONES[r.billing]}>{BILLING_LABELS[r.billing]}</Badge></td>
               <td className="px-3 py-2">
@@ -285,7 +286,7 @@ function LostList({ rows }: { rows: SaleRow[] }) {
         </thead>
         <tbody className="divide-y divide-line">
           {rows.map((r) => (
-            <tr key={r.company_id} className="hover:bg-surface/60">
+            <tr key={r.row_id} className="hover:bg-surface/60">
               <td className="px-3 py-2"><button type="button" onClick={() => openCompany(r.company_id, { name: r.name })} className="font-semibold hover:underline">{r.name}</button></td>
               <td className="px-3 py-2 whitespace-nowrap">{dayLabel(r.closed_on)}</td>
               <td className="px-3 py-2">{r.stage_name ? `${r.pipeline_name} › ${r.stage_name}` : <span className="text-muted">—</span>}</td>

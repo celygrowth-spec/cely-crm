@@ -243,7 +243,7 @@ export function registerTools(server: McpServer, client: GetClient) {
     {
       title: "Déplacer une fiche dans un pipeline",
       description:
-        "Place la fiche dans une étape existante (même fiche, aucune copie). L'entrée dans un pipeline arrête les relances de prospection actives. Si l'étape demandée n'existe pas exactement, demandez à l'utilisateur au lieu d'en choisir une.",
+        "Place la fiche dans une étape existante (même fiche, aucune copie). L'entrée dans un pipeline arrête les relances de prospection actives. Si l'étape demandée n'existe pas exactement, demandez à l'utilisateur au lieu d'en choisir une. Une opportunité gagnée ou perdue reste clôturée : l'outil refuse de la déplacer ; seul l'utilisateur peut la rouvrir depuis la fiche (« Rouvrir l'opportunité »).",
       inputSchema: z.object({ company_id: uuid, stage_id: uuid, request_id: requestId }),
     },
     async ({ company_id, stage_id, request_id }, sb) => {

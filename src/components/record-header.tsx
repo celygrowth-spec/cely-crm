@@ -96,7 +96,9 @@ function StageControl({ ctx }: { ctx: RecordCtx }) {
       <select
         value={c.stage_id ?? ""}
         onChange={(e) => move(e.target.value)}
-        title={`${c.pipeline?.name ?? ""} › ${c.stage?.name ?? "—"}`}
+        disabled={c.deal_status !== "open"}
+        data-stage-locked={c.deal_status !== "open" || undefined}
+        title={c.deal_status !== "open" ? `${c.pipeline?.name ?? ""} › ${c.stage?.name ?? "—"} — opportunité clôturée : « Rouvrir l'opportunité » pour changer d'étape` : `${c.pipeline?.name ?? ""} › ${c.stage?.name ?? "—"}`}
         className={cn(selectCls, "border-violet-line bg-violet-soft text-violet-strong")}
         aria-label="Étape du pipeline"
       >
