@@ -59,7 +59,7 @@ async function gmail(sb: SupabaseClient, c: Checks): Promise<Connector> {
       ...accounts.filter((a) => a !== active).map((a) => ({ label: "Autre compte", value: `${a.email} · ${a.status === "disconnected" ? "déconnecté" : a.status === "needs_reconnect" ? "à reconnecter" : "connecté"}`, tone: "muted" as const })),
       { label: "Identifiants Google côté serveur", value: configured ? "Présents" : "Absents (GOOGLE_MAIL_CLIENT_ID, GOOGLE_MAIL_CLIENT_SECRET, MAIL_TOKEN_KEY)", tone: configured ? ("ok" as const) : ("warn" as const) },
     ],
-    disconnect: active ? { label: "Déconnecter Gmail", effect: "Les prochains envois qui dépendent de Gmail sont suspendus (les envois programmés sont annulés) et l'accès est révoqué chez Google. Les emails déjà envoyés restent dans l'historique des fiches." } : null,
+    disconnect: active ? { label: "Déconnecter Gmail", effect: "Les prochains envois qui dépendent de Gmail sont suspendus et l'accès est révoqué chez Google. Les emails déjà envoyés restent dans l'historique des fiches." } : null,
     external: "Le client OAuth et l'écran de consentement se gèrent dans Google Cloud ; les variables dans Vercel.",
     lastSuccess: dated(lastSent, "Dernier envoi réussi"),
     account: active ? String(active.email) : null,

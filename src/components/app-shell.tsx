@@ -40,7 +40,7 @@ export const PROSPECTION_NAV = [
   { href: "/prospection/campagnes", label: "Campagnes" },
   { href: "/prospection/base", label: "Base de prospects" },
   { href: "/prospection/listes", label: "Listes" },
-  { href: "/prospection/modeles", label: "Modèles" },
+  { href: "/prospection/modeles", label: "Modèles de séquence" },
   { href: "/prospection/doublons", label: "Doublons" },
   { href: "/prospection/import", label: "Import / export" },
 ];
