@@ -82,7 +82,8 @@ export type OnboardingDeck = {
   shared_at: string | null;
 };
 
-export type CompanyDoc = { id: string; display_name: string; category: string | null; created_at: string };
+/** `reading` : contenu lu par le CRM (K10) : ok, empty (rien de lisible), unsupported, failed, ou null (pas encore lu). */
+export type CompanyDoc = { id: string; display_name: string; category: string | null; created_at: string; reading?: { status: string; error: string | null; chars: number } | null };
 export type Contact = { id: string; name: string; title: string | null; email: string | null; phone: string | null; is_primary: boolean };
 
 export type Onboarding = {

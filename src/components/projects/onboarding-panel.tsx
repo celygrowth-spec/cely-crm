@@ -443,7 +443,15 @@ function MissionView({ o, run, projectId }: { o: Onboarding; run: Run; projectId
           <li>Proposition : {proposal ? <button type="button" className="font-semibold text-violet-strong underline" onClick={() => openDocument(projectId, proposal.id)}>{proposal.display_name}</button> : <span className="text-muted">aucune retenue</span>}</li>
           <li>Appels Fireflies : <span className="text-muted">{o.sections.context?.items.filter((x) => x.refs?.some((r) => r.kind === "call")).length || "aucun"} résumé(s)</span></li>
           <li>Diagnostic : <span className="text-muted">{o.diagnostic_id ? "dernier diagnostic avec une version prête" : "aucun"}</span></li>
-          <li className="text-xs text-muted">Le CRM lit les résumés et transcriptions Fireflies et le texte du diagnostic. Le contenu des documents (PDF, Word, PowerPoint) n&apos;est lu que par Claude, lors de l&apos;analyse.</li>
+          {o.documents.filter((d) => d.category === "Proposition" || d.category === "Contrat" || d.category === "Brief").map((d) => (
+            <li key={d.id} className="text-xs" data-doc-reading={d.reading?.status ?? "a_lire"}>
+              {d.display_name} :{" "}
+              {d.reading?.status === "ok" ? <span className="text-success">contenu lu ({d.reading.chars.toLocaleString("fr-FR")} caractères)</span>
+                : d.reading ? <span className="text-warning">{d.reading.error ?? "non lu"}</span>
+                : <span className="text-muted">lecture à la prochaine préparation</span>}
+            </li>
+          ))}
+          <li className="text-xs text-muted">Le CRM lit le texte des PDF, documents Word (.docx) et fichiers texte ; la proposition retenue fait référence pour les engagements. Les résumés Fireflies et le diagnostic complètent le contexte.</li>
         </ul>
       </Card>
       {CONTEXT.map((k) => o.sections[k]?.items.length ? <SectionCard key={k} k={k} o={o} run={run} projectId={projectId} /> : null)}

@@ -29,6 +29,7 @@
     "@tiptap/react": "^3.33.0",
     "@tiptap/starter-kit": "^3.33.0",
     "clsx": "^2.1.1",
+    "fflate": "0.8.2",
     "lucide-react": "^1.64.0",
     "mcp-handler": "^2.3.0",
     "next": "16.4.3",
@@ -40,6 +41,7 @@
     "server-only": "^0.0.1",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.7.0",
+    "unpdf": "1.4.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
