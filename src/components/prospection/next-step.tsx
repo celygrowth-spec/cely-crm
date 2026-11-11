@@ -3,7 +3,6 @@
 // Suite après « Intéressé » ou « RDV obtenu » (Q04) : la fiche ne doit jamais sortir de toutes les listes.
 // Trois choix : une tâche de suivi (par défaut), une étape du pipeline, ou un rendez-vous déjà planifié (la base
 // vérifie alors qu'il existe un rendez-vous à venir ou une tâche ouverte, sinon elle refuse avec une explication).
-import { useState } from "react";
 import { addDaysISO, todayISO } from "@/lib/format";
 import type { NextStep } from "@/lib/prospection/service";
 import { useCrm } from "../app-shell";
@@ -19,10 +18,6 @@ export function defaultNext(outcome: "interested" | "meeting", companyName: stri
 
 export const toNextStep = (c: NextChoice): NextStep | null =>
   c.mode === "task" ? { task: { title: c.title, due_date: c.due } } : c.mode === "stage" && c.stage ? { stage_id: c.stage } : null;
-
-export function useNextChoice(outcome: "interested" | "meeting", companyName: string) {
-  return useState<NextChoice>(() => defaultNext(outcome, companyName));
-}
 
 export function NextStepFields({ value, onChange, outcome }: { value: NextChoice; onChange: (c: NextChoice) => void; outcome: "interested" | "meeting" }) {
   const { pipelines } = useCrm();

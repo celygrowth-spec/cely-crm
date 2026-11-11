@@ -356,12 +356,5 @@ export async function saveView(sb: SupabaseClient, v: { id?: string | null; scop
 export async function deleteView(sb: SupabaseClient, id: string) {
   check(await sb.from("saved_views").delete().eq("id", uuid.parse(id)));
 }
-export async function getPreference<T>(sb: SupabaseClient, key: string): Promise<T | null> {
-  const r = check(await sb.from("user_preferences").select("value").eq("key", key).maybeSingle()) as { value: T } | null;
-  return r?.value ?? null;
-}
-export async function setPreference(sb: SupabaseClient, key: string, value: unknown) {
-  check(await sb.from("user_preferences").upsert({ key, value }));
-}
 
 export type { StepType };

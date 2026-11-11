@@ -1,5 +1,5 @@
 // Libellés français et formats d'affichage.
-import type { Channel, InteractionKind, ParticipantStatus, ProspectStatus } from "@/lib/crm/types";
+import type { Channel, InteractionKind, ProspectStatus } from "@/lib/crm/types";
 
 export const TZ = "Europe/Paris";
 
@@ -9,15 +9,6 @@ export const PROSPECT_STATUS_LABELS: Record<ProspectStatus, string> = {
   en_discussion: "En discussion",
   qualifie: "Qualifié",
   pas_interesse: "Pas intéressé",
-};
-
-export const PARTICIPANT_STATUS_LABELS: Record<ParticipantStatus, string> = {
-  a_preparer: "À préparer",
-  a_contacter: "À contacter",
-  en_cours: "En cours",
-  a_repondu: "A répondu",
-  termine: "Terminé",
-  arrete: "Arrêté",
 };
 
 export const CHANNEL_LABELS: Record<Channel, string> = {
