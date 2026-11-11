@@ -99,7 +99,7 @@ const fmt = (iso: string) => new Intl.DateTimeFormat("fr-FR", { day: "numeric", 
 const GCAL = {
   key: "google_calendar" as const, name: "Google Agenda", usage: "Rendez-vous et points projet",
   feeds: ["Disponibilités de la page de réservation (agendas vérifiés)", "Événements des rendez-vous et des points projet", "Liens Google Meet des types de rendez-vous qui l'activent", "Signalement des déplacements faits directement dans Google"],
-  links: [{ label: "Ouvrir la connexion agenda", href: "/rendez-vous/agenda-google" }],
+  links: [{ label: "Choisir les agendas et suivre la synchronisation", href: "/parametres/connecteurs/google-agenda" }],
 };
 
 async function calendar(sb: SupabaseClient, c: Checks): Promise<Connector> {
@@ -135,7 +135,7 @@ async function calendar(sb: SupabaseClient, c: Checks): Promise<Connector> {
   if (r.status === "error") {
     const revoked = /invalid_grant|révoqu|401|unauthor/i.test(err);
     return { ...base, state: revoked ? "reconnect" : "sync_error", problem: { at: (r.updated_at as string) ?? null, message: revoked ? "Google a refusé l'accès (révoqué ou expiré)." : readable(err) }, note: null,
-      primary: revoked ? { kind: "link", label: "Reconnecter", href: base.reconnectHref ?? "/rendez-vous/agenda-google" } : { kind: "verify", label: "Vérifier" } };
+      primary: revoked ? { kind: "link", label: "Reconnecter", href: base.reconnectHref ?? "/parametres/connecteurs/google-agenda" } : { kind: "verify", label: "Vérifier" } };
   }
   if (r.events_sync_error || out > 0) {
     return { ...base, state: "sync_error", problem: { at: (r.updated_at as string) ?? null, message: out > 0 ? `${out} rendez-vous pas encore répercuté(s) dans Google.` : readable(String(r.events_sync_error)) }, note: null, primary: { kind: "manage", label: "Gérer" } };

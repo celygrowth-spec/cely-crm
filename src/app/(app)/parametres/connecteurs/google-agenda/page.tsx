@@ -1,6 +1,7 @@
 import { requireOwner } from "@/lib/auth";
 import { configStatus } from "@/lib/appointments/config";
 import { getGoogleConnection } from "@/lib/appointments/owner";
+import Link from "next/link";
 import { PageHeader } from "@/components/ui";
 import { GoogleView } from "./google-view";
 
@@ -23,7 +24,8 @@ export default async function GooglePage({ searchParams }: { searchParams: Promi
   ]);
   return (
     <div>
-      <PageHeader title="Connexion agenda" description="Google Agenda : vérification des indisponibilités et création des événements." />
+      <Link href="/parametres/connecteurs" className="text-sm font-semibold text-muted hover:text-ink">← Connecteurs</Link>
+      <PageHeader title="Google Agenda" description="Agendas vérifiés pour les disponibilités, agenda qui reçoit les rendez-vous, synchronisation." />
       <GoogleView
         connection={conn}
         config={configStatus()}

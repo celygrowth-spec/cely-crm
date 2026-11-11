@@ -8,7 +8,7 @@ import { appointmentsSecretOrNull } from "@/lib/appointments/config";
 
 export async function GET(req: NextRequest) {
   await requireAppOwner();
-  const back = new URL("/rendez-vous/agenda-google", req.nextUrl.origin);
+  const back = new URL("/parametres/connecteurs/google-agenda", req.nextUrl.origin);
   if (!googleConfig() || !appointmentsSecretOrNull()) {
     back.searchParams.set("erreur", "config");
     return NextResponse.redirect(back);

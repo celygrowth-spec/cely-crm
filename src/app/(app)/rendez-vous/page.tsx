@@ -45,7 +45,7 @@ export default async function RdvOverviewPage() {
 
       {data.outOfSync.length > 0 && (
         <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-warning">
-          {data.outOfSync.length} rendez-vous pas encore répercuté(s) dans Google Agenda. <Link className="font-semibold underline" href="/rendez-vous/agenda-google">Voir la connexion</Link>
+          {data.outOfSync.length} rendez-vous pas encore répercuté(s) dans Google Agenda. <Link className="font-semibold underline" href="/parametres/connecteurs/google-agenda">Voir la connexion</Link>
         </p>
       )}
 
