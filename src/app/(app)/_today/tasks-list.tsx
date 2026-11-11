@@ -4,25 +4,26 @@ import { useRouter } from "next/navigation";
 import { useCrm } from "@/components/app-shell";
 import { TaskRow } from "@/components/record-tasks";
 import type { TodoItem } from "@/lib/crm/types";
+import { ProjectTaskRow } from "./project-task-row";
 
-export function TasksBlock({ tasks }: { tasks: TodoItem[] }) {
+/** Tâches CRM et tâches de projet attribuées à moi, chacune validée sur sa tâche d'origine. */
+export function TasksList({ tasks }: { tasks: TodoItem[] }) {
   const router = useRouter();
   const { openCompany } = useCrm();
   return (
-    <section>
-      <h2 className="mb-1.5 font-label text-xs font-bold text-muted uppercase">Tâches manuelles · {tasks.length}</h2>
-      <div className="space-y-1.5">
-        {tasks.map((t) => (
+    <div className="space-y-1.5">
+      {tasks.map((t) =>
+        t.item_type === "project_task" ? <ProjectTaskRow key={`p-${t.id}`} t={t} /> : (
           <TaskRow
-            key={t.id}
+            key={`t-${t.id}`}
             task={{ id: t.id, title: t.title, due_date: t.due_date }}
             companyLabel={t.company_name}
             personLabel={t.person_name || undefined}
             onOpenCompany={() => openCompany(t.company_id)}
             onChanged={() => router.refresh()}
           />
-        ))}
-      </div>
-    </section>
+        ),
+      )}
+    </div>
   );
 }

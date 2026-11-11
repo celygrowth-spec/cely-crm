@@ -463,12 +463,12 @@ describe("historique des appels", () => {
     const { rows } = await db.query<{ proname: string }>(`
       select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.prosrc ilike '%fireflies%' and p.proname not like 'fireflies\\_%' and p.proname not like 'onboarding\\_%'
-         and p.proname <> 'merge_preview'`);
+         and p.proname not in ('merge_preview', 'nav_counters')`);
     expect(rows).toEqual([]);
-    // la préparation des projets et l'aperçu de fusion (comptes) lisent les appels, mais n'est ouverte qu'au propriétaire connecté
+    // la préparation des projets, l'aperçu de fusion et le compteur du menu (comptes) lisent les appels, mais n'est ouverte qu'au propriétaire connecté
     const open = await db.query(`
       select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-       where n.nspname = 'public' and (p.proname like 'onboarding\\_%' or p.proname = 'merge_preview') and p.prosrc ilike '%fireflies%' and has_function_privilege('anon', p.oid, 'execute')`);
+       where n.nspname = 'public' and (p.proname like 'onboarding\\_%' or p.proname in ('merge_preview', 'nav_counters')) and p.prosrc ilike '%fireflies%' and has_function_privilege('anon', p.oid, 'execute')`);
     expect(open.rows).toEqual([]);
   });
 

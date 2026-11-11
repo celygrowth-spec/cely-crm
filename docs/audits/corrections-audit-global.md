@@ -26,10 +26,10 @@ parcours rejoué dans l'application locale reliée à la base de test ; « réel
 | Q06 | 3 | ✅ | Acompte puis « Encaisser le solde (X €) » en un clic, reste affiché ; plafond = montant prévu ; facture liée à un mensuel au passage Gagné rattachée à l'échéance la plus proche | `finance-coherente.test.ts` (Q06), navigateur | lot 3 | — |
 | Q07 | 3 | ✅ | Montant estimé avant clôture ; après Gagné, montant du revenu confirmé (« X € / mois », `companies.amount_recurring`), suivi des modifications du revenu ; estimation conservée dans l'historique ; export avec l'unité ; vocabulaire « revenu » dans Finance | `finance-coherente.test.ts` (Q07), navigateur (fiche, export) | lot 3 | — |
 | K02 | 3 | ✅ | Un seul composant et une seule règle de revenu (`RevenueTerms`, `revenueTermsError`) pour Finance › Revenus, Revenus par client et « Marquer comme gagné » ; formulaire « Mission » retiré ; « Ajouter un revenu » n'ouvre plus une facture (« Enregistrer une facture ») | navigateur | lot 3 | — |
-| Q01 | 4 | ⏳ | | | | |
-| K01 | 4 | ⏳ | | | | |
-| Q04 | 4 | ⏳ | | | | |
-| K06 | 4 | ⏳ | | | | |
+| Q01 | 4 | ✅ | `todo_items` inclut les tâches de projet attribuées à moi (projets actifs) : « Aujourd'hui », compteur du menu et prochaine action de la fiche ; validation sur la tâche d'origine (projet) | `aujourdhui.test.ts` (Q01), navigateur `tests/e2e/lot4-aujourdhui.cjs` | lot 4 | — |
+| K01 | 4 | ✅ | Une page « Aujourd'hui » à la racine (1re entrée du menu) : tâches CRM et de projet, relances avec Focus, réponses à traiter, appels à rattacher ; filtre aujourd'hui / 7 jours / tout ; `/a-faire` et `/prospection/aujourdhui` redirigent ; « À faire » retiré du menu | navigateur (redirections, compteur) | lot 4 | — |
+| Q04 | 4 | ✅ | « Intéressé » et « RDV obtenu » demandent une suite (tâche de suivi par défaut, étape, ou rendez-vous déjà planifié) dans Focus, Réponses et le panneau participant ; refus en base sans suite | `aujourdhui.test.ts` (Q04), navigateur | lot 4 | — |
+| K06 | 4 | ✅ | Réponse + résultat en une opération (`record_reply` avec résultat) ; clés liées aux paramètres pour réponse, résultat et création de tâche ; Focus n'enchaîne plus deux appels | `aujourdhui.test.ts` (K06), navigateur (double clic : une tâche) | lot 4 | — |
 | C07 | 5 | ⏳ | | | | |
 | C08 | 5 | ⏳ | | | | |
 | C09 | 5 | ⏳ | | | | |
@@ -89,3 +89,14 @@ parcours rejoué dans l'application locale reliée à la base de test ; « réel
 - Défaut trouvé pendant la recette : le rattrapage des fusions (lot 2) déplaçait le revenu et le projet d'une vente
   laissée en place dans un cas ambigu ; un cas ambigu ne déplace désormais plus rien. Les données issues des
   anciennes fusions (revenu déplacé, vente restée) ne bloquent pas l'installation ; le rattrapage les réunit.
+
+## Lot 4 — une seule page « Aujourd'hui »
+- Migration `20261115000400_aujourdhui.sql` (vue `todo_items` : colonnes ajoutées en fin ; `nav_counters` ;
+  `set_participant_outcome` et `record_reply` : paramètres ajoutés avec valeurs par défaut, appels existants
+  inchangés). Description : `docs/aujourdhui.md`.
+- Vérifié dans le navigateur (`tests/e2e/lot4-aujourdhui.cjs`) : l'accueil est « Aujourd'hui » ; tâche de projet du
+  jour listée et comptée dans le menu ; cochée → terminée dans le projet et retirée de la file ; anciennes adresses
+  redirigées ; « RDV obtenu » sur une réponse propose la tâche « Préparer le rendez-vous », double clic = une seule
+  tâche, la fiche réapparaît dans « 7 prochains jours ».
+- Environnement de test : le simulateur PostgREST charge maintenant les ressources parentes avec alias
+  (`company:companies!inner(...)`), comme le vrai PostgREST (la page Réponses ne s'affichait pas en recette locale).

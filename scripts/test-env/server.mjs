@@ -87,7 +87,8 @@ function parseSelect(sel) {
       const name = c.split("(")[0];
       const inner = c.slice(c.indexOf("(") + 1, c.lastIndexOf(")"));
       // ressource enfant sans alias (ex. stages(id, name)) : chargée un-à-plusieurs par sa clé étrangère
-      embeds.push(name.includes(":") ? { key: name.split(":")[0], val: null } : { key: name, val: [], table: name.replace(/!.*/, ""), inner });
+      // alias:table(...) : ressource parente (plusieurs-à-un), chargée par la clé étrangère de la ligne
+      embeds.push(name.includes(":") ? { key: name.split(":")[0], val: null, parent: name.split(":")[1].replace(/!.*/, ""), inner } : { key: name, val: [], table: name.replace(/!.*/, ""), inner });
     } else plain.push(c === "*" ? "*" : ident(c));
   }
   return { cols: plain.length ? plain.join(", ") : "1 as _", embeds };
@@ -261,6 +262,22 @@ const server = http.createServer(async (req, res) => {
             const innerCols = parseSelect(e.inner).cols;
             const kids = (await tx.query(`select ${innerCols}, ${ident(fk)} as __fk from public.${ident(e.table)} where ${ident(fk)} = any($1)`, [rows.map((r) => r.id)])).rows;
             for (const r of rows) r[`__embed_${e.key}`] = kids.filter((k) => k.__fk === r.id).map((k) => { const { __fk: _fk, _: _x, ...rest } = k; void _fk; void _x; return rest; });
+          }
+          for (const e of embeds.filter((x) => x.parent && /^\w+$/.test(x.parent))) {
+            const fk = (await tx.query(`select a.attname from pg_constraint c join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+              where c.contype = 'f' and c.conrelid = $1::regclass and c.confrelid = $2::regclass limit 1`, [`public.${t}`, `public.${e.parent}`]).catch(() => ({ rows: [] }))).rows[0]?.attname;
+            if (!fk || !rows.length || (!(fk in rows[0]) && !("id" in rows[0]))) continue;
+            // clé étrangère non sélectionnée : lue à part (PostgREST la résout sans qu'on la demande)
+            const fkOf = new Map();
+            if (!(fk in rows[0])) for (const x of (await tx.query(`select id, ${ident(fk)} as v from public.${t} where id = any($1)`, [rows.map((r) => r.id)])).rows) fkOf.set(x.id, x.v);
+            const val = (r) => (fk in r ? r[fk] : fkOf.get(r.id));
+            const innerCols = parseSelect(e.inner).cols;
+            const ids = [...new Set(rows.map(val).filter(Boolean))];
+            const parents = ids.length ? (await tx.query(`select ${innerCols}, id as __pk from public.${ident(e.parent)} where id = any($1)`, [ids])).rows : [];
+            for (const r of rows) {
+              const hit = parents.find((x) => x.__pk === val(r));
+              if (hit) { const { __pk: _pk, _: _x, ...rest } = hit; void _pk; void _x; r[`__embed_${e.key}`] = rest; }
+            }
           }
           const count = prefer.includes("count=exact") ? (await tx.query(`select count(*)::int n from public.${t}${where(p)}`)).rows[0].n : null;
           return { rows, count };

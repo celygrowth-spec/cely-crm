@@ -117,8 +117,9 @@ export async function addInteractionAction(input: InteractionInput, idempotencyK
   return run((sb) => crm.addInteraction(sb, input, idempotencyKey));
 }
 
-export async function createTaskAction(input: TaskInput) {
-  return run((sb) => crm.createTask(sb, input));
+/** `key` : une seule tâche malgré un double clic ou une reprise réseau (K06). */
+export async function createTaskAction(input: TaskInput, key?: string) {
+  return run((sb) => crm.createTask(sb, input, key));
 }
 
 export async function postponeTaskAction(taskId: string, dueDate: string) {

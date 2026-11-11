@@ -36,7 +36,6 @@ export function useCrm() {
 }
 
 export const PROSPECTION_NAV = [
-  { href: "/prospection/aujourdhui", label: "Aujourd'hui" },
   { href: "/prospection/reponses", label: "Réponses à traiter" },
   { href: "/prospection/campagnes", label: "Campagnes" },
   { href: "/prospection/base", label: "Base de prospects" },
@@ -66,6 +65,7 @@ export const RDV_NAV = [
 ];
 
 const NAV = [
+  { href: "/", label: "Aujourd'hui", icon: CheckSquare },
   { href: "/prospection", label: "Prospection", icon: Users },
   { href: "/pipelines", label: "Pipelines", icon: Columns3 },
   { href: "/ventes", label: "Ventes", icon: Trophy },
@@ -73,7 +73,6 @@ const NAV = [
   { href: "/rendez-vous", label: "Rendez-vous", icon: CalendarDays },
   { href: "/finance", label: "Finance", icon: Wallet },
   { href: "/temps", label: "Temps", icon: Timer },
-  { href: "/a-faire", label: "À faire", icon: CheckSquare },
   { href: "/mail", label: "Mail", icon: Mail },
   { href: "/appels", label: "Appels", icon: PhoneCall },
   { href: "/parametres", label: "Paramètres", icon: Settings },
@@ -199,14 +198,14 @@ function Shell({
                   >
                     <Icon size={17} className={active ? "text-violet-strong" : undefined} />
                     <span className="flex-1">{label}</span>
-                    {href === "/a-faire" && todoCount > 0 && (
+                    {href === "/" && todoCount > 0 && (
                       <span className="hidden rounded-full bg-violet px-1.5 font-label text-[10px] text-white md:inline">{todoCount}</span>
                     )}
                   </Link>
                   {href === "/prospection" && active && (
                     <div className="mt-0.5 mb-1 ml-[22px] hidden border-l border-line pl-2 md:block">
                       {PROSPECTION_NAV.map((n) => {
-                        const on = pathname === n.href || pathname.startsWith(n.href + "/") || (n.href.endsWith("aujourdhui") && pathname.startsWith("/prospection/focus"));
+                        const on = pathname === n.href || pathname.startsWith(n.href + "/") || (n.href.endsWith("campagnes") && pathname.startsWith("/prospection/focus"));
                         return (
                           <Link
                             key={n.href}
@@ -220,7 +219,7 @@ function Shell({
                             {n.href.endsWith("reponses") && repliesCount > 0 && (
                               <span className="rounded-full bg-amber-100 px-1.5 font-label text-[10px] font-bold text-amber-800">{repliesCount}</span>
                             )}
-                            {n.href.endsWith("aujourdhui") && dueCount > 0 && (
+                            {n.href.endsWith("campagnes") && dueCount > 0 && (
                               <span className="rounded-full bg-violet px-1.5 font-label text-[10px] font-bold text-white">{dueCount}</span>
                             )}
                           </Link>

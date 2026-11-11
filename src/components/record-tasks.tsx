@@ -15,13 +15,15 @@ export function TaskForm({ companyId, people, onDone }: { companyId: string; peo
   const [due, setDue] = useState(addDaysISO(todayISO(), 1));
   const [personId, setPersonId] = useState("");
   const [pending, setPending] = useState(false);
+  const [key, setKey] = useState(() => crypto.randomUUID());
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
     setPending(true);
-    const res = await attempt(() => createTaskAction({ company_id: companyId, title, due_date: due, person_id: personId || null }));
+    const res = await attempt(() => createTaskAction({ company_id: companyId, title, due_date: due, person_id: personId || null }, key));
     setPending(false);
-    if (!res.ok) return toast.error(res.error);
+    if (!res.ok) return toast.error(res.error); // même clé : « réessayer » ne crée pas de doublon
+    setKey(crypto.randomUUID());
     await onDone();
   }
 
