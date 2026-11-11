@@ -8,6 +8,11 @@ import { EmptyState } from "@/components/ui";
 
 // Aperçu du portail tel qu'un contact le voit : contenu produit par la même fonction de visibilité que le
 // vrai portail (portal_private.project_view). Ne remplace pas un test avec un véritable accès client.
+/** Accès présent, non révoqué (filtré en requête) et non expiré. */
+function accessValid(a: { expires_at: string | null } | null) {
+  return !!a && (!a.expires_at || Date.parse(a.expires_at) > Date.now());
+}
+
 export default async function PreviewPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ personne?: string }> }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -24,7 +29,7 @@ export default async function PreviewPage({ params, searchParams }: { params: Pr
   ]);
   const published = !!(proj as { portal_published?: boolean } | null)?.portal_published;
   const a = access as { expires_at: string | null } | null;
-  const validAccess = !!a && (!a.expires_at || Date.parse(a.expires_at) > Date.now());
+  const validAccess = accessValid(a);
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-violet-line bg-violet-soft/50 px-3 py-2 text-sm">
