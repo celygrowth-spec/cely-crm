@@ -39,7 +39,7 @@ export default async function FinanceOverview({ searchParams }: { searchParams: 
   const empty = !data.invoices.length && !data.expenses.length && !data.missions.length;
   const range = `du=${period.from}&au=${period.to}`;
   const inv = invoicedIn(data.invoices, period.from, period.to);
-  const mrr = contractualMrr(data.missions);
+  const mrr = contractualMrr(data.missions, data.today);
   const us = urssafSummary(urssafRows(data));
 
   return (
@@ -77,7 +77,7 @@ export default async function FinanceOverview({ searchParams }: { searchParams: 
       <nav aria-label="Vues de détail" className="flex flex-wrap gap-x-5 gap-y-1.5 border-t border-line pt-3 text-xs text-muted">
         <Link className="hover:text-ink" href={`/finance/revenus?vue=factures&${range}`}>Facturé sur la période : <span className="font-semibold text-ink">{eur(inv.ht)}</span></Link>
         <Link className="hover:text-ink" href="/finance/revenus?type=mensuel">Revenu mensuel récurrent : <span className="font-semibold text-ink"><Money value={mrr} /></span></Link>
-        <Link className="hover:text-ink" href="/finance/clients">Clients actifs</Link>
+        <Link className="hover:text-ink" href="/finance/clients">Revenus par client</Link>
         <Link className="hover:text-ink" href="/finance/urssaf">URSSAF à provisionner : <span className="font-semibold text-ink"><Money value={us.toProvision} /></span></Link>
         <Link className="hover:text-ink" href="/finance/rentabilite">Rentabilité →</Link>
       </nav>

@@ -62,6 +62,15 @@ begin
             or exists (select 1 from public.sales where company_id = r.absorbed_id)) then
       continue; -- rien à rattacher : déjà traité
     end if;
+    -- vente en cours : rattachée seulement si la fiche finale n'en a pas et que son issue est compatible ;
+    -- sinon RIEN n'est déplacé pour cette fiche (sa vente, son revenu et son projet restent ensemble)
+    select * into v_active from public.sales where company_id = r.absorbed_id and state in ('won', 'reopened');
+    if v_active.id is not null and (
+         exists (select 1 from public.sales where company_id = r.final_id and state in ('won', 'reopened'))
+         or (select deal_status from public.companies where id = r.final_id) <> (case v_active.state when 'won' then 'won' else 'open' end)) then
+      v_skipped := v_skipped + 1;
+      continue;
+    end if;
     update public.projects set company_id = r.final_id where company_id = r.absorbed_id;
     update public.appt_bookings set company_id = r.final_id where company_id = r.absorbed_id;
     update public.finance_missions set company_id = r.final_id where company_id = r.absorbed_id;
@@ -72,17 +81,9 @@ begin
     select coalesce(max(cycle), 0) into v_offset from public.sales where company_id = r.final_id;
     update public.sales set company_id = r.final_id, cycle = cycle + v_offset
      where company_id = r.absorbed_id and state not in ('won', 'reopened');
-    -- vente en cours : seulement si la fiche finale n'en a pas et que son issue est compatible
-    select * into v_active from public.sales where company_id = r.absorbed_id and state in ('won', 'reopened');
     if v_active.id is not null then
-      if not exists (select 1 from public.sales where company_id = r.final_id and state in ('won', 'reopened'))
-         and (select deal_status from public.companies where id = r.final_id) = (case v_active.state when 'won' then 'won' else 'open' end) then
-        select coalesce(max(cycle), 0) into v_offset from public.sales where company_id = r.final_id;
-        update public.sales set company_id = r.final_id, cycle = v_offset + 1 where id = v_active.id;
-      else
-        v_skipped := v_skipped + 1;
-        continue;
-      end if;
+      select coalesce(max(cycle), 0) into v_offset from public.sales where company_id = r.final_id;
+      update public.sales set company_id = r.final_id, cycle = v_offset + 1 where id = v_active.id;
     end if;
     v_moved := v_moved + 1;
     perform public.log_event(r.final_id, 'merge', 'Rattrapage de fusion : éléments restés sur une fiche absorbée rattachés à cette fiche',

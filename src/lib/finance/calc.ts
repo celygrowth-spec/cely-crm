@@ -172,17 +172,21 @@ export function subscriptionTotals(subs: Subscription[], today: string) {
 // Missions
 // ---------------------------------------------------------------------------
 
-/** Revenu mensuel récurrent contractuel : missions récurrentes actives, ramenées au mois (HT). */
-export function contractualMrr(missions: Mission[]): KnownSum {
+/** Le revenu est-il en cours à cette date ? (un contrat dont la date de fin est passée n'est plus compté) */
+export const missionActiveOn = (m: Mission, day: string) =>
+  m.status === "actif" && (!m.end_date || m.end_date >= day);
+
+/** Revenu mensuel récurrent contractuel : missions récurrentes en cours à la date, ramenées au mois (HT). */
+export function contractualMrr(missions: Mission[], today: string): KnownSum {
   return sumKnown(
     missions
-      .filter((m) => m.status === "actif" && m.kind === "recurrent" && m.frequency)
+      .filter((m) => m.kind === "recurrent" && m.frequency && missionActiveOn(m, today))
       .map((m) => (m.amount == null ? null : mulDiv(m.amount, 1, FREQ_MONTHS[m.frequency!]))),
   );
 }
 
-export function activeClientIds(missions: Mission[]): string[] {
-  return [...new Set(missions.filter((m) => m.status === "actif").map((m) => m.company_id))];
+export function activeClientIds(missions: Mission[], today: string): string[] {
+  return [...new Set(missions.filter((m) => missionActiveOn(m, today)).map((m) => m.company_id))];
 }
 
 // ---------------------------------------------------------------------------
@@ -353,8 +357,8 @@ export function periodKpis(data: FinanceData, from: string, to: string) {
     cash: periodCash(data, from, to),
     estimatedBalance: estimatedBalanceAt(data, to < data.today ? to : data.today),
     toProvision: urssafSummary(rows).toProvision,
-    activeClients: activeClientIds(data.missions).length,
-    mrr: contractualMrr(data.missions),
+    activeClients: activeClientIds(data.missions, data.today).length,
+    mrr: contractualMrr(data.missions, data.today),
   };
 }
 
@@ -417,6 +421,20 @@ export type ForecastMonth = {
  * - estimé : échéances des missions actives, abonnements à venir, cotisations estimées.
  * Les opportunités du pipeline ne sont jamais comptées.
  */
+/**
+ * Taux de TVA attendu sur un revenu (en centièmes de %) : celui de sa dernière facture, sinon 20 % si la TVA
+ * est activée à cette date, sinon 0.
+ */
+export function vatRateFor(m: Mission, data: Pick<FinanceData, "invoices" | "settings">, day: string): number {
+  const last = data.invoices
+    .filter((i) => i.mission_id === m.id && i.kind === "facture" && !i.cancelled_at)
+    .sort((a, b) => b.issue_date.localeCompare(a.issue_date))[0];
+  if (last) return last.vat_rate ? Math.round(Number(last.vat_rate) * 100) : last.amount_ttc > last.amount_ht ? Math.round(((last.amount_ttc - last.amount_ht) * 10000) / last.amount_ht) : 0;
+  return settingsAt(data.settings, day)?.vat_enabled ? 2000 : 0;
+}
+/** HT → TTC, arrondi au centime comme en base (round(ht × taux / 100, 2)). */
+export const withVat = (ht: number, rateCentiPct: number) => ht + mulDiv(ht, rateCentiPct, 10000);
+
 export function forecast(data: FinanceData, months = 6): ForecastMonth[] {
   const cur = monthStart(data.today);
   const list = [cur, ...Array.from({ length: months }, (_, k) => addMonths(cur, k + 1))];
@@ -447,7 +465,8 @@ export function forecast(data: FinanceData, months = 6): ForecastMonth[] {
     for (const d of forecastDues(m, data.invoices, cur, last)) {
       if (d.amount == null) slot(d.date)!.unknown++;
       else {
-        slot(d.date)!.inEstime += d.amount;
+        // la trésorerie s'encaisse TTC (comme les factures « prévu ») ; les cotisations portent sur le HT (K14)
+        slot(d.date)!.inEstime += withVat(d.amount, vatRateFor(m, data, d.date));
         addBase(d.date, d.amount);
       }
     }

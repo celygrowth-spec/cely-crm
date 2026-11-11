@@ -8,7 +8,7 @@ import { addMonths } from "@/lib/finance/dates";
 import { eur } from "@/lib/finance/money";
 import {
   DUE_STATE,
-  REVENUE_STATUS,
+  revenueStatusLabel,
   anchorDate,
   monthlyDues,
   nextOpenDue,
@@ -30,9 +30,9 @@ export type RevenueRow =
 
 type Tone = "neutral" | "violet" | "success" | "danger" | "warning";
 const STATUS_TONE: Record<RevenueStatus, Tone> = {
-  prevu: "neutral", a_encaisser: "violet", en_retard: "danger", partiel: "warning", encaisse: "success", en_cours: "violet", termine: "neutral", a_verifier: "warning",
+  prevu: "neutral", a_encaisser: "violet", en_retard: "danger", partiel: "warning", encaisse: "success", a_jour: "success", termine: "neutral", a_verifier: "warning",
 };
-export const StatusBadge = ({ s }: { s: RevenueStatus }) => <Badge tone={STATUS_TONE[s]}>{REVENUE_STATUS[s]}</Badge>;
+export const StatusBadge = ({ s, kind }: { s: RevenueStatus; kind?: Mission["kind"] }) => <Badge tone={STATUS_TONE[s]}>{revenueStatusLabel(s, kind)}</Badge>;
 const DUE_TONE: Record<DueState, Tone> = { prevue: "neutral", a_verifier: "warning", facturee: "violet", partielle: "warning", en_retard: "danger", encaissee: "success" };
 
 const invoiceStatus = (i: Invoice): RevenueStatus =>
@@ -44,7 +44,8 @@ export function revenueRows(data: FinanceData): RevenueRow[] {
   const rows: RevenueRow[] = data.missions.map((m) => {
     const mine = data.invoices.filter((i) => i.mission_id === m.id && live(i));
     const open = mine.filter((i) => i.balance > 0).sort((a, b) => (a.due_date ?? a.issue_date).localeCompare(b.due_date ?? b.issue_date))[0] ?? null;
-    const next = m.kind === "recurrent" ? nextOpenDue(m, data.invoices, data.today) : !mine.length && (oneOffRemaining(m) ?? 1) > 0 ? oneOffDate(m) : null;
+    // ponctuel : tant que tout n'est pas facturé (acompte puis solde, Q06)
+    const next = m.kind === "recurrent" ? nextOpenDue(m, data.invoices, data.today) : (oneOffRemaining(m) ?? (mine.length ? 0 : 1)) > 0 ? oneOffDate(m) : null;
     return { type: "mission" as const, id: m.id, kind: revenueKind(m), mission: m, status: revenueStatus(m, data.invoices, data.today), sortDate: next ?? oneOffDate(m) ?? "", next, nextIsDue: !!next && next <= data.today, open, client: m.company_id };
   });
   for (const i of data.invoices) {
@@ -52,7 +53,7 @@ export function revenueRows(data: FinanceData): RevenueRow[] {
     rows.push({ type: "invoice", id: i.id, kind: "ponctuel", invoice: i, status: invoiceStatus(i), sortDate: i.due_date ?? i.issue_date, client: i.company_id });
   }
   // à traiter d'abord (retard, à encaisser), puis par date
-  const rank: Record<RevenueStatus, number> = { en_retard: 0, a_verifier: 1, partiel: 2, a_encaisser: 3, en_cours: 4, prevu: 5, encaisse: 6, termine: 7 };
+  const rank: Record<RevenueStatus, number> = { en_retard: 0, a_verifier: 1, partiel: 2, a_encaisser: 3, a_jour: 4, prevu: 5, encaisse: 6, termine: 7 };
   return rows.sort((a, b) => rank[a.status] - rank[b.status] || a.sortDate.localeCompare(b.sortDate));
 }
 
@@ -98,10 +99,12 @@ function MissionCells({ r, onSettle, onPay }: { r: Extract<RevenueRow, { type: "
           </>
         ) : <span className="whitespace-nowrap">Prévu le {formatDate(oneOffDate(m))}</span>}
       </td>
-      <td><StatusBadge s={r.status} /></td>
+      <td><StatusBadge s={r.status} kind={m.kind} /></td>
       <td className="pr-2 text-right whitespace-nowrap">
         {r.open ? <Button size="sm" variant="primary" onClick={stop(() => onPay(r.open!))}>Paiement reçu</Button>
-          : r.next && <Button size="sm" variant={r.nextIsDue ? "primary" : "secondary"} onClick={stop(() => onSettle(m, r.next!, monthly ? m.amount : oneOffRemaining(m)))}>Encaisser</Button>}
+          : r.next && <Button size="sm" variant={r.nextIsDue ? "primary" : "secondary"} onClick={stop(() => onSettle(m, r.next!, monthly ? m.amount : oneOffRemaining(m)))} data-settle>
+            {!monthly && r.status !== "prevu" && r.status !== "a_verifier" ? `Encaisser le solde (${eur(oneOffRemaining(m))})` : "Encaisser"}
+          </Button>}
       </td>
     </>
   );
@@ -145,7 +148,7 @@ export function RevenuePanel({ mission: m, data, onClose, onEdit, onStop, onSett
       <aside role="dialog" aria-modal="true" aria-label="Détail du revenu" className="relative h-full w-full max-w-md overflow-y-auto border-l border-line bg-white p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2"><KindBadge kind={revenueKind(m)} /><StatusBadge s={status} /></div>
+            <div className="flex items-center gap-2"><KindBadge kind={revenueKind(m)} /><StatusBadge s={status} kind={m.kind} /></div>
             <h2 className="mt-1.5 font-display text-xl font-bold">{m.company_name}</h2>
             <p className="text-sm text-muted">{m.label}</p>
           </div>
@@ -187,12 +190,13 @@ export function RevenuePanel({ mission: m, data, onClose, onEdit, onStop, onSett
         ) : (
           <section className="mt-5">
             <h3 className="font-label text-xs font-bold text-muted uppercase">Encaissement</h3>
-            {mine.length === 0 && oneOff && (
-              <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm">
-                <span>{formatDate(oneOff)} · {eur(rest)}</span>
-                <Button size="sm" variant="primary" onClick={() => onSettle(oneOff, rest)}>Encaisser</Button>
+            {oneOff && (rest ?? (mine.length ? 0 : 1)) > 0 && (
+              <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-line px-3 py-2 text-sm" data-balance>
+                <span>{mine.length ? <>Reste à facturer : <strong>{eur(rest)}</strong></> : <>{formatDate(oneOff)} · {eur(rest)}</>}</span>
+                <Button size="sm" variant="primary" onClick={() => onSettle(oneOff, rest)}>{mine.length ? `Encaisser le solde (${eur(rest)})` : "Encaisser"}</Button>
               </div>
             )}
+            {mine.length > 0 && rest === 0 && <p className="mt-1 text-sm text-muted">Tout le montant prévu est facturé.</p>}
           </section>
         )}
 

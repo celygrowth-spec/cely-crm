@@ -29,7 +29,10 @@ apparaissent dès la mise en ligne, sans migration de données ni création en m
   | En mission | projet en cours ou en attente | Ouvrir le projet |
 
   Un projet terminé ou archivé fait quitter le tableau ; la vente reste dans Gagnées.
-- **Gagnées** : client, date de clôture, montant et type, projet, facturation (à renseigner / prévu / facturé / encaissé).
+- **Gagnées** : client, date de clôture, montant et type, projet, et l'état d'encaissement **commun avec Finance**
+  (`finance_revenue_state`) : ponctuel — Prévu, Date passée, À encaisser, En retard, Partiellement encaissé, Encaissé
+  (seulement quand tout le montant prévu est facturé et réglé) ; mensuel — Prévu, À jour, Partiellement réglé, En retard,
+  Terminé. « Facturation à renseigner » s'il n'y a pas encore de revenu.
 - **Perdues** : client, date, dernière étape, motif.
 
 ## « Marquer comme gagné » (fiche, Kanban, Ventes)
@@ -100,3 +103,9 @@ Une fiche gagnée avant cette version apparaît dans Gagnées avec « Compléter
 client dont le projet est encore en cours reste visible dans « En mission ».
 
 Migration : `supabase/migrations/20261113000100_ventes.sql` (additive).
+
+## Montant affiché (Q07)
+Avant la clôture, la fiche porte un montant **estimé** (total). Après Gagné, elle porte le montant du **revenu
+confirmé** : « X € / mois » pour un mensuel (`companies.amount_recurring`), et il suit les modifications du revenu
+dans Finance. L'estimation d'origine reste dans l'historique (« Montant confirmé : 1 000 € / mois (estimé avant
+clôture : 12 000 €) »). Une nouvelle opportunité repart d'une estimation.

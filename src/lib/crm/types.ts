@@ -21,6 +21,8 @@ export type Company = {
   stage_id: string | null;
   deal_status: DealStatus;
   amount: number | null;
+  /** après Gagné en mensuel : montant par mois (Q07) */
+  amount_recurring?: boolean;
   expected_close_date: string | null;
   lost_reason: string | null;
   deal_closed_at: string | null;

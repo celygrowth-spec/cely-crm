@@ -31,6 +31,7 @@ export const mapMission = (r: Row): Mission => ({
   ...(r as unknown as Mission),
   amount: c(r.amount),
   invoiced_ht: cc(r.invoiced_ht),
+  billed_ht: r.billed_ht == null ? undefined : cc(r.billed_ht),
   invoiced_ttc: cc(r.invoiced_ttc),
   received: cc(r.received),
   remaining: cc(r.remaining),

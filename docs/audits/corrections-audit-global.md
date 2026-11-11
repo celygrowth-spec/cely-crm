@@ -21,11 +21,11 @@ parcours rejoué dans l'application locale reliée à la base de test ; « réel
 | Q05 | 1 | ✅ | Une vente par cycle (`sales.cycle`, une seule active par fiche) ; « Nouvelle opportunité » ; nouveau Gain = nouvelle vente, nouveau revenu, nouveau projet ; projet terminé jamais réutilisé ; projet supprimé recréé seulement sur demande ; ventes passées dans Gagnées | `ventes-cycles.test.ts` (Q05), navigateur (3 cycles) | lot 1 | — |
 | K10 | 1/7 | 🔎 | Lot 1 : état de préparation à source unique (`project_onboarding_status`, lu par Ventes et Projets ; ancienne préparation TS retirée) ; une proposition ou un contrat ajouté relance la préparation (corrections conservées) ; un contrat reste une pièce à examiner. Reste au lot 7 : lecture du contenu des documents | `ventes-cycles.test.ts` (K10), `ventes.test.ts` | lot 1 | — |
 | C02 | 2 | ✅ | `merge_companies` rattache tout (ventes renumérotées, revenus, factures, règlements, projets, rendez-vous, fichiers, emails, appels, diagnostics, temps) ; aperçu `merge_preview` (comptes, points d'attention, blocages) affiché avant confirmation ; deux ventes en cours = blocage expliqué ; issue gardée incompatible avec la vente en cours = refus. Fusions passées : diagnostic en lecture seule + rattrapage idempotent qui laisse les cas ambigus | `fusion.test.ts` (rattachement complet, blocage, renumérotation, diagnostic + rattrapage), navigateur `tests/e2e/lot2-fusion.cjs` | lot 2 | Rattrapage en production : sur instruction |
-| C04 | 3 | ⏳ | | | | |
-| C05 | 3 | ⏳ | | | | |
-| Q06 | 3 | ⏳ | | | | |
-| Q07 | 3 | ⏳ | | | | |
-| K02 | 3 | ⏳ | | | | |
+| C04 | 3 | ✅ | Contrôles en base pour tous les chemins (déclencheurs vérifiés en fin de transaction) : facture ↔ revenu ↔ vente ↔ client ; revenu lié à une vente ou facturé : pas de changement de client ; modification partielle (champ absent inchangé, `null` = retirer) ; facture rattachée à l'échéance libre la plus proche, jamais à une échéance déjà facturée ; référence unique par client ; formulaire de facture de Finance › Clients reçoit enfin les factures | `finance-coherente.test.ts` (C04), navigateur `tests/e2e/lot3-finance.cjs` (échéance proposée libre) | lot 3 | — |
+| C05 | 3 | ✅ | État d'encaissement unique en base (`finance_revenue_state`) et dans l'interface, lu par Ventes : « Encaissé » seulement si tout est facturé et réglé ; « Partiellement encaissé » / « À jour » / « Partiellement réglé » / « En retard » ; revenus terminés exclus du mensuel récurrent et des clients actifs ; annulation d'un paiement remboursé refusée ; avoir sans effet sur le reste à facturer, réduction du revenu sur décision explicite | `finance-coherente.test.ts`, `tests/unit/finance-coherente.test.ts`, navigateur | lot 3 | — |
+| Q06 | 3 | ✅ | Acompte puis « Encaisser le solde (X €) » en un clic, reste affiché ; plafond = montant prévu ; facture liée à un mensuel au passage Gagné rattachée à l'échéance la plus proche | `finance-coherente.test.ts` (Q06), navigateur | lot 3 | — |
+| Q07 | 3 | ✅ | Montant estimé avant clôture ; après Gagné, montant du revenu confirmé (« X € / mois », `companies.amount_recurring`), suivi des modifications du revenu ; estimation conservée dans l'historique ; export avec l'unité ; vocabulaire « revenu » dans Finance | `finance-coherente.test.ts` (Q07), navigateur (fiche, export) | lot 3 | — |
+| K02 | 3 | ✅ | Un seul composant et une seule règle de revenu (`RevenueTerms`, `revenueTermsError`) pour Finance › Revenus, Revenus par client et « Marquer comme gagné » ; formulaire « Mission » retiré ; « Ajouter un revenu » n'ouvre plus une facture (« Enregistrer une facture ») | navigateur | lot 3 | — |
 | Q01 | 4 | ⏳ | | | | |
 | K01 | 4 | ⏳ | | | | |
 | Q04 | 4 | ⏳ | | | | |
@@ -42,7 +42,7 @@ parcours rejoué dans l'application locale reliée à la base de test ; « réel
 | K09 | 7 | ⏳ | | | | |
 | Q09 | 7 | ⏳ | | | | |
 | K05 | 8 | ⏳ | | | | |
-| K14 | 8 | ⏳ | | | | |
+| K14 | 3/8 | 🔎 | Lot 3 : prévisions en TTC comme les factures (base des cotisations en HT), arrondis identiques base / interface, Ventes et fiche rafraîchis après une action Finance. Reste au lot 8 : points d'intégration (MCP, Gmail, Fireflies, webhook) | `tests/unit/finance-coherente.test.ts` (K14) | lot 3 | — |
 | C12 | 8 | ⏳ | | | | |
 | C14 | 8 | ⏳ | | | | |
 | K03 | 9 | ⏳ | | | | |
@@ -76,3 +76,16 @@ parcours rejoué dans l'application locale reliée à la base de test ; « réel
   rendez-vous et personne → aperçu exact, tout rattaché, l'ancien identifiant redirige.
 - Défauts trouvés en cours de route : les rendez-vous (RLS) et un `CASE` non parenthésé dans une condition PL/pgSQL
   empêchaient le déplacement ; corrigés et couverts par les tests.
+
+## Lot 3 — Finance cohérente
+- Migration `20261115000300_finance_coherente.sql` (additive : une colonne `companies.amount_recurring`, fonctions,
+  déclencheurs, vues `finance_mission_overview` + `billed_ht`, `company_overview` + `amount_recurring`,
+  `sales_overview` reconstruite). Règles : `docs/finance-coherence.md`.
+- Vérifié dans le navigateur (`tests/e2e/lot3-finance.cjs`) : revenu créé depuis « Revenus par client » avec le
+  formulaire commun ; acompte de 1 000 € sur 3 000 € → « Partiellement encaissé » et « Encaisser le solde (2 000 €) » ;
+  solde → « Encaissé » ; avoir avec choix explicite sur le revenu ; Gagné mensuel sur une fiche estimée à 12 000 € →
+  « 1 000 € / mois » sur la fiche et dans l'export, estimation dans l'historique ; facture saisie sur un mensuel →
+  échéance libre proposée.
+- Défaut trouvé pendant la recette : le rattrapage des fusions (lot 2) déplaçait le revenu et le projet d'une vente
+  laissée en place dans un cas ambigu ; un cas ambigu ne déplace désormais plus rien. Les données issues des
+  anciennes fusions (revenu déplacé, vente restée) ne bloquent pas l'installation ; le rattrapage les réunit.

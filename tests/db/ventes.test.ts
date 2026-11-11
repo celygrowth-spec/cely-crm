@@ -67,11 +67,11 @@ describe("marquer comme gagné", () => {
     expect(await n("interactions", "kind = 'deal_status'")).toBe(1);
   });
 
-  test("facture déjà enregistrée : rattachée (revenu créé depuis elle si besoin), état « facturé » puis « encaissé »", async () => {
+  test("facture déjà enregistrée : rattachée (revenu créé depuis elle si besoin), état « à encaisser » puis « encaissé »", async () => {
     const inv = (await db.rpc<{ id: string }>("finance_record_invoice", { p_data: { company_id: co, issue_date: today(), amount_ht: 1200, amount_ttc: 1200 } })).id;
     await confirm({ revenue: { mode: "plus_tard" }, link_invoice_id: inv });
     const o = await overview();
-    expect(o).toMatchObject({ mission_kind: "ponctuel", mission_amount: "1200.00", billing: "facture" });
+    expect(o).toMatchObject({ mission_kind: "ponctuel", mission_amount: "1200.00", billing: "a_encaisser" });
     expect((await db.one<{ mission_id: string }>(`select mission_id from finance_invoices where id = $1`, [inv])).mission_id).toBe(o.mission_id);
     await db.rpc("finance_record_payment", { p_invoice: inv, p_paid_on: today(), p_amount: 1200 });
     expect((await overview()).billing).toBe("encaisse");

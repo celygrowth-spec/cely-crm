@@ -93,17 +93,25 @@ describe("fusions passées (avant la correction)", () => {
     const old = await fiche("Delta bis", "b@delta.example.test");
     const s = await win(old);
     // fusion « à l'ancienne » : seule la fiche est marquée fusionnée, le projet et la vente restent sur l'absorbée
-    await db.exec(`reset role; update companies set merged_into_id = '${keep}', archived_at = now(), pipeline_id = null, stage_id = null where id = '${old}';`);
+    // (l'ancienne fusion déplaçait les revenus sans la vente : état que les contrôles actuels refusent, recréé ici tel
+    // qu'il peut exister dans les données)
+    await db.exec(`reset role; alter table finance_missions disable trigger finance_mission_consistency;
+      update companies set merged_into_id = '${keep}', archived_at = now(), pipeline_id = null, stage_id = null where id = '${old}';
+      alter table finance_missions enable trigger finance_mission_consistency;`);
     const diag = (await db.query<{ projets: number; ventes_en_cours: number }>(maintenance("diagnostic-fusions.sql"))).rows;
     expect(diag).toEqual([expect.objectContaining({ projets: 1, ventes_en_cours: 1 })]);
-    // la fiche finale est ouverte : la vente gagnée de l'absorbée est un cas ambigu (non déplacée), le projet l'est
+    // la fiche finale est ouverte : la vente gagnée de l'absorbée est un cas ambigu ; rien n'est déplacé pour cette
+    // fiche (la vente, son revenu et son projet restent ensemble)
     await db.exec(maintenance("rattrapage-fusions.sql"));
-    expect(await count("projects", keep)).toBe(1);
+    expect(await count("projects", keep)).toBe(0);
+    expect(await count("projects", old)).toBe(1);
     expect(await db.one(`select company_id from sales where id = $1`, [s.sale_id])).toEqual({ company_id: old });
     // résolue à la main (fiche finale gagnée) : le rattrapage rejoué la rattache
     await db.exec(`update companies set deal_status = 'won', deal_closed_at = now() where id = '${keep}';`);
     await db.exec(maintenance("rattrapage-fusions.sql"));
     expect(await db.one(`select company_id, cycle from sales where id = $1`, [s.sale_id])).toEqual({ company_id: keep, cycle: 1 });
+    expect(await count("projects", keep)).toBe(1);
+    expect(await count("finance_missions", keep)).toBe(1);
     // rejouable : rien de plus, aucune trace en double
     const traces = async () => (await db.one<{ n: number }>(`select count(*)::int n from interactions where company_id = $1 and content like 'Rattrapage de fusion%'`, [keep])).n;
     const before = await traces();

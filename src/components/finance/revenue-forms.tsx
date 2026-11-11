@@ -4,6 +4,7 @@
 // d'une échéance (encaisser, facturer) et d'un revenu mensuel (modifier pour la suite, arrêter).
 // Chaque enregistrement a sa clé d'idempotence : un double clic n'enregistre qu'une fois.
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState, useTransition, type FormEvent } from "react";
 import { toast } from "sonner";
 import { CalendarClock, Repeat } from "lucide-react";
@@ -21,6 +22,8 @@ const monthDay = (d: string) => new Intl.DateTimeFormat("fr-FR", { day: "numeric
 
 function useSubmit() {
   const router = useRouter();
+  // une écriture Finance se voit aussi dans Ventes et sur la fiche (K14)
+  const qc = useQueryClient();
   const [pending, start] = useTransition();
   const submit = <T,>(fn: () => Promise<ActionResult<T>>, done: (data: T) => void) =>
     start(async () => {
@@ -28,6 +31,8 @@ function useSubmit() {
       if (!res.ok) return void toast.error(res.error);
       done(res.data);
       router.refresh();
+      void qc.invalidateQueries({ queryKey: ["sales"] });
+      void qc.invalidateQueries({ queryKey: ["company"] });
     });
   return { pending, submit };
 }
@@ -38,16 +43,63 @@ export function KindBadge({ kind }: { kind: RevenueKind }) {
     : <Badge><CalendarClock size={11} aria-hidden />Ponctuel</Badge>;
 }
 
-function KindSwitch({ value, onChange }: { value: RevenueKind; onChange: (k: RevenueKind) => void }) {
+export type RevenueMode = RevenueKind | "plus_tard";
+const MODE_LABEL: Record<RevenueMode, string> = { ponctuel: "Ponctuel", mensuel: "Mensuel", plus_tard: "Renseigner plus tard" };
+
+function KindSwitch({ value, onChange, allowLater = false, disabled = false }: { value: RevenueMode; onChange: (k: RevenueMode) => void; allowLater?: boolean; disabled?: boolean }) {
+  const modes: RevenueMode[] = allowLater ? ["mensuel", "ponctuel", "plus_tard"] : ["ponctuel", "mensuel"];
   return (
-    <div role="radiogroup" aria-label="Type de revenu" className="grid grid-cols-2 gap-1 rounded-xl border border-line p-1">
-      {(["ponctuel", "mensuel"] as const).map((k) => (
-        <button key={k} type="button" role="radio" aria-checked={value === k} onClick={() => onChange(k)}
-          className={cn("flex items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold", value === k ? "bg-ink text-white" : "text-muted hover:bg-surface")}>
-          {k === "ponctuel" ? <CalendarClock size={15} aria-hidden /> : <Repeat size={15} aria-hidden />}
-          {k === "ponctuel" ? "Ponctuel" : "Mensuel"}
+    <div role="radiogroup" aria-label="Type de revenu" className={cn("grid gap-1 rounded-xl border border-line p-1", allowLater ? "grid-cols-3" : "grid-cols-2")}>
+      {modes.map((k) => (
+        <button key={k} type="button" role="radio" aria-checked={value === k} onClick={() => onChange(k)} disabled={disabled}
+          className={cn("flex items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold disabled:opacity-40", value === k ? "bg-ink text-white" : "text-muted hover:bg-surface")}>
+          {k === "ponctuel" ? <CalendarClock size={15} aria-hidden /> : k === "mensuel" ? <Repeat size={15} aria-hidden /> : null}
+          {MODE_LABEL[k]}
         </button>
       ))}
+    </div>
+  );
+}
+
+/** Règle commune (Finance, fiche, passage Gagné) : montant positif, date, fin après le début. null = valide. */
+export function revenueTermsError(mode: RevenueKind, amount: number | null, date: string, end: string | null): string | null {
+  if (amount == null || Number.isNaN(amount) || amount <= 0) return "Indiquez le montant";
+  if (!date) return mode === "mensuel" ? "Indiquez la date du premier encaissement" : "Indiquez la date d'encaissement prévue";
+  if (mode === "mensuel" && end && end < date) return "La date de fin précède la première échéance";
+  return null;
+}
+
+/**
+ * Conditions d'un revenu, UN composant pour tous les formulaires (K02) : type, montant, date prévue ou date de
+ * début, date de fin facultative pour un mensuel, aperçu des échéances.
+ */
+export function RevenueTerms({ mode, onMode, amount, onAmount, date, onDate, end, onEnd, vatEnabled = false, allowLater = false, lockKind = false }: {
+  mode: RevenueMode; onMode: (m: RevenueMode) => void; amount: number | null; onAmount: (v: number | null) => void;
+  date: string; onDate: (d: string) => void; end: string; onEnd: (d: string) => void;
+  vatEnabled?: boolean; allowLater?: boolean; lockKind?: boolean;
+}) {
+  const monthly = mode === "mensuel";
+  return (
+    <div className="space-y-3" data-revenue-terms>
+      {!lockKind && <KindSwitch value={mode} onChange={onMode} allowLater={allowLater} />}
+      {mode !== "plus_tard" && (
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={monthly ? "Montant par mois" : "Montant"} hint={vatEnabled ? "Hors taxes" : undefined}>
+            <MoneyInput value={amount} onChange={onAmount} required aria-label={monthly ? "Montant par mois" : "Montant"} />
+          </Field>
+          <Field label={monthly ? "Premier encaissement prévu" : "Encaissement prévu le"}>
+            <Input type="date" required value={date} onChange={(e) => onDate(e.target.value)} aria-label={monthly ? "Premier encaissement prévu" : "Encaissement prévu le"} />
+          </Field>
+        </div>
+      )}
+      {monthly && (
+        <>
+          <Field label="Date de fin (facultatif)" hint="Laissez vide si vous ne la connaissez pas">
+            <Input type="date" value={end} min={date} onChange={(e) => onEnd(e.target.value)} aria-label="Date de fin" />
+          </Field>
+          <DuePreview first={date} end={end || null} amount={amount} />
+        </>
+      )}
     </div>
   );
 }
@@ -77,7 +129,7 @@ export function DuePreview({ first, end, amount }: { first: string; end: string 
 // Ajouter / modifier un revenu
 // ---------------------------------------------------------------------------
 
-export function RevenueModal(props: { open: boolean; onClose: () => void; clients: ClientOption[]; vatEnabled: boolean; edit?: Mission | null; onSaved?: (id: string) => void }) {
+export function RevenueModal(props: { open: boolean; onClose: () => void; clients: ClientOption[]; vatEnabled: boolean; edit?: Mission | null; onSaved?: (id: string) => void; company?: ClientOption | null }) {
   return (
     <Modal open={props.open} onClose={props.onClose} title={props.edit ? "Modifier le revenu" : "Ajouter un revenu"}>
       {props.open && <RevenueBody {...props} />}
@@ -85,10 +137,10 @@ export function RevenueModal(props: { open: boolean; onClose: () => void; client
   );
 }
 
-function RevenueBody({ onClose, clients, vatEnabled, edit, onSaved }: Parameters<typeof RevenueModal>[0]) {
+function RevenueBody({ onClose, clients, vatEnabled, edit, onSaved, company: c0 = null }: Parameters<typeof RevenueModal>[0]) {
   const today = todayISO();
   const [key] = useState(() => crypto.randomUUID());
-  const [company, setCompany] = useState<ClientOption | null>(edit ? { id: edit.company_id, name: edit.company_name } : null);
+  const [company, setCompany] = useState<ClientOption | null>(edit ? { id: edit.company_id, name: edit.company_name } : c0);
   const [label, setLabel] = useState(edit?.label ?? "");
   const [kind, setKind] = useState<RevenueKind>(edit ? revenueKind(edit) : "ponctuel");
   const [amount, setAmount] = useState<number | null>(edit?.amount ?? null);
@@ -103,7 +155,8 @@ function RevenueBody({ onClose, clients, vatEnabled, edit, onSaved }: Parameters
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!company) return toast.error("Choisissez le client");
-    if (!amount) return toast.error("Indiquez le montant");
+    const err = revenueTermsError(kind, amount, date, kind === "mensuel" ? end || null : null);
+    if (err || !amount) return toast.error(err ?? "Indiquez le montant");
     if (edit) {
       return submit(() => updateRevenueAction(edit.id, { label, amount, date, end_date: kind === "mensuel" ? end || null : null, note }), () => {
         toast.success("Revenu modifié pour la suite. Les mois déjà facturés gardent leur montant.");
@@ -127,7 +180,6 @@ function RevenueBody({ onClose, clients, vatEnabled, edit, onSaved }: Parameters
 
   return (
     <form onSubmit={onSubmit} className="space-y-3">
-      {!edit && <KindSwitch value={kind} onChange={setKind} />}
       {edit && <p className="flex items-center gap-2 text-sm"><KindBadge kind={kind} /> <span className="font-semibold">{company?.name}</span></p>}
       {!edit && (
         <Field label="Client">
@@ -137,22 +189,9 @@ function RevenueBody({ onClose, clients, vatEnabled, edit, onSaved }: Parameters
       <Field label="Prestation">
         <Input required value={label} onChange={(e) => setLabel(e.target.value)} placeholder={kind === "mensuel" ? "Accompagnement growth" : "Audit SEO"} maxLength={200} />
       </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label={kind === "mensuel" ? "Montant par mois" : "Montant"} hint={vatEnabled ? "Hors taxes" : undefined}>
-          <MoneyInput value={amount} onChange={setAmount} required aria-label={kind === "mensuel" ? "Montant par mois" : "Montant"} />
-        </Field>
-        <Field label={kind === "mensuel" ? "Premier encaissement prévu" : "Encaissement prévu le"}>
-          <Input type="date" required value={date} onChange={(e) => setDate(e.target.value)} aria-label={kind === "mensuel" ? "Premier encaissement prévu" : "Encaissement prévu le"} />
-        </Field>
-      </div>
-      {kind === "mensuel" ? (
-        <>
-          <Field label="Date de fin (facultatif)" hint="Laissez vide si vous ne la connaissez pas">
-            <Input type="date" value={end} min={date} onChange={(e) => setEnd(e.target.value)} aria-label="Date de fin" />
-          </Field>
-          <DuePreview first={date} end={end || null} amount={amount} />
-        </>
-      ) : !edit && (
+      <RevenueTerms mode={kind} onMode={(m) => setKind(m as RevenueKind)} amount={amount} onAmount={setAmount} date={date} onDate={setDate}
+        end={end} onEnd={setEnd} vatEnabled={vatEnabled} lockKind={!!edit} />
+      {kind === "ponctuel" && !edit && (
         <div className="rounded-xl border border-line p-3">
           <label className="flex items-center gap-2 text-sm font-semibold">
             <input type="checkbox" checked={received} onChange={(e) => setReceived(e.target.checked)} /> J&apos;ai déjà reçu le paiement
@@ -224,8 +263,14 @@ function SettleBody({ target, onClose, vatEnabled }: { target: SettleTarget; onC
     >
       <p className="text-sm">
         <span className="font-semibold">{target.mission.company_name}</span> · {target.mission.label}<br />
-        <span className="text-muted">Échéance du {monthDay(target.date)}</span>
+        <span className="text-muted">{target.mission.kind === "recurrent" ? `Échéance du ${monthDay(target.date)}` : `Prévu le ${monthDay(target.date)}`}</span>
       </p>
+      {target.mission.kind !== "recurrent" && target.mission.amount != null && (
+        <p className="rounded-lg bg-surface px-3 py-2 text-xs" data-settle-rest>
+          Montant prévu {eur(target.mission.amount)} · déjà facturé {eur(target.mission.billed_ht ?? target.mission.invoiced_ht)} ·{" "}
+          <strong>reste {eur(Math.max(target.mission.amount - (target.mission.billed_ht ?? target.mission.invoiced_ht), 0))}</strong>. Un acompte est possible : le solde s&apos;encaisse ensuite en un clic.
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <Field label={vatEnabled ? "Montant HT dû" : "Montant dû"}><MoneyInput value={amount} onChange={setAmount} required aria-label="Montant dû" /></Field>
         {vatEnabled ? <Field label="TVA (%)"><Input value={vatRate} onChange={(e) => setVatRate(e.target.value)} inputMode="decimal" /></Field> : <div />}

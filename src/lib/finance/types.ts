@@ -41,6 +41,8 @@ export type Mission = {
   next_due_date: string | null;
   note: string | null;
   invoiced_ht: number;
+  /** facturé brut (factures non annulées, avoirs non déduits) : base du « reste à facturer » */
+  billed_ht?: number;
   invoiced_ttc: number;
   received: number;
   remaining: number;

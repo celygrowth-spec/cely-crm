@@ -115,7 +115,7 @@ export const confirmSchema = z.object({
   project_name: z.string().trim().max(160).nullish(),
   /** projet de la vente supprimé : le recréer seulement sur demande explicite */
   create_project: z.boolean().optional(),
-});
+}).refine((v) => v.revenue.mode !== "mensuel" || !v.revenue.end_date || v.revenue.end_date >= v.revenue.date, { message: "La date de fin précède la première échéance" });
 export type ConfirmInput = z.input<typeof confirmSchema>;
 export type ConfirmResult = { sale_id: string; cycle: number; project_id: string | null; mission_id: string | null; created: { sale?: boolean; revenue?: boolean; project?: boolean }; project_removed: boolean };
 

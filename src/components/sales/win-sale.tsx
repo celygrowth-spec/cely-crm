@@ -11,12 +11,12 @@ import { toast } from "sonner";
 import { Check, Link2 } from "lucide-react";
 import { confirmSaleAction, saleContextAction } from "@/app/sales-actions";
 import { apiGet, attempt, useSync } from "@/lib/client/query";
-import { centsToInput, eur, parseEuroInput, toCents } from "@/lib/finance/money";
+import { eur, toCents } from "@/lib/finance/money";
 import { todayISO } from "@/lib/format";
 import type { SaleRow } from "@/lib/sales/rules";
 import type { ConfirmInput, SaleContext } from "@/lib/sales/service";
-import { DuePreview } from "@/components/finance/revenue-forms";
-import { Button, Field, Input, Modal, Select, Skeleton, cn } from "@/components/ui";
+import { RevenueTerms, revenueTermsError, type RevenueMode } from "@/components/finance/revenue-forms";
+import { Button, Field, Input, Modal, Select, Skeleton } from "@/components/ui";
 
 export const useSales = (initial?: SaleRow[]) =>
   useQuery({ queryKey: ["sales"], queryFn: ({ signal }) => apiGet<SaleRow[]>("/api/ventes", signal), initialData: initial, staleTime: 15_000 });
@@ -29,7 +29,7 @@ export function useSaleSync() {
   return (companyId: string) => sync(["company", companyId], ["company-timeline", companyId], ["companies"], ["pipeline-cards"], ["sales"], ["company-projects", companyId], ["finance"]);
 }
 
-type Mode = "mensuel" | "ponctuel" | "plus_tard";
+type Mode = RevenueMode;
 
 /**
  * `complete` : la fiche est déjà gagnée (ancien dossier, ou revenu « à renseigner plus tard ») : la clôture
@@ -72,7 +72,7 @@ function WinForm({ company, complete, ctx, onClose, onDone }: { company: { id: s
   const [closedOn, setClosedOn] = useState(today);
   const [signedOn, setSignedOn] = useState(ctx.sale?.signed_on ?? "");
   const [docsReady, setDocsReady] = useState(ctx.sale?.documents_ready ?? false);
-  const [amount, setAmount] = useState(centsToInput(dealCents));
+  const [amount, setAmount] = useState<number | null>(dealCents ?? null);
   const [date, setDate] = useState(ctx.company.expected_close_date && ctx.company.expected_close_date >= today ? ctx.company.expected_close_date : today);
   const [end, setEnd] = useState("");
   const [linkMission, setLinkMission] = useState(free.length === 1 && !linked ? free[0].id : "");
@@ -86,7 +86,7 @@ function WinForm({ company, complete, ctx, onClose, onDone }: { company: { id: s
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const cents = parseEuroInput(amount);
+  const cents = amount;
   const usesExisting = !!linkMission || !!linked;
   const contractFile = ctx.files.some((f) => f.category === "Contrat");
   const invoices = ctx.invoices.filter((i) => !i.mission_id || i.mission_id === (linkMission || linked?.id));
@@ -95,9 +95,9 @@ function WinForm({ company, complete, ctx, onClose, onDone }: { company: { id: s
     setError(null);
     let revenue: ConfirmInput["revenue"] = { mode: "plus_tard" };
     if (!usesExisting && mode !== "plus_tard") {
-      if (cents == null || Number.isNaN(cents) || cents <= 0) return setError("Indiquez un montant valide, ou choisissez « Renseigner plus tard ».");
-      if (!date) return setError(mode === "mensuel" ? "Indiquez la date de début." : "Indiquez la date d'encaissement prévue.");
-      if (mode === "mensuel" && end && end < date) return setError("La date de fin précède la date de début.");
+      // même règle que « Ajouter un revenu » (Finance)
+      const err = revenueTermsError(mode, cents, date, mode === "mensuel" ? end || null : null);
+      if (err || cents == null) return setError(`${err ?? "Indiquez le montant"}, ou choisissez « Renseigner plus tard ».`);
       revenue = mode === "mensuel" ? { mode, amount_cents: cents, date, end_date: end || null } : { mode, amount_cents: cents, date };
     }
     if (!complete && closedOn > today) return setError("La date de clôture ne peut pas être dans le futur.");
@@ -121,13 +121,6 @@ function WinForm({ company, complete, ctx, onClose, onDone }: { company: { id: s
       duration: 8000,
     });
   }
-
-  const seg = (m: Mode, label: string) => (
-    <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)} disabled={usesExisting}
-      className={cn("flex-1 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40", mode === m ? "bg-ink text-white" : "text-muted hover:text-ink")}>
-      {label}
-    </button>
-  );
 
   return (
     <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void submit(); }} data-win-sale>
@@ -163,23 +156,7 @@ function WinForm({ company, complete, ctx, onClose, onDone }: { company: { id: s
             )}
             {!linkMission && (
               <>
-                <div role="radiogroup" aria-label="Type de revenu" className="flex gap-1 rounded-lg border border-line p-0.5">
-                  {seg("mensuel", "Mensuel")}{seg("ponctuel", "Ponctuel")}{seg("plus_tard", "Renseigner plus tard")}
-                </div>
-                {mode === "mensuel" && (
-                  <div className="grid grid-cols-3 gap-2">
-                    <Field label="Par mois (HT)"><Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="1 000" aria-label="Montant par mois" autoFocus /></Field>
-                    <Field label="Début"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date de début" /></Field>
-                    <Field label="Fin (facultatif)"><Input type="date" value={end} min={date} onChange={(e) => setEnd(e.target.value)} aria-label="Date de fin" /></Field>
-                  </div>
-                )}
-                {mode === "mensuel" && cents != null && !Number.isNaN(cents) && date && <DuePreview first={date} end={end || null} amount={cents} />}
-                {mode === "ponctuel" && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <Field label="Montant (HT)"><Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="2 500" aria-label="Montant" autoFocus /></Field>
-                    <Field label="Encaissement prévu"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date d'encaissement prévue" /></Field>
-                  </div>
-                )}
+                <RevenueTerms mode={mode} onMode={setMode} amount={amount} onAmount={setAmount} date={date} onDate={setDate} end={end} onEnd={setEnd} allowLater />
                 {mode === "plus_tard" && <p className="text-xs text-muted">La vente est validée ; la carte affichera « Facturation à renseigner ».</p>}
               </>
             )}

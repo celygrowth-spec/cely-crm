@@ -1,9 +1,11 @@
 // Ventes : règles pures, partagées par la page Ventes, la fiche et Projets (aucune dépendance au navigateur).
 // La source de vérité reste companies.deal_status ; une ligne vient de la vue sales_overview.
 import { eur, toCents } from "@/lib/finance/money";
+import { revenueStatusLabel, type RevenueStatus } from "@/lib/finance/revenues";
 
 export type SaleStage = "devis_contrat" | "onboarding" | "en_mission" | "termine";
-export type Billing = "a_renseigner" | "prevu" | "facture" | "encaisse";
+/** État d'encaissement : celui de Finance (finance_revenue_state), « à renseigner » s'il n'y a pas de revenu. */
+export type Billing = "a_renseigner" | RevenueStatus;
 /** État de préparation de l'onboarding : une seule source, project_onboarding_status (Ventes et Projets). */
 export type PrepStatus = "preparing" | "to_complete" | "ready";
 
@@ -22,6 +24,9 @@ export type SaleRow = {
   closed_on: string | null;
   lost_reason: string | null;
   deal_amount: number | string | null;
+  /** le montant de la fiche est « par mois » (mensuel confirmé) */
+  amount_recurring?: boolean;
+  billed_ht?: number | string | null;
   archived_at: string | null;
   pipeline_name: string | null;
   stage_name: string | null;
@@ -57,8 +62,12 @@ export const STAGES: { key: Exclude<SaleStage, "termine">; label: string; hint: 
 ];
 export const STAGE_LABELS: Record<SaleStage, string> = { devis_contrat: "Devis / Contrat", onboarding: "Onboarding", en_mission: "En mission", termine: "Terminée" };
 
-export const BILLING_LABELS: Record<Billing, string> = { a_renseigner: "Facturation à renseigner", prevu: "Prévu", facture: "Facturé", encaisse: "Encaissé" };
-export const BILLING_TONES: Record<Billing, "warning" | "neutral" | "violet" | "success"> = { a_renseigner: "warning", prevu: "neutral", facture: "violet", encaisse: "success" };
+export const billingLabel = (r: Pick<SaleRow, "billing" | "mission_kind">) =>
+  r.billing === "a_renseigner" ? "Facturation à renseigner" : revenueStatusLabel(r.billing, r.mission_kind);
+export const BILLING_TONES: Record<Billing, "warning" | "neutral" | "violet" | "success" | "danger"> = {
+  a_renseigner: "warning", prevu: "neutral", a_verifier: "warning", a_encaisser: "violet", partiel: "violet",
+  en_retard: "danger", encaisse: "success", a_jour: "success", termine: "neutral",
+};
 
 /** Montant sur une ligne : « 1 000 € / mois », « 2 500 € ponctuels », ou null s'il n'est pas connu. */
 export function amountLine(r: Pick<SaleRow, "mission_amount" | "mission_kind" | "deal_amount">): string | null {

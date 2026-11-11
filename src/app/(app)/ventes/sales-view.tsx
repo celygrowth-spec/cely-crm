@@ -14,7 +14,7 @@ import { Badge, Button, EmptyState, Modal, PageHeader, Select, cn } from "@/comp
 import { attempt } from "@/lib/client/query";
 import { todayISO } from "@/lib/format";
 import {
-  BILLING_LABELS, BILLING_TONES, PERIODS, STAGE_LABELS, amountLine, board, byClosedDesc, inPeriod, metrics, missingCount, needsCompletion,
+  BILLING_TONES, billingLabel, PERIODS, STAGE_LABELS, amountLine, board, byClosedDesc, inPeriod, metrics, missingCount, needsCompletion,
   type Period, type SaleRow, type SaleStage,
 } from "@/lib/sales/rules";
 
@@ -178,7 +178,7 @@ function SaleCard({ r }: { r: SaleRow }) {
         </div>
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
-        <Badge tone={BILLING_TONES[r.billing]}>{BILLING_LABELS[r.billing]}</Badge>
+        <Badge tone={BILLING_TONES[r.billing]}>{billingLabel(r)}</Badge>
         {r.billing === "a_renseigner" && (
           <button type="button" onClick={() => setComplete(true)} className="text-xs font-semibold text-violet-strong hover:underline" data-fill-billing>Renseigner</button>
         )}
@@ -260,7 +260,7 @@ function WonList({ rows }: { rows: SaleRow[] }) {
               <td className="px-3 py-2 whitespace-nowrap">{dayLabel(r.closed_on)}</td>
               <td className="px-3 py-2 whitespace-nowrap">{amountLine(r) ?? <span className="text-muted">—</span>}{r.mission_status === "termine" && <span className="ml-1 text-xs text-muted">(revenu arrêté)</span>}</td>
               <td className="px-3 py-2">{r.project_id ? <Link href={`/projets/${r.project_id}`} className="hover:underline">{r.project_name}</Link> : <span className="text-muted">—</span>}</td>
-              <td className="px-3 py-2"><Badge tone={BILLING_TONES[r.billing]}>{BILLING_LABELS[r.billing]}</Badge></td>
+              <td className="px-3 py-2"><Badge tone={BILLING_TONES[r.billing]}>{billingLabel(r)}</Badge></td>
               <td className="px-3 py-2">
                 {needsCompletion(r)
                   ? <Button size="sm" onClick={() => setComplete(r)} data-complete={r.company_id}>Compléter</Button>

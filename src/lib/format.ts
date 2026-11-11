@@ -85,9 +85,10 @@ export function relativeDay(iso?: string | null): string {
   return formatDate(day);
 }
 
-export function formatAmount(v?: number | null): string {
+/** Montant d'une fiche : estimé (total) avant la clôture ; après Gagné en mensuel, « X € / mois » (Q07). */
+export function formatAmount(v?: number | null, recurring = false): string {
   if (v == null) return "";
-  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(v);
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(v) + (recurring ? " / mois" : "");
 }
 
 export function personName(p?: { first_name?: string | null; last_name?: string | null; email?: string | null } | null): string {

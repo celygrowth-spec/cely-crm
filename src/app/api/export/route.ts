@@ -39,6 +39,7 @@ export async function GET(req: Request) {
       etape: c.stage_id ? st.get(c.stage_id as string)?.stage : "",
       statut_commercial: c.deal_status,
       montant_eur: c.amount,
+      montant_par: c.amount == null ? "" : c.amount_recurring ? "mois" : "total",
       closing_estime: c.expected_close_date,
       motif_perte: c.lost_reason,
       contact_principal: c.primary_person_name,

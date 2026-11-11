@@ -17,7 +17,7 @@ import { CardClosingMenu } from "@/components/deal-closing";
 import { NewPipeline } from "../new-pipeline";
 import { StageManager } from "./stage-manager";
 
-type Card = Pick<CompanyOverview, "id" | "name" | "stage_id" | "amount" | "primary_person_name" | "next_action_title" | "next_action_due" | "deal_status" | "deal_closed_at" | "lost_reason">;
+type Card = Pick<CompanyOverview, "id" | "name" | "stage_id" | "amount" | "amount_recurring" | "primary_person_name" | "next_action_title" | "next_action_due" | "deal_status" | "deal_closed_at" | "lost_reason">;
 
 export function Kanban({ pipelineId }: { pipelineId: string }) {
   const router = useRouter();
@@ -158,7 +158,7 @@ function KCard({ card: c, pipelines, onOpen, onHover, onMove, disabled, onClosed
         </p>
         {c.primary_person_name && <p className="truncate text-xs text-muted">{c.primary_person_name}</p>}
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
-          {c.amount != null && <Badge tone="ink">{formatAmount(c.amount)}</Badge>}
+          {c.amount != null && <Badge tone="ink">{formatAmount(c.amount, c.amount_recurring)}</Badge>}
           {c.deal_status === "open" && c.next_action_title && (
             <span className={cn("truncate text-xs", late ? "font-semibold text-danger" : "text-muted")}>
               {c.next_action_title} · {relativeDay(c.next_action_due)}

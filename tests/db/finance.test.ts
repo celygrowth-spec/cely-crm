@@ -128,11 +128,11 @@ describe("missions", () => {
       { label: "Retainer", invoiced_ht: "1500.00", received: "1500.00", remaining: "0.00", next_due_date: "2026-11-01" },
     ]);
     const d = await load("2026-10-30");
-    expect(contractualMrr(d.missions)).toEqual({ cents: 150000 + 10000, unknown: 0 });
+    expect(contractualMrr(d.missions, d.today)).toEqual({ cents: 150000 + 10000, unknown: 0 });
     expect(periodKpis(d, "2026-10-01", "2026-10-31").activeClients).toBe(1);
     // une mission d'un autre client est refusée
     const other = await company("Beta");
-    await expect(invoice(other, { mission_id: m1, issue_date: "2026-10-01", amount_ht: "10" })).rejects.toThrow(/ne correspond pas/);
+    await expect(invoice(other, { mission_id: m1, issue_date: "2026-10-01", amount_ht: "10" })).rejects.toThrow(/autre client/);
   });
 
   test("une mission récurrente génère des échéances prévisionnelles, jamais d'encaissement", async () => {

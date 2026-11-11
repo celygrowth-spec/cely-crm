@@ -48,9 +48,16 @@ export function RecordDeal({ ctx }: { ctx: RecordCtx }) {
         )}
       </div>
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-        <Field label="Montant potentiel (€)">
-          <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={c.amount ? formatAmount(c.amount) : "—"} />
-        </Field>
+        {c.deal_status === "won" ? (
+          // après Gagné, le montant est celui du revenu confirmé (Finance) ; l'estimation reste dans l'historique
+          <Field label="Montant confirmé">
+            <p className="flex h-9 items-center text-sm font-semibold" title="Montant du revenu de la vente : il se modifie dans Finance › Revenus">{c.amount != null ? formatAmount(c.amount, c.amount_recurring) : "—"}</p>
+          </Field>
+        ) : (
+          <Field label="Montant potentiel (€)">
+            <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={c.amount ? formatAmount(c.amount) : "—"} />
+          </Field>
+        )}
         <Field label="Date de signature estimée">
           <Input type="date" value={closeDate} onChange={(e) => setCloseDate(e.target.value)} />
         </Field>

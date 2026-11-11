@@ -48,7 +48,7 @@ export const PROSPECTION_NAV = [
 
 export const FINANCE_NAV = [
   { href: "/finance", label: "Vue d'ensemble", exact: true },
-  { href: "/finance/clients", label: "Clients actifs" },
+  { href: "/finance/clients", label: "Revenus par client" },
   { href: "/finance/revenus", label: "Revenus" },
   { href: "/finance/charges", label: "Charges" },
   { href: "/finance/urssaf", label: "URSSAF" },
