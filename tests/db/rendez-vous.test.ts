@@ -389,7 +389,7 @@ describe("rattachement CRM", () => {
     expect((await db.one<{ n: number }>(`select count(*)::int n from companies`)).n).toBe(1);
     expect(await db.one(`select phone, last_name from people where company_id = $1`, [c])).toMatchObject({ phone: "0101", last_name: "M." });
     const notes = await db.query<{ content: string }>(`select content from interactions where company_id = $1 and meta ? 'appointment_id'`, [c]);
-    expect(notes.rows[0].content).toBe(`Rendez-vous réservé : Appel découverte le ${MON.split("-").reverse().join("/")} à 09h00`);
+    expect(notes.rows[0].content).toBe(`Rendez-vous réservé : Appel découverte le ${MON.split("-").reverse().join("/")} à 09h00 — réservation en ligne : nom, email et entreprise déclarés par le visiteur, à confirmer`);
   });
 
   test("domaine professionnel = indice : « À rattacher » avec suggestion, rien de créé", async () => {

@@ -105,7 +105,7 @@ export async function disconnectConnectorAction(key: string): Promise<ActionResu
     }
     const r = await disconnectGoogleAction();
     if (!r.ok) throw new CrmError(r.error);
-    return { revoked: true };
+    return { revoked: r.data.revoked };
   });
 }
 

@@ -125,7 +125,7 @@ async function calendar(sb: SupabaseClient, c: Checks): Promise<Connector> {
       { label: "Google Meet", value: (meet.count ?? 0) > 0 ? `Activé sur ${meet.count} type(s) de rendez-vous` : "Activé sur aucun type de rendez-vous" },
       { label: "Rendez-vous à répercuter dans Google", value: out ? String(out) : "Aucun", tone: out ? ("warn" as const) : ("ok" as const) },
     ] : [{ label: "Identifiants Google et secret serveur", value: configured ? "Présents" : "Absents (GOOGLE_CALENDAR_CLIENT_ID / SECRET, APPOINTMENTS_SECRET)", tone: configured ? ("ok" as const) : ("warn" as const) }],
-    disconnect: r ? { label: "Déconnecter Google Agenda", effect: "Plus de vérification des disponibilités ni de création d'événements ou de liens Meet pour les nouveaux rendez-vous. Les événements déjà créés restent dans Google ; les rendez-vous restent dans le CRM." } : null,
+    disconnect: r ? { label: "Déconnecter Google Agenda", effect: "La réservation en ligne est suspendue (disponibilités invérifiables), ainsi que les reports par l'invité. Plus de création d'événements ni de liens Meet. Les événements déjà créés restent dans Google ; une annulation faite entre-temps y sera répercutée à la reconnexion. Les rendez-vous restent dans le CRM." } : null,
     external: "Le projet Google Cloud (API Calendar, URI de redirection) et les variables Vercel se gèrent hors du CRM.",
     account: r ? (r.google_email as string) ?? "Compte Google" : null,
     lastSuccess: dated(r?.events_synced_at as string, "Dernière lecture des changements Google"),

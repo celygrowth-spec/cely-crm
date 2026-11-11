@@ -26,7 +26,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const view: View = vue === "semaine" || vue === "tout" ? vue : "jour";
   const today = todayISO();
   const [items, counters] = await Promise.all([listTodo(supabase), supabase.rpc("nav_counters", { p_today: today })]);
-  const c = (counters.data ?? {}) as { replies?: number; calls?: number };
+  const c = (counters.data ?? {}) as { replies?: number; calls?: number; emails?: number };
   const until = view === "jour" ? today : view === "semaine" ? addDaysISO(today, 7) : null;
   const inView = (i: TodoItem) => (until ? i.due_date != null && i.due_date <= until : true);
   const followups = items.filter((i) => i.item_type === "followup" && inView(i));
@@ -77,11 +77,17 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
         ))}
       </nav>
 
-      {((c.replies ?? 0) > 0 || (c.calls ?? 0) > 0) && (
+      {((c.replies ?? 0) > 0 || (c.calls ?? 0) > 0 || (c.emails ?? 0) > 0) && (
         <div className="mb-4 grid gap-2 sm:grid-cols-2">
           {(c.replies ?? 0) > 0 && (
             <Link href="/prospection/reponses" className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm hover:border-amber-300" data-today-replies>
               <span><strong>{c.replies} réponse(s) à traiter</strong> : intéressé, rendez-vous, pas intéressé ou reprise.</span>
+              <span className="shrink-0 pl-2 font-semibold whitespace-nowrap">Ouvrir →</span>
+            </Link>
+          )}
+          {(c.emails ?? 0) > 0 && (
+            <Link href="/mail/a-rattacher" className="flex items-center justify-between rounded-xl border border-line px-4 py-2.5 text-sm hover:border-violet" data-today-emails>
+              <span><strong>{c.emails} email(s) reçu(s) à rattacher</strong> : l&apos;adresse correspond à plusieurs fiches.</span>
               <span className="shrink-0 pl-2 font-semibold whitespace-nowrap">Ouvrir →</span>
             </Link>
           )}

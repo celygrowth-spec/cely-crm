@@ -101,6 +101,8 @@ export const bookingRequestSchema = z.object({
   invitee: inviteeSchema,
   answers: z.record(z.string().max(40), z.string().max(5000)),
   idempotency_key: z.string().min(8).max(200).regex(/^[A-Za-z0-9_-]+$/),
+  /** champ piège invisible : rempli seulement par un robot (C09) */
+  fax: z.string().max(200).optional(),
 });
 export type BookingRequest = z.input<typeof bookingRequestSchema>;
 

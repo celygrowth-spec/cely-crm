@@ -75,3 +75,16 @@ Le même projet que la connexion Gmail du module Mail peut servir ; les deux con
   pour ce seul report.
 - **Emails** : aucun email n'est envoyé par ce module (ni confirmation, ni rappel) ; voir
   `docs/integrations/appointments-mail.md`. Google n'envoie pas d'invitation (`sendUpdates=none`).
+
+## Audit, lot 5 (C07, C08, C09, Q02)
+- **Rattrapage automatique** : `/api/cron` (tâche « agenda ») et `/api/rendez-vous/reconcile` sont accessibles au
+  planificateur (le proxy ne les bloque plus) ; la reprise lancée après une réservation est attendue par la plateforme
+  (`after`). Fréquence et activation : `docs/planificateur.md`.
+- **Agenda déconnecté ou sans agenda à vérifier** : la page publique et le report par l'invité sont suspendus avec un
+  message (« prise de rendez-vous en ligne momentanément suspendue »). L'annulation reste possible et sera répercutée
+  dans Google à la reconnexion. La déconnexion dit si Google a réellement confirmé la révocation.
+- **Invité prévenu** : Google envoie l'invitation, le report et l'annulation (`sendUpdates=all`), depuis l'adresse
+  Google de l'organisateur (indiqué sur la page de confirmation). Les rappels partent par Gmail (tâche « rappels »).
+- **Anti-abus** : champ piège, 10 tentatives par heure et par connexion (empreinte d'adresse IP, jamais l'adresse),
+  3 rendez-vous par jour et par email. Les informations saisies ne modifient jamais une fiche ; la trace sur la fiche
+  précise qu'elles sont déclarées par le visiteur, à confirmer.

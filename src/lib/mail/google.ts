@@ -7,18 +7,23 @@ const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 const SEND_URL = "https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media";
 
 export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+/** Lecture (réception des réponses, Q03) : demandée explicitement à la connexion ; sans elle, seul l'envoi marche. */
+export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const IDENTITY_SCOPES = ["openid", "email", "profile"];
 
 export type GoogleClient = { clientId: string; clientSecret: string };
 
-/** Autorisation progressive : la phase 1 ne demande que l'envoi, jamais la lecture de la boîte. */
+/**
+ * Envoi et lecture : la lecture sert à rattacher les réponses de vos contacts (rien d'autre n'est conservé).
+ * Google affiche les deux autorisations ; décocher la lecture laisse l'envoi fonctionner (réception désactivée).
+ */
 export function authorizeUrl(c: GoogleClient, p: { redirectUri: string; state: string; challenge: string; loginHint?: string }) {
   const u = new URL(AUTH_URL);
   u.search = new URLSearchParams({
     client_id: c.clientId,
     redirect_uri: p.redirectUri,
     response_type: "code",
-    scope: [...IDENTITY_SCOPES, GMAIL_SEND_SCOPE].join(" "),
+    scope: [...IDENTITY_SCOPES, GMAIL_SEND_SCOPE, GMAIL_READ_SCOPE].join(" "),
     access_type: "offline",
     prompt: "consent select_account", // sans « consent », Google ne redonne pas de jeton de renouvellement
     state: p.state,

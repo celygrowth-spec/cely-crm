@@ -30,11 +30,11 @@ parcours rejoué dans l'application locale reliée à la base de test ; « réel
 | K01 | 4 | ✅ | Une page « Aujourd'hui » à la racine (1re entrée du menu) : tâches CRM et de projet, relances avec Focus, réponses à traiter, appels à rattacher ; filtre aujourd'hui / 7 jours / tout ; `/a-faire` et `/prospection/aujourdhui` redirigent ; « À faire » retiré du menu | navigateur (redirections, compteur) | lot 4 | — |
 | Q04 | 4 | ✅ | « Intéressé » et « RDV obtenu » demandent une suite (tâche de suivi par défaut, étape, ou rendez-vous déjà planifié) dans Focus, Réponses et le panneau participant ; refus en base sans suite | `aujourdhui.test.ts` (Q04), navigateur | lot 4 | — |
 | K06 | 4 | ✅ | Réponse + résultat en une opération (`record_reply` avec résultat) ; clés liées aux paramètres pour réponse, résultat et création de tâche ; Focus n'enchaîne plus deux appels | `aujourdhui.test.ts` (K06), navigateur (double clic : une tâche) | lot 4 | — |
-| C07 | 5 | ⏳ | | | | |
-| C08 | 5 | ⏳ | | | | |
-| C09 | 5 | ⏳ | | | | |
-| Q02 | 5 | ⏳ | | | | |
-| Q03 | 5 | ⏳ | | | | |
+| C07 | 5 | ✅ | `/api/cron` (agenda, rappels, Gmail, Fireflies) et `/api/rendez-vous/reconcile` ouverts au planificateur (secret vérifié dans la route, propriétaire seulement en session) ; reprise après réservation attendue (`after`) ; dernière réussite / erreur par tâche (`scheduled_jobs`, Paramètres › Passages planifiés) ; Vercel Hobby : passage quotidien, planificateur Supabase 15 min prêt (`supabase/maintenance/planificateur.sql`) | `rendez-vous-emails.test.ts` (C07), navigateur `tests/e2e/lot5-rendez-vous.cjs` (401 sans secret, passage lancé et rapporté) | lot 5 | Activation du planificateur 15 min en production : sur instruction |
+| C08 | 5 | ✅ | Agenda déconnecté ou sans agenda vérifié : réservation publique et report par l'invité suspendus avec message ; annulation répercutée à la reconnexion ; textes de déconnexion complétés ; révocation réellement constatée (avertissement sinon) | navigateur (page publique et API refusent, 0 rendez-vous créé) | lot 5 | Google réel non testé |
+| C09 | 5 | ✅ | Champ piège, limites par connexion (empreinte IP) et par email, trace « déclaré par le visiteur, à confirmer » ; aucune donnée de fiche écrasée (vérifié dans `link_crm`) | `rendez-vous-emails.test.ts` (limites), `rendez-vous.test.ts` | lot 5 | — |
+| Q02 | 5 | ✅ | Confirmation, report, annulation : invitation Google à l'invité (`sendUpdates=all`), expéditeur indiqué ; rappels envoyés par Gmail depuis le serveur (file existante : délais et modèles par type, versions, révisions, suspension globale, invalidation après report) avec quota par passage, incertain jamais renvoyé, trace dans l'historique avec la personne | `rendez-vous-emails.test.ts` (trace unique), `rendez-vous-rappels.test.ts` | lot 5 | Envoi Gmail et invitation Google réels non testés (simulés) |
+| Q03 | 5 | ✅ | Lecture Gmail autorisée explicitement (reconnexion), initiale bornée, incrémentale, reprise ; rattachement par contact, ambiguïté résolue à la main (conservée), doublons et échos du CRM écartés, automatiques ignorés, relances en pause et réponse dans Aujourd'hui, pièces jointes en métadonnées | `rendez-vous-emails.test.ts` (Q03), `tests/unit/mail-inbound.test.ts` | lot 5 | Lecture Gmail réelle : reconnexion du compte requise |
 | C06 | 6 | ⏳ | | | | |
 | Q08 | 6 | ⏳ | | | | |
 | K11 | 6 | ⏳ | | | | |
@@ -100,3 +100,11 @@ parcours rejoué dans l'application locale reliée à la base de test ; « réel
   tâche, la fiche réapparaît dans « 7 prochains jours ».
 - Environnement de test : le simulateur PostgREST charge maintenant les ressources parentes avec alias
   (`company:companies!inner(...)`), comme le vrai PostgREST (la page Réponses ne s'affichait pas en recette locale).
+
+## Lot 5 — rendez-vous et emails
+- Migration `20261115000500_rendez_vous_emails.sql` ; nouvelles routes `/api/cron`, pages Paramètres › Passages
+  planifiés et Mail › Emails à rattacher. Fréquences : `docs/planificateur.md`.
+- Vérifié dans le navigateur (environnement local, Google et Gmail non configurés) : page publique suspendue avec
+  message, réservation directe par l'API refusée (aucun rendez-vous créé), `/api/cron` refusé sans autorisation,
+  passage lancé par le propriétaire et rapporté (Gmail et Fireflies « non actifs », raison affichée).
+- **Simulé seulement** : envoi Gmail des rappels, lecture Gmail, invitations Google.
