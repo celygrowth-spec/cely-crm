@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-import { mergeCompaniesAction } from "@/app/actions";
+import { mergeCompaniesAction, mergePreviewAction } from "@/app/actions";
+import { useQuery } from "@tanstack/react-query";
 import { Button, Card, PageHeader, cn } from "@/components/ui";
 import type { CompanyDetail } from "@/lib/crm/types";
 import { formatAmount, formatDate, personName, PROSPECT_STATUS_LABELS } from "@/lib/format";
@@ -31,6 +32,12 @@ function display(d: CompanyDetail, f: (typeof FIELDS)[number][0]): string {
   }
 }
 
+const MERGE_LABELS: Record<string, string> = {
+  personnes: "personne(s)", historique: "entrée(s) d'historique", taches: "tâche(s)", campagnes: "participation(s) aux campagnes", ventes: "vente(s)",
+  revenus: "revenu(s)", factures: "facture(s)", reglements: "règlement(s)", projets: "projet(s)", taches_projet: "tâche(s) de projet",
+  rendez_vous: "rendez-vous", fichiers: "fichier(s)", emails: "email(s)", appels: "appel(s)", diagnostics: "diagnostic(s)", temps: "entrée(s) de temps",
+};
+
 export function MergeForm({ a, b }: { a: CompanyDetail; b: CompanyDetail }) {
   const router = useRouter();
   const [keepA, setKeepA] = useState(true);
@@ -42,6 +49,12 @@ export function MergeForm({ a, b }: { a: CompanyDetail; b: CompanyDetail }) {
   const [pipelineFromA, setPipelineFromA] = useState(true);
   const [confirmed, setConfirmed] = useState(false);
   const [pending, setPending] = useState(false);
+  // aperçu complet (projets, ventes, finance, rendez-vous…) et conflits, calculé par la base
+  const preview = useQuery({
+    queryKey: ["merge-preview", keep.company.id, merged.company.id],
+    queryFn: async () => { const r = await mergePreviewAction(keep.company.id, merged.company.id); if (!r.ok) throw new Error(r.error); return r.data; },
+  });
+  const blocking = preview.data?.blocking ?? [];
 
   async function submit() {
     setPending(true);
@@ -75,7 +88,7 @@ export function MergeForm({ a, b }: { a: CompanyDetail; b: CompanyDetail }) {
 
   return (
     <div className="max-w-4xl">
-      <PageHeader title="Fusionner deux fiches" description="Choisissez la fiche conservée. Personnes, notes, messages, tâches, listes et historique des deux fiches sont conservés." actions={<Link href="/prospection/doublons" className="text-sm font-semibold text-muted">← Doublons</Link>} />
+      <PageHeader title="Fusionner deux fiches" description="Choisissez la fiche conservée. Tout ce qui est lié aux deux fiches est conservé : personnes, historique, tâches, campagnes, ventes, finance, projets, rendez-vous, fichiers, emails, appels, diagnostics et temps." actions={<Link href="/prospection/doublons" className="text-sm font-semibold text-muted">← Doublons</Link>} />
       <div className="grid gap-3 md:grid-cols-2">
         {side(a, true)}
         {side(b, false)}
@@ -121,6 +134,19 @@ export function MergeForm({ a, b }: { a: CompanyDetail; b: CompanyDetail }) {
         </Card>
       )}
 
+      <Card className="mt-4 p-4" data-merge-preview>
+        <h2 className="font-display text-base font-bold">Ce qui sera rattaché à « {keep.company.name} »</h2>
+        {preview.isLoading ? <p className="text-sm text-muted">Calcul…</p> : preview.isError ? <p className="text-sm text-danger">{preview.error.message}</p> : (
+          <>
+            <p className="mt-1 text-sm">
+              {Object.entries(preview.data!.counts.merge).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${MERGE_LABELS[k] ?? k}`).join(" · ") || "Aucune donnée liée sur la fiche absorbée."}
+            </p>
+            {blocking.map((b) => <p key={b} className="mt-2 rounded-lg bg-danger/5 px-3 py-2 text-sm text-danger" role="alert" data-merge-blocking>{b}</p>)}
+            {preview.data!.warnings.map((w) => <p key={w} className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm">{w}</p>)}
+          </>
+        )}
+      </Card>
+
       <Card className="mt-4 p-4">
         <p className="text-sm">
           La fiche <strong>{merged.company.name}</strong> sera fusionnée dans <strong>{keep.company.name}</strong>. L&apos;ancien identifiant est conservé et redirige vers la fiche gardée.
@@ -130,7 +156,7 @@ export function MergeForm({ a, b }: { a: CompanyDetail; b: CompanyDetail }) {
           <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} /> Je confirme la fusion
         </label>
         <div className="mt-3 flex justify-end">
-          <Button variant="primary" disabled={!confirmed || pending} onClick={submit}>{pending ? "Fusion…" : "Fusionner"}</Button>
+          <Button variant="primary" disabled={!confirmed || pending || blocking.length > 0 || preview.isLoading} onClick={submit}>{pending ? "Fusion…" : "Fusionner"}</Button>
         </div>
       </Card>
     </div>

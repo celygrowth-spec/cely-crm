@@ -20,7 +20,7 @@ parcours rejoué dans l'application locale reliée à la base de test ; « réel
 | Q11 | 1 | ✅ | `sale_set_stage(p_confirm)` : reculer un projet en cours ou en attente demande confirmation ; formalités (documents) ≠ préparation ≠ exécution (projet) | `ventes-cycles.test.ts` (Q11), navigateur (confirmation affichée) | lot 1 | — |
 | Q05 | 1 | ✅ | Une vente par cycle (`sales.cycle`, une seule active par fiche) ; « Nouvelle opportunité » ; nouveau Gain = nouvelle vente, nouveau revenu, nouveau projet ; projet terminé jamais réutilisé ; projet supprimé recréé seulement sur demande ; ventes passées dans Gagnées | `ventes-cycles.test.ts` (Q05), navigateur (3 cycles) | lot 1 | — |
 | K10 | 1/7 | 🔎 | Lot 1 : état de préparation à source unique (`project_onboarding_status`, lu par Ventes et Projets ; ancienne préparation TS retirée) ; une proposition ou un contrat ajouté relance la préparation (corrections conservées) ; un contrat reste une pièce à examiner. Reste au lot 7 : lecture du contenu des documents | `ventes-cycles.test.ts` (K10), `ventes.test.ts` | lot 1 | — |
-| C02 | 2 | ⏳ | | | | |
+| C02 | 2 | ✅ | `merge_companies` rattache tout (ventes renumérotées, revenus, factures, règlements, projets, rendez-vous, fichiers, emails, appels, diagnostics, temps) ; aperçu `merge_preview` (comptes, points d'attention, blocages) affiché avant confirmation ; deux ventes en cours = blocage expliqué ; issue gardée incompatible avec la vente en cours = refus. Fusions passées : diagnostic en lecture seule + rattrapage idempotent qui laisse les cas ambigus | `fusion.test.ts` (rattachement complet, blocage, renumérotation, diagnostic + rattrapage), navigateur `tests/e2e/lot2-fusion.cjs` | lot 2 | Rattrapage en production : sur instruction |
 | C04 | 3 | ⏳ | | | | |
 | C05 | 3 | ⏳ | | | | |
 | Q06 | 3 | ⏳ | | | | |
@@ -68,3 +68,11 @@ parcours rejoué dans l'application locale reliée à la base de test ; « réel
   confirmation ; perte simple depuis le Kanban.
 - Défaut trouvé et corrigé pendant la recette : une nouvelle vente se rattachait au projet terminé de la vente
   précédente (présélection du formulaire et absence de contrôle en base).
+
+## Lot 2 — fusion complète
+- Migration `20261115000200_fusion_complete.sql` ; scripts `supabase/maintenance/diagnostic-fusions.sql` et
+  `rattrapage-fusions.sql` (procédure : `docs/fusion-fiches.md`). Non exécutés en production.
+- Vérifié dans le navigateur : deux fiches gagnées → blocage affiché, bouton désactivé ; doublon avec projet,
+  rendez-vous et personne → aperçu exact, tout rattaché, l'ancien identifiant redirige.
+- Défauts trouvés en cours de route : les rendez-vous (RLS) et un `CASE` non parenthésé dans une condition PL/pgSQL
+  empêchaient le déplacement ; corrigés et couverts par les tests.

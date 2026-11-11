@@ -330,6 +330,12 @@ export async function dismissDuplicateAction(a: string, b: string) {
   });
 }
 
+export type MergePreview = { counts: { keep: Record<string, number>; merge: Record<string, number> }; blocking: string[]; warnings: string[]; active_sale: "keep" | "merge" | null };
+/** Ce que chaque fiche apporte, et ce qui bloque ou demande attention (affiché avant confirmation). */
+export async function mergePreviewAction(keepId: string, mergeId: string) {
+  return run(async (sb) => (await rpc(sb, "merge_preview", { p_keep: v(idSchema, keepId), p_merge: v(idSchema, mergeId) })) as MergePreview);
+}
+
 export async function mergeCompaniesAction(keepId: string, mergeId: string, fields: Record<string, "keep" | "merged">, pipelineFrom: "keep" | "merged") {
   return run(
     async (sb) =>
