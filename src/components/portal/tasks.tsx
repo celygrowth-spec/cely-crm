@@ -170,6 +170,7 @@ function Detail({ id, onStatus }: { id: string; onStatus: (t: PortalTask, s: Tas
       {t.status === "bloque" && t.blocked_reason && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-warning">Bloqué : {t.blocked_reason}</p>}
       {t.description && <p className="text-sm whitespace-pre-line text-ink">{t.description}</p>}
       <LinksView links={t.links ?? []} />
+      {t.can_edit && <TaskUpload task={t} onDone={() => void qc.invalidateQueries({ queryKey: ["portal-task", id] })} />}
       <Comments comments={t.comments ?? []} onAdd={async (body) => {
         const r = await post({ op: "comment", task: t.id, body });
         if (!r.ok) { toast.error(r.error); return false; }
@@ -177,5 +178,41 @@ function Detail({ id, onStatus }: { id: string; onStatus: (t: PortalTask, s: Tas
         return true;
       }} />
     </div>
+  );
+}
+
+/**
+ * Q08 : déposer un fichier directement sur la demande. Le fichier rejoint les documents du projet, rattaché à la
+ * tâche ; la demande d'onboarding correspondante passe « répondue » pour Cely Growth.
+ */
+function TaskUpload({ task, onDone }: { task: PortalTask; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  async function send(file: File) {
+    if (file.size > 25 * 1024 * 1024) return toast.error("Fichier trop lourd (25 Mo maximum).");
+    setBusy(true);
+    const call = async (payload: Record<string, unknown>) => {
+      const res = await fetch("/api/portail/fichiers", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error ?? "Dépôt impossible");
+      return j;
+    };
+    try {
+      const s = (await call({ op: "start", project: task.project_id, folder: null, task: task.id, name: file.name, type: file.type, size: file.size })) as { file_id: string; signedUrl: string };
+      const put = await fetch(s.signedUrl, { method: "PUT", headers: { "content-type": file.type }, body: file });
+      if (!put.ok) { await call({ op: "abort", file: s.file_id }).catch(() => undefined); throw new Error("Transfert interrompu, réessayez."); }
+      await call({ op: "confirm", file: s.file_id });
+      toast.success("Fichier déposé : Cely Growth est prévenu.");
+      onDone();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Dépôt impossible");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <label className={cn("inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm font-semibold hover:border-violet", busy && "pointer-events-none opacity-50")} data-task-upload>
+      {busy ? "Envoi…" : "Déposer un fichier"}
+      <input type="file" className="sr-only" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void send(f); }} />
+    </label>
   );
 }

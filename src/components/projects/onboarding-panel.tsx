@@ -351,11 +351,14 @@ function ItemRow({ item: i, index, o, run, projectId }: { item: OnboardingItem; 
 function RequestModal({ open, onClose, item: i, o, run }: { open: boolean; onClose: () => void; item: OnboardingItem; o: Onboarding; run: Run }) {
   const [text, setText] = useState(i.request_text ?? [i.label, i.detail].filter(Boolean).join("\n"));
   const [person, setPerson] = useState(o.members[0]?.id ?? "");
+  // C06 : le titre montré au client est choisi ici (le libellé interne ne sort pas tel quel)
+  const [title, setTitle] = useState(i.label);
   const [busy, setBusy] = useState(false);
   return (
     <Modal open={open} onClose={onClose} title="Demande au client">
       <div className="space-y-3 text-sm">
         <p className="text-muted">Relisez la demande. Une fois partagée, elle apparaît comme une tâche dans le portail du client : il pourra y répondre ou déposer le fichier demandé. Rien n&apos;est envoyé par email.</p>
+        <Field label="Titre visible du client"><Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={300} aria-label="Titre visible du client" /></Field>
         <Field label="Texte visible du client"><Textarea value={text} onChange={(e) => setText(e.target.value)} className="min-h-28" maxLength={5000} /></Field>
         {o.members.length > 0 && (
           <Field label="Destinataire">
@@ -370,7 +373,7 @@ function RequestModal({ open, onClose, item: i, o, run }: { open: boolean; onClo
           <Button variant="ghost" onClick={onClose}>Annuler</Button>
           <Button variant="primary" disabled={busy || !text.trim() || !o.portal_published} onClick={async () => {
             setBusy(true);
-            const r = await run({ op: "request", item: i.id, text, person: person || null }, "Demande partagée sur le portail");
+            const r = await run({ op: "request", item: i.id, text, person: person || null, title }, "Demande partagée sur le portail");
             setBusy(false);
             if (r !== null) onClose();
           }}>

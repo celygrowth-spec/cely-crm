@@ -166,8 +166,12 @@ export async function taskFromRecap(sb: SupabaseClient, meetingId: string, index
   const a = actions[index];
   if (!m || !a) throw new CrmError("Action introuvable : enregistrez d'abord le récapitulatif.");
   if (a.task_id) return { task_id: a.task_id, existing: true };
+  // C06 : récapitulatif en brouillon → tâche privée ; elle devient visible du client à la publication (en base)
+  const { data: rs } = await sb.from("meeting_recaps").select("status").eq("meeting_id", meetingId).single();
+  const published = (rs as { status: string } | null)?.status === "published";
   const { data: t, error } = await sb.from("project_tasks").insert({
-    project_id: (m as { project_id: string }).project_id, title: a.text.slice(0, 300), meeting_id: meetingId, assignee_kind: "client", visible_to_client: true,
+    project_id: (m as { project_id: string }).project_id, title: a.text.slice(0, 300), meeting_id: meetingId,
+    assignee_kind: published ? "client" : "owner", visible_to_client: published,
   }).select("id").single();
   if (error) throw new CrmError(friendlyError(error));
   actions[index] = { ...a, task_id: (t as { id: string }).id };
@@ -204,8 +208,9 @@ export async function attachUpload(sb: SupabaseClient, projectId: string, fileId
   await ok(sb.from("project_files").insert({ project_id: projectId, file_id: fileId, folder_id: folderId }));
 }
 
-export const shareFiles = (sb: SupabaseClient, projectId: string, fileIds: string[], folderId: string | null) =>
-  ok(sb.from("project_files").insert(fileIds.map((f) => ({ project_id: projectId, file_id: f, folder_id: folderId }))));
+/** C06 : jamais visible du client sans confirmation : {confirm: n} tant que le partage exposerait n documents. */
+export const shareFiles = (sb: SupabaseClient, projectId: string, fileIds: string[], folderId: string | null, confirm = false) =>
+  rpc<{ shared?: number; visible?: boolean; confirm?: number }>(sb, "project_files_share", { p_project: idv(projectId), p_files: fileIds.map(idv), p_folder: folderId, p_confirm: confirm });
 
 /** Retrait du projet uniquement : le document reste dans la fiche CRM. */
 export const unshareFile = (sb: SupabaseClient, projectFileId: string) => changed(sb.from("project_files").delete().eq("id", idv(projectFileId)).select("id"));

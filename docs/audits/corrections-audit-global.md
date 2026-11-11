@@ -35,10 +35,10 @@ parcours rejoué dans l'application locale reliée à la base de test ; « réel
 | C09 | 5 | ✅ | Champ piège, limites par connexion (empreinte IP) et par email, trace « déclaré par le visiteur, à confirmer » ; aucune donnée de fiche écrasée (vérifié dans `link_crm`) | `rendez-vous-emails.test.ts` (limites), `rendez-vous.test.ts` | lot 5 | — |
 | Q02 | 5 | ✅ | Confirmation, report, annulation : invitation Google à l'invité (`sendUpdates=all`), expéditeur indiqué ; rappels envoyés par Gmail depuis le serveur (file existante : délais et modèles par type, versions, révisions, suspension globale, invalidation après report) avec quota par passage, incertain jamais renvoyé, trace dans l'historique avec la personne | `rendez-vous-emails.test.ts` (trace unique), `rendez-vous-rappels.test.ts` | lot 5 | Envoi Gmail et invitation Google réels non testés (simulés) |
 | Q03 | 5 | ✅ | Lecture Gmail autorisée explicitement (reconnexion), initiale bornée, incrémentale, reprise ; rattachement par contact, ambiguïté résolue à la main (conservée), doublons et échos du CRM écartés, automatiques ignorés, relances en pause et réponse dans Aujourd'hui, pièces jointes en métadonnées | `rendez-vous-emails.test.ts` (Q03), `tests/unit/mail-inbound.test.ts` | lot 5 | Lecture Gmail réelle : reconnexion du compte requise |
-| C06 | 6 | ⏳ | | | | |
-| Q08 | 6 | ⏳ | | | | |
-| K11 | 6 | ⏳ | | | | |
-| C13 | 6 | ⏳ | | | | |
+| C06 | 6 | ✅ | Partage depuis la fiche : dossier choisi et confirmation « N documents deviendront visibles » exigée en base (`project_files_share`) ; commentaires écrits sur une tâche interne restent privés ; titre de la demande d'onboarding choisi pour le client ; tâche issue d'un récapitulatif en brouillon privée jusqu'à sa publication ; slides partagés en une opération | `portail-documents.test.ts`, navigateur `tests/e2e/lot6-portail.cjs` | lot 6 | — |
+| Q08 | 6 | ✅ | « Déposer un fichier » dans le détail d'une tâche du portail : le fichier rejoint le projet, rattaché à la tâche ; la demande d'onboarding passe « répondue » (déclencheur existant) | `projets-fichiers.test.ts`, `projet-onboarding.test.ts` ; navigateur non rejoué (dépôt Storage simulé seulement) | lot 6 | Dépôt Storage réel : projet hébergé |
+| K11 | 6 | ✅ | Aperçu : avertit si le contact ne voit rien (projet non publié, accès absent ou expiré) ; limite de connexion par code et par connexion (plus de plafond global) ; retrait d'un dépôt par le client = retrait du projet, la pièce reste dans la fiche ; slides atomiques | `portail-documents.test.ts`, navigateur (aperçu) | lot 6 | — |
+| C13 | 6 | 🚧 | Mécanisme relu : liens de téléchargement créés côté serveur après contrôle de session et de projet en base (`portal_file_grant`), objet privé, chemin aléatoire non devinable, autorisation Storage limitée à un objet et 60 s, lien signé valable 5 min (non révocable pendant cette durée : limite documentée). Aucun défaut démontré, donc aucune correction | `projets-fichiers.test.ts` (simulé) | — | Vérification sur un Supabase hébergé de test (à créer par vous) |
 | K09 | 7 | ⏳ | | | | |
 | Q09 | 7 | ⏳ | | | | |
 | K05 | 8 | ⏳ | | | | |
@@ -108,3 +108,9 @@ parcours rejoué dans l'application locale reliée à la base de test ; « réel
   message, réservation directe par l'API refusée (aucun rendez-vous créé), `/api/cron` refusé sans autorisation,
   passage lancé par le propriétaire et rapporté (Gmail et Fireflies « non actifs », raison affichée).
 - **Simulé seulement** : envoi Gmail des rappels, lecture Gmail, invitations Google.
+
+## Lot 6 — portail et documents
+- Migration `20261115000600_portail_documents.sql`.
+- Vérifié dans le navigateur (`tests/e2e/lot6-portail.cjs`) : partage d'un contrat à la racine d'un projet publié →
+  confirmation affichée, rien de partagé avant, partagé après ; aperçu signalant qu'un contact sans code ne voit rien.
+- C13 reste à vérifier sur Storage réel : un lien signé déjà émis reste valable 5 minutes après une révocation d'accès.

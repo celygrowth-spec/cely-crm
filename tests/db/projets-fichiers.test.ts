@@ -132,13 +132,12 @@ describe("dépôt client", () => {
     await expect(portal(db, "portal_file_update", bob, { p_project_file: f.id, p_name: "Piraté", p_folder: null, p_move: false })).rejects.toThrow(/propres dépôts/);
     await expect(portal(db, "portal_file_delete", alice, { p_project_file: pfOwner })).rejects.toThrow(/propres dépôts/);
     expect(await portal(db, "portal_file_update", alice, { p_project_file: f.id, p_name: "Textes v2.docx", p_folder: sub, p_move: true })).toMatchObject({ name: "Textes v2.docx", folder_id: sub });
-    const d = await portal<{ path: string; file_id: string }>(db, "portal_file_delete", alice, { p_project_file: f.id });
+    const d = await portal<{ path: string | null; file_id: string }>(db, "portal_file_delete", alice, { p_project_file: f.id });
     expect((await portal<Files>(db, "portal_files", bob, { p_project: pid, p_limit: 100, p_offset: 0 })).files.map((x) => x.name)).toEqual(["Charte.pdf"]);
-    // le serveur retire l'objet grâce à l'autorisation de suppression, puis la ligne
-    await asAnonStorage(() => db.query(`delete from storage.objects where name = $1`, [d.path]));
-    await portal(db, "portal_file_purge", alice, { p_file: d.file_id });
+    // audit K11 : le dépôt quitte le projet, mais reste dans la fiche CRM (aucun objet supprimé)
+    expect(d.path).toBeNull();
     await db.query("reset role");
-    expect((await db.one<{ n: number }>(`select count(*)::int n from company_files where id = $1`, [d.file_id])).n).toBe(0);
+    expect((await db.one<{ status: string }>(`select status from company_files where id = $1`, [d.file_id])).status).toBe("ready");
     // le document du propriétaire est intact, et anon ne peut pas le supprimer
     await asAnonStorage(() => db.query(`delete from storage.objects where name = $1`, [`${acme.id}/${shared}.pdf`]));
     await db.query("reset role");

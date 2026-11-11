@@ -57,10 +57,12 @@ export async function POST(req: NextRequest) {
       case "move":
         return reply(await portalRpc("portal_file_update", { p_project_file: b.id, p_name: null, p_folder: b.folder, p_move: true }));
       case "delete": {
-        const d = await portalRpc<{ path: string; file_id: string }>("portal_file_delete", { p_project_file: b.id });
-        // le document est déjà invisible ; si le retrait de l'objet échoue, le nettoyage administrateur le reprendra
-        const { error } = await storage.remove([d.path]);
-        if (!error) await portalRpc("portal_file_purge", { p_file: d.file_id }).catch(() => undefined);
+        // K11 : le dépôt est retiré du projet ; il reste dans la fiche CRM de Cely Growth (aucun objet supprimé)
+        const d = await portalRpc<{ path: string | null; file_id: string }>("portal_file_delete", { p_project_file: b.id });
+        if (d.path) {
+          const { error } = await storage.remove([d.path]);
+          if (!error) await portalRpc("portal_file_purge", { p_file: d.file_id }).catch(() => undefined);
+        }
         return reply({ ok: true });
       }
     }

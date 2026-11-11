@@ -9,7 +9,7 @@ import { CrmError, friendlyError } from "@/lib/crm/service";
 import { confirmUpload, fileUrl, startUpload } from "@/lib/crm/files";
 import { PPTX_TYPE } from "@/lib/crm/diagnostic-rules";
 import { fireRoutine, routineConfig } from "@/lib/crm/diagnostic-trigger";
-import { idv, moveFiles, rpc, v } from "./service";
+import { idv, rpc, v } from "./service";
 import { SECTION_KEYS, routineText, type Onboarding, type OnboardingDeck, type OnboardingItem, type Section, type SectionKey } from "./onboarding-rules";
 
 const COMPANY_BUCKET = "company-files";
@@ -115,8 +115,9 @@ export const answerItem = (sb: SupabaseClient, itemId: string, action: AnswerAct
     p_file: fileId ? idv(fileId) : null,
   });
 
-export const shareRequest = (sb: SupabaseClient, itemId: string, text: string, personId: string | null) =>
-  rpc<{ task_id: string }>(sb, "onboarding_share_request", { p_item: idv(itemId), p_text: text, p_person: personId ? idv(personId) : null });
+/** `title` : titre montré au client (par défaut, le libellé interne) — C06. */
+export const shareRequest = (sb: SupabaseClient, itemId: string, text: string, personId: string | null, title?: string | null) =>
+  rpc<{ task_id: string }>(sb, "onboarding_share_request", { p_item: idv(itemId), p_text: text, p_person: personId ? idv(personId) : null, p_title: title?.trim() || null });
 
 /** Document importé depuis le bloc : il devient la réponse du point (la pièce reste dans la fiche et le projet, en interne). */
 export async function attachAnswerFile(sb: SupabaseClient, projectId: string, itemId: string, fileId: string) {
@@ -172,19 +173,8 @@ export async function requestDeck(sb: SupabaseClient, projectId: string, fetcher
  */
 export async function shareDeck(sb: SupabaseClient, projectId: string, deckId: string, share: boolean) {
   const pid = idv(projectId);
-  const decks = check(await sb.from("project_onboarding_decks").select("id, file_id, status").eq("project_id", pid)) as { id: string; file_id: string | null; status: string }[];
-  const target = decks.find((d) => d.id === idv(deckId));
-  if (!target?.file_id || target.status !== "ready") throw new CrmError("Cette version n'est pas prête.");
-  const files = check(await sb.from("project_files").select("id, file_id").eq("project_id", pid).in("file_id", decks.map((d) => d.file_id).filter((x): x is string => !!x))) as { id: string; file_id: string }[];
-  const folder = await internalFolder(sb, pid);
-  const others = files.filter((f) => f.file_id !== target.file_id).map((f) => f.id);
-  if (others.length) await moveFiles(sb, pid, others, folder, false);
-  const mine = files.find((f) => f.file_id === target.file_id);
-  if (!mine) throw new CrmError("Le fichier de cette version n'est plus dans le projet.");
-  const r = await moveFiles(sb, pid, [mine.id], share ? null : folder, share);
-  if (r.confirm) throw new CrmError("Partage non confirmé : rien n'a été partagé.");
-  check(await sb.from("project_onboarding_decks").update({ shared_at: null }).eq("project_id", pid).neq("id", target.id));
-  check(await sb.from("project_onboarding_decks").update({ shared_at: share ? new Date().toISOString() : null }).eq("id", target.id));
+  // K11 : une seule opération en base (versions précédentes au dossier interne, celle-ci partagée ou retirée)
+  await rpc(sb, "onboarding_share_deck", { p_project: pid, p_deck: idv(deckId), p_share: share, p_internal_folder: await internalFolder(sb, pid) });
 }
 
 // Claude (connecteur) ------------------------------------------------------------------------
