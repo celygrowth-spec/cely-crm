@@ -227,13 +227,13 @@ describe("règle 3 : appels à rattacher", () => {
     expect((await db.one<{ n: number }>(`select count(*)::int n from companies where pipeline_id is not null`)).n).toBe(0);
   });
 
-  test("contact ajouté plus tard : le recalcul le rattache", async () => {
+  test("contact ajouté plus tard : rattaché aussitôt (audit K14), sans attendre le recalcul quotidien", async () => {
     const id = nextId();
     expect((await importCall(id, { participants: ["plus-tard@omega-test.fr"] })).link_state).toBe("to_link");
     const o = await company("[TEST] Omega", ["plus-tard@omega-test.fr"]);
     await db.as("owner");
-    expect(await db.rpc("fireflies_rematch", {})).toBe(1);
     expect(await link(id)).toMatchObject({ company_id: o, link_source: "email" });
+    expect(await db.rpc("fireflies_rematch", {})).toBe(0);
   });
 });
 
@@ -463,12 +463,12 @@ describe("historique des appels", () => {
     const { rows } = await db.query<{ proname: string }>(`
       select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.prosrc ilike '%fireflies%' and p.proname not like 'fireflies\\_%' and p.proname not like 'onboarding\\_%'
-         and p.proname not in ('merge_preview', 'nav_counters')`);
+         and p.proname not in ('merge_preview', 'nav_counters', 'tg_people_rematch_calls')`);
     expect(rows).toEqual([]);
     // la préparation des projets, l'aperçu de fusion et le compteur du menu (comptes) lisent les appels, mais n'est ouverte qu'au propriétaire connecté
     const open = await db.query(`
       select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-       where n.nspname = 'public' and (p.proname like 'onboarding\\_%' or p.proname in ('merge_preview', 'nav_counters')) and p.prosrc ilike '%fireflies%' and has_function_privilege('anon', p.oid, 'execute')`);
+       where n.nspname = 'public' and (p.proname like 'onboarding\\_%' or p.proname in ('merge_preview', 'nav_counters', 'tg_people_rematch_calls')) and p.prosrc ilike '%fireflies%' and has_function_privilege('anon', p.oid, 'execute')`);
     expect(open.rows).toEqual([]);
   });
 

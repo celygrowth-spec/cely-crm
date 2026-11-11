@@ -262,7 +262,8 @@ async function claude(sb: SupabaseClient, c: Checks, mcpUrl: string): Promise<Co
   };
   if (!grants) return { ...base, state: "unknown", problem: { at: null, message: error ?? "Liste des accès indisponible." }, note: "Le serveur MCP est en place ; les accès accordés ne peuvent pas être listés.", primary: { kind: "verify", label: "Vérifier" } };
   if (!grants.length) return { ...base, state: "not_connected", problem: null, note: "Aucun accès accordé à Claude.", primary: { kind: "manage", label: "Connecter" } };
-  return { ...base, state: "connected", problem: null, note: grants.length > 1 ? `${grants.length} accès distincts` : "Un seul accès, partagé par vos usages de Claude", primary: { kind: "manage", label: "Gérer" } };
+  // K14 : seul ce que le serveur vérifie est affiché — un accès accordé, pas la preuve que Claude l'utilise
+  return { ...base, state: "connected", problem: null, note: `${grants.length > 1 ? `${grants.length} accès accordés` : "Accès accordé"} ; l'usage réel se voit à la dernière écriture de Claude`, primary: { kind: "manage", label: "Gérer" } };
 }
 
 // ---------------------------------------------------------------------------

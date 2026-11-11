@@ -41,10 +41,10 @@ parcours rejoué dans l'application locale reliée à la base de test ; « réel
 | C13 | 6 | 🚧 | Mécanisme relu : liens de téléchargement créés côté serveur après contrôle de session et de projet en base (`portal_file_grant`), objet privé, chemin aléatoire non devinable, autorisation Storage limitée à un objet et 60 s, lien signé valable 5 min (non révocable pendant cette durée : limite documentée). Aucun défaut démontré, donc aucune correction | `projets-fichiers.test.ts` (simulé) | — | Vérification sur un Supabase hébergé de test (à créer par vous) |
 | K09 | 7 | ✅ | Projet facultatif sur une session de temps (chrono, saisie, modification) et sur un appel Fireflies, contrôlé (même fiche) ; appel déplacé vers une autre fiche = projet retiré ; filtre par projet sur les mêmes sessions (chaque session comptée une fois) ; historique sans projet inchangé | `onboarding-temps-appels.test.ts` (K09), navigateur `tests/e2e/lot7-temps.cjs` | lot 7 | — |
 | Q09 | 7 | ✅ | Chrono de plus de 12 h : fin proposée (début + 8 h, jamais après maintenant), modifiable, confirmée ; « fin corrigée » tracée ; toujours arrêtable, même après 7 jours | `onboarding-temps-appels.test.ts` (Q09), navigateur | lot 7 | — |
-| K05 | 8 | ⏳ | | | | |
-| K14 | 3/8 | 🔎 | Lot 3 : prévisions en TTC comme les factures (base des cotisations en HT), arrondis identiques base / interface, Ventes et fiche rafraîchis après une action Finance. Reste au lot 8 : points d'intégration (MCP, Gmail, Fireflies, webhook) | `tests/unit/finance-coherente.test.ts` (K14) | lot 3 | — |
-| C12 | 8 | ⏳ | | | | |
-| C14 | 8 | ⏳ | | | | |
+| K05 | 8/9 | ✅ | « Modèles de séquence » / « Modèles d'email », « Ouvrir Pipelines », promesse d'envois programmés retirée, doc de clôture réécrite ; état MCP limité à ce que le serveur vérifie (« accès accordé », dernière écriture de Claude) | relu, navigateur (agent lot 9) | lot 9, lot 8 | — |
+| K14 | 3/8 | ✅ | Lot 3 : prévisions en TTC comme les factures (base des cotisations en HT), arrondis identiques base / interface, Ventes et fiche rafraîchis après une action Finance. Lot 8 : personne retrouvée dans l'historique des emails (contact unique parmi les destinataires) ; appel Fireflies rattaché dès l'ajout du contact ; retours OAuth Gmail fixés par `APP_URL` ; état MCP sans affirmation invérifiable ; webhook : signature officielle, rejeu sans effet (documenté) ; déconnexion Fireflies = plus d'import futur (documenté). Limite : les portées OAuth du MCP ne distinguent pas lecture/écriture côté Supabase, l'accès reste celui du compte propriétaire | `tests/unit/finance-coherente.test.ts` (K14) | lot 3 | — |
+| C12 | 8 | ✅ | `APPOINTMENTS_SECRET` documenté comme secret serveur global : usages dérivés, effets d'un changement, procédure de rotation vérifiable ; séparation ultérieure décrite (transition avec ancien et nouveau secret), non faite | `docs/secrets.md` | lot 8 | — |
+| C14 | 8 | ✅ | Une règle : une fiche portant du temps passé ou un diagnostic ne se supprime plus en silence (suppression refusée, comme pour ventes, finance, emails) ; fonctions de déclencheur et tables récentes fermées au rôle anonyme ; nouvelles fonctions fermées par défaut ; test : toute fonction anonyme exige la clé serveur, aucune table lisible sans connexion. Claude : mêmes règles qu'avant (suppressions limitées aux espaces client, avec accord explicite) | `acces-anonymes.test.ts` | lot 8 | — |
 | K03 | 9 | ⏳ | | | | |
 | K04 | 9 | ⏳ | | | | |
 | K07 | 9 | ⏳ | | | | |
@@ -123,3 +123,9 @@ parcours rejoué dans l'application locale reliée à la base de test ; « réel
   en filtrant sur le projet.
 - Lecture des documents : testée sur un PDF et un .docx générés (tests unitaires). La routine Claude réelle
   d'analyse n'a pas été lancée (configuration externe) : non vérifié en réel.
+
+## Lot 8 — connecteurs, accès et suppressions
+- Migration `20261115000800_connecteurs_suppressions.sql` ; `docs/secrets.md`.
+- Défaut démontré par l'inventaire et corrigé : des fonctions de déclencheur (dont certaines ajoutées aux lots 1 et 7)
+  et quatre tables récentes restaient ouvertes au rôle anonyme (sans effet exploitable : les déclencheurs ne
+  s'appellent pas directement et les tables sont sous RLS). Désormais fermées, et toute nouvelle fonction l'est par défaut.
