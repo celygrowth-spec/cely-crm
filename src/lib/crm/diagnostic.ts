@@ -27,27 +27,51 @@ function ordered(d: Diagnostic): Diagnostic {
 // Bibliothèque
 // ---------------------------------------------------------------------------
 
-export async function getLibrary(sb: SupabaseClient): Promise<{ instructions: string; files: LibraryFile[] }> {
-  const [settings, files] = await Promise.all([
-    sb.from("diagnostic_settings").select("instructions").maybeSingle(),
-    sb.from("diagnostic_library_files").select(LIBRARY_COLUMNS).eq("status", "ready").order("category").order("display_name"),
+/** Dossiers de « Bibliothèque diagnostic » (lui compris, sous-dossiers ajoutés ensuite aussi) : ce que lit le diagnostic. */
+export async function diagnosticFolderIds(sb: SupabaseClient): Promise<string[]> {
+  const folders = check<{ id: string; parent_id: string | null; system_key: string | null }[]>(await sb.from("library_folders").select("id, parent_id, system_key").limit(5000));
+  const root = folders.find((f) => f.system_key === "diagnostic");
+  if (!root) return [];
+  const ids = new Set([root.id]);
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const f of folders) if (f.parent_id && ids.has(f.parent_id) && !ids.has(f.id)) { ids.add(f.id); grew = true; }
+  }
+  return [...ids];
+}
+
+/**
+ * Bibliothèque lue par le diagnostic : les fichiers du dossier « Bibliothèque diagnostic » et de ses sous-dossiers
+ * (mêmes identifiants qu'avant la bibliothèque générale), et les titres des prompts qui y sont rangés.
+ */
+export async function getLibrary(sb: SupabaseClient): Promise<{ instructions: string; files: LibraryFile[]; prompts: { id: string; display_name: string }[] }> {
+  const [settings, folders] = await Promise.all([sb.from("diagnostic_settings").select("instructions").maybeSingle(), diagnosticFolderIds(sb)]);
+  const [files, prompts] = await Promise.all([
+    sb.from("diagnostic_library_files").select(LIBRARY_COLUMNS).eq("status", "ready").eq("kind", "file").in("folder_id", folders).order("category").order("display_name"),
+    sb.from("diagnostic_library_files").select("id, display_name").eq("status", "ready").eq("kind", "prompt").in("folder_id", folders).order("display_name"),
   ]);
-  return { instructions: check<{ instructions: string } | null>(settings)?.instructions ?? "", files: check<LibraryFile[]>(files) };
+  return {
+    instructions: check<{ instructions: string } | null>(settings)?.instructions ?? "",
+    files: check<LibraryFile[]>(files),
+    prompts: check<{ id: string; display_name: string }[]>(prompts),
+  };
 }
 
 export const setInstructions = (sb: SupabaseClient, text: string) =>
   rpc<null>(sb, "diagnostic_set_instructions", { p_text: z.string().trim().min(1, "Le prompt ne peut pas être vide.").max(100000, "Prompt trop long.").parse(text) });
 
+/** Dépôt depuis Paramètres › Diagnostic : dans le dossier « Bibliothèque diagnostic », nom libre choisi par la base. */
 export async function startLibraryUpload(sb: SupabaseClient, input: { name: string; size: number; category: string }) {
   const type = libraryType(input.name);
   if (!type) throw new CrmError("Format non autorisé.");
   if (input.size <= 0) throw new CrmError("Ce fichier est vide.");
   if (input.size > MAX_LIBRARY_BYTES) throw new CrmError("Fichier trop volumineux (25 Mo maximum).");
-  const id = crypto.randomUUID();
-  const path = `${id}.${input.name.split(".").pop()!.toLowerCase()}`;
-  const category = input.category in LIBRARY_CATEGORIES ? input.category : "other";
-  check(await sb.from("diagnostic_library_files").insert({ id, category, display_name: input.name.slice(0, 200), mime_type: type, size_bytes: input.size, storage_path: path }));
-  const { data, error } = await sb.storage.from(LIBRARY_BUCKET).createSignedUploadUrl(path);
+  const row = await rpc<{ id: string; path: string }>(sb, "library_file_start", {
+    p_folder: null, p_name: input.name.slice(0, 200), p_mime: type, p_size: input.size, p_ext: input.name.split(".").pop()!.toLowerCase(),
+    p_category: input.category in LIBRARY_CATEGORIES ? input.category : "other",
+  });
+  const id = row.id;
+  const { data, error } = await sb.storage.from(LIBRARY_BUCKET).createSignedUploadUrl(row.path);
   if (error || !data) {
     await sb.from("diagnostic_library_files").delete().eq("id", id);
     throw new CrmError(`Préparation de l'envoi impossible : ${error?.message ?? "réponse vide"}`);
@@ -55,30 +79,35 @@ export async function startLibraryUpload(sb: SupabaseClient, input: { name: stri
   return { id, signedUrl: data.signedUrl, type };
 }
 
+/** Chemin de stockage d'un élément ; null pour un prompt (aucun objet de stockage). */
 async function libraryPath(sb: SupabaseClient, id: string) {
-  const row = check<{ storage_path: string } | null>(await sb.from("diagnostic_library_files").select("storage_path").eq("id", uuid.parse(id)).maybeSingle());
+  const row = check<{ storage_path: string | null } | null>(await sb.from("diagnostic_library_files").select("storage_path").eq("id", uuid.parse(id)).maybeSingle());
   if (!row) throw new CrmError("Fichier introuvable.");
   return row.storage_path;
 }
 
 export async function confirmLibraryUpload(sb: SupabaseClient, id: string): Promise<LibraryFile> {
   const path = await libraryPath(sb, id);
+  if (!path) throw new CrmError("Fichier introuvable.");
   const probe = await sb.storage.from(LIBRARY_BUCKET).createSignedUrl(path, 10);
   if (probe.error) throw new CrmError("Le fichier n'a pas été reçu par le stockage.");
   return check<LibraryFile>(await sb.from("diagnostic_library_files").update({ status: "ready" }).eq("id", id).select(LIBRARY_COLUMNS).single());
 }
 
-/** Retire l'objet puis la ligne : sert aussi à abandonner un envoi. */
+/** Retire l'objet puis la ligne : sert aussi à abandonner un envoi. Un prompt n'a que sa ligne. */
 export async function deleteLibraryFile(sb: SupabaseClient, id: string) {
   const path = await libraryPath(sb, id);
-  const { error } = await sb.storage.from(LIBRARY_BUCKET).remove([path]);
-  if (error) throw new CrmError(`Le fichier n'a pas pu être retiré du stockage : ${error.message}. Réessayez.`);
-  check(await sb.from("diagnostic_library_files").delete().eq("id", id));
+  if (path) {
+    const { error } = await sb.storage.from(LIBRARY_BUCKET).remove([path]);
+    if (error) throw new CrmError(`Le fichier n'a pas pu être retiré du stockage : ${error.message}. Réessayez.`);
+  }
+  const gone = check<unknown[]>(await sb.from("diagnostic_library_files").delete().eq("id", id).select("id"));
+  if (!gone.length) throw new CrmError("Suppression impossible.");
 }
 
 export async function libraryFileUrl(sb: SupabaseClient, id: string, download = false) {
   const row = check<{ storage_path: string; display_name: string } | null>(
-    await sb.from("diagnostic_library_files").select("storage_path, display_name").eq("id", uuid.parse(id)).eq("status", "ready").maybeSingle(),
+    await sb.from("diagnostic_library_files").select("storage_path, display_name").eq("id", uuid.parse(id)).eq("status", "ready").eq("kind", "file").maybeSingle(),
   );
   if (!row) throw new CrmError("Fichier introuvable.");
   const { data, error } = await sb.storage.from(LIBRARY_BUCKET).createSignedUrl(row.storage_path, 300, download ? { download: row.display_name } : undefined);

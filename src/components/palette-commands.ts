@@ -10,6 +10,7 @@ export const PALETTE_COMMANDS: PaletteCommand[] = [
   { id: "go-time", group: "Aller à…", label: "Temps", keywords: "chrono heures", href: "/temps" },
   { id: "go-mail", group: "Aller à…", label: "Mail", keywords: "email gmail", href: "/mail" },
   { id: "go-calls", group: "Aller à…", label: "Appels", keywords: "fireflies", href: "/appels" },
+  { id: "go-library", group: "Aller à…", label: "Bibliothèque", keywords: "prompts documents dossiers modeles", href: "/bibliotheque" },
   { id: "go-settings", group: "Aller à…", label: "Paramètres", keywords: "reglages connecteurs", href: "/parametres" },
   { id: "new-company", group: "Créer…", label: "Nouvelle fiche", keywords: "entreprise prospect creer ajouter", create: true },
   // pas de paramètre d'ouverture du formulaire sur /finance/revenus : la page s'ouvre, bouton « Ajouter un revenu » en tête
