@@ -15540,7 +15540,7 @@ revoke execute on function public.tg_subscription_follow_contract() from public,
 grant execute on function public.finance_generate_occurrences(date) to authenticated;
 
 
--- ===== 20261116000100_corbeille.sql =====
+-- ===== 20261116010100_corbeille.sql =====
 -- Corbeille, lot 1 : mécanisme commun (mise à la corbeille, restauration, purge après 30 jours).
 --
 -- Principe : un élément mis à la corbeille RESTE en base, inchangé. Ses lignes (et celles de ses éléments liés) sont
@@ -15932,7 +15932,7 @@ begin
 end $$;
 
 
--- ===== 20261116000200_corbeille_finance.sql =====
+-- ===== 20261116010200_corbeille_finance.sql =====
 -- Corbeille, lot 2 : Finance (revenus, factures et avoirs, règlements).
 --  * Un règlement part seul ; une facture part avec ses règlements et ses avoirs (et leurs remboursements) ;
 --    un revenu part avec ses factures. Les totaux de Finance les ignorent aussitôt (vues sous RLS).
@@ -16183,7 +16183,7 @@ end;
 $$;
 
 
--- ===== 20261116000300_corbeille_projets.sql =====
+-- ===== 20261116010300_corbeille_projets.sql =====
 -- Corbeille, lot 3 : Projets (projet client, tâches, idées, phases du planning, points de suivi).
 --  * Un projet part avec tout son contenu : tâches et commentaires, idées, planning (phases, jalons), points de
 --    suivi et récapitulatifs, dossiers, liens vers les documents, historique, onboarding.
@@ -16655,7 +16655,7 @@ end; $function$;
 revoke all on all functions in schema portal_private from public, anon, authenticated;
 
 
--- ===== 20261116000400_corbeille_fiches.sql =====
+-- ===== 20261116010400_corbeille_fiches.sql =====
 -- Corbeille, lot 4 : fiches (entreprises, contacts) et ventes associées.
 --  * Une entreprise part avec tout ce qui lui est rattaché : contacts (et leurs accès au portail), vente, tâches,
 --    historique, revenus, factures et règlements, projets (et tout leur contenu), fichiers, diagnostics,
