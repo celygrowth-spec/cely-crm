@@ -4,10 +4,23 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 import os; L = os.path.dirname(os.path.abspath(__file__)) + "/"
 COLS = ["cible","entreprise","site_web","taille","ville","specialite_secteur","prenom","nom","poste","linkedin_url","email","email_generique","format_email_suppose","signal","source_signal","source_contact","perso_angle","score_priorite","statut_verification","date_recherche"]
-DNS = ["dns_mx","dns_spf","dns_dmarc","dns_verdict"]
+DNS = ["email_envoi","email_envoi_type","dns_mx","dns_spf","dns_dmarc","dns_verdict"]
 rows = []
-for f in ["c1a","c1b","c1c","c2a","c2b","c3","c4"]:
+import sys, unicodedata; sys.path.insert(0, L)
+from dns_check import FILES, email_domain, EMAIL_RE
+DNSC = json.load(open(L+"dns_cache.json")) if os.path.exists(L+"dns_cache.json") else {}
+def _ascii(x): return re.sub(r"[^a-z]", "", unicodedata.normalize("NFKD", x or "").encode("ascii","ignore").decode().lower())
+def email_envoi(r):
+    """E-mail publié, sinon adresse déduite (seulement si elle contient le nom de la personne)."""
+    if r.get("email"): return r["email"].strip(), "publié"
+    for m in EMAIL_RE.finditer(str(r.get("format_email_suppose") or "")):
+        loc = _ascii(m.group(0).split("@")[0]); nom = _ascii(r.get("nom"))
+        if nom and nom[:5] in loc: return m.group(0).strip(".,;)"), "déduit"
+    return "", ""
+for f in [f for f in FILES if os.path.exists(L+f+".json")]:
     for r in json.load(open(L+f+".json")):
+        r["email_envoi"], r["email_envoi_type"] = email_envoi(r)
+        r.update(DNSC.get(email_domain(r), {}))
         r["segment"] = f.upper(); rows.append(r)
 rows.sort(key=lambda r: (int(r["cible"]), r["score_priorite"], r.get("entreprise") or "zz"))
 HEAD = ["segment"]+COLS+DNS
@@ -25,31 +38,23 @@ def sheet(ws, data, head):
     ws.freeze_panes = "C2"; ws.auto_filter.ref = ws.dimensions
 wb = Workbook(); s = wb.active; s.title = "Synthèse"
 from collections import Counter
-s.append(["Hexagone AI × Cely — Listes M1 — V0 partielle (recherche du 2026-11-12)"]); s["A1"].font = Font(bold=True, size=14)
-s.append([]); s.append(["Cible","Objectif","Obtenus","A","B","C","Vérifié","Déduit","À vérifier","Avec LinkedIn","Avec e-mail nominatif"])
+s.append(["Hexagone AI × Cely — Listes M1 — V1 (recherche du 2026-11-12)"]); s["A1"].font = Font(bold=True, size=14)
+s.append([]); s.append(["Cible","Objectif","Obtenus","A","B","C","Vérifié","Déduit","À vérifier","Avec LinkedIn","E-mail publié","E-mail déduit","Domaine sans MX"])
 for c in s[3]: c.font = Font(bold=True)
 names = {1:"1 · Avocats d'affaires",2:"2 · Expertise comptable",3:"3 · Partenaires Anthropic",4:"4 · Directions juridiques"}
-goal = {1:100,2:100,3:100,4:50}
+goal = {1:55,2:35,3:30,4:30}
 for k in [1,2,3,4]:
     d = [r for r in rows if int(r["cible"])==k]; sc = Counter(r["score_priorite"] for r in d); st = Counter(r["statut_verification"] for r in d)
-    s.append([names[k], goal[k], len(d), sc["A"], sc["B"], sc["C"], st["vérifié"], st["déduit"], st["à vérifier"], sum(1 for r in d if r.get("linkedin_url")), sum(1 for r in d if r.get("email"))])
-s.append(["TOTAL", 350, len(rows)])
+    s.append([names[k], goal[k], len(d), sc["A"], sc["B"], sc["C"], st["vérifié"], st["déduit"], st["à vérifier"], sum(1 for r in d if r.get("linkedin_url")), sum(1 for r in d if r.get("email")), sum(1 for r in d if r["email_envoi_type"]=="déduit"), sum(1 for r in d if r.get("dns_verdict","").startswith("PAS DE MX"))])
+s.append(["TOTAL", 150, len(rows), *[sum(1 for r in rows if r["score_priorite"]==x) for x in "ABC"], *[sum(1 for r in rows if r["statut_verification"]==x) for x in ["vérifié","déduit","à vérifier"]], sum(1 for r in rows if r.get("linkedin_url")), sum(1 for r in rows if r.get("email")), sum(1 for r in rows if r["email_envoi_type"]=="déduit"), sum(1 for r in rows if r.get("dns_verdict","").startswith("PAS DE MX"))])
 s.append([])
-for line in [
- "LIMITES DE CETTE V0 (à lire avant usage) :",
- "• Le réseau de la session bloquait l'ouverture des sites des cabinets (WebFetch) : les données viennent des résultats de recherche, pas des pages équipe / mentions légales → la plupart des lignes sont 'à vérifier'.",
- "• Quota de 200 recherches web par tour atteint par les 7 recherches parallèles.",
- "• Aucune URL LinkedIn ni e-mail n'a été construit par déduction : vide = non trouvé publiquement.",
- "• DNS (MX/SPF/DMARC) non vérifiables depuis la session (résolution DNS bloquée) → lancer check_dns.py en local, il remplit les colonnes dns_* de l'onglet 'Tous'.",
- "• Hors secteurs prioritaires en cible 4 (gardés pour signal IA / rôle AFJE) : Fnac Darty, Decathlon, Kiabi, Accor, Siparex.",
- "• Hors fourchette de taille : Hayot Expertise (solo, mais article sur la pseudonymisation = signal très fort) ; Exco Nexiom (réseau Exco).",
- "• À exclure probablement : Cyril Thoumyre / Élodie Scemama Benharrous (cabinet non identifié), Vincent Lacomme / Mohamed Chilah (cabinet non identifié).",
-]: s.append([line])
+NOTES = open(L+"notes_v1.txt").read().splitlines() if os.path.exists(L+"notes_v1.txt") else []
+for line in NOTES: s.append([line])
 s.column_dimensions["A"].width = 32
 for k in range(2,12): s.column_dimensions[get_column_letter(k)].width = 13
 sheet(wb.create_sheet("Tous"), rows, HEAD)
 for k in [1,2,3,4]:
-    sheet(wb.create_sheet(f"Cible {k}"), [r for r in rows if int(r["cible"])==k], HEAD[:-4])
+    sheet(wb.create_sheet(f"Cible {k}"), [r for r in rows if int(r["cible"])==k], HEAD)
 # Cible 3 firm list
 md = open(L+"c3_cabinets.md").read().split("\n")
 def table(start, stop):
@@ -83,8 +88,12 @@ P = [
  ("3","Sia, SFEIR, Galadrim, Eleven Labs, Talan","Partenaires déclarant le secteur Professional & Legal Services"),
  ("4","Banques, mutuelles, énergie, défense","Peu couverts dans cette V0 (seulement BNP, Covéa, CCR, Thales)"),
 ]
+if os.path.exists(L+"pistes_v1.json"): P = [tuple(x) for x in json.load(open(L+"pistes_v1.json"))]
 sheet(wb.create_sheet("Pistes à creuser"), [dict(cible=a, piste=b, pourquoi=c) for a,b,c in P], ["cible","piste","pourquoi"])
-out = "" + L + "../Hexagone_AI_leads_M1.xlsx"; wb.save(out)
-with open(L + "../Hexagone_AI_leads_M1_lemlist.csv","w",newline="",encoding="utf-8-sig") as f:
-    w = csv.DictWriter(f, fieldnames=COLS, extrasaction="ignore"); w.writeheader(); [w.writerow(r) for r in rows]
+out = L + "../Hexagone_AI_leads_M1_V1.xlsx"; wb.save(out)
+# Lemlist : uniquement les lignes avec une adresse (publiée ou déduite) sur un domaine qui a un MX
+send = [dict(r, email=r["email_envoi"]) for r in rows if r["email_envoi"] and not r.get("dns_verdict","").startswith(("PAS DE MX","ERREUR"))]
+with open(L + "../Hexagone_AI_leads_M1_V1_lemlist.csv","w",newline="",encoding="utf-8-sig") as f:
+    w = csv.DictWriter(f, fieldnames=COLS+["email_envoi_type","dns_verdict"], extrasaction="ignore"); w.writeheader(); [w.writerow(r) for r in send]
+print("lemlist:", len(send))
 print(out, len(rows))
