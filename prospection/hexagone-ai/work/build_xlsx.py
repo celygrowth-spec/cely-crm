@@ -4,6 +4,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 import os; L = os.path.dirname(os.path.abspath(__file__)) + "/"
 COLS = ["cible","entreprise","site_web","taille","ville","specialite_secteur","prenom","nom","poste","linkedin_url","email","email_generique","format_email_suppose","signal","source_signal","source_contact","perso_angle","score_priorite","statut_verification","date_recherche"]
+PERSO = ["score_revu","maturite_ia","outils_ia_cites","douleur_confidentialite","perso_faits","accroche","qualif_commentaire"]
 DNS = ["email_a_utiliser","email_a_utiliser_type","dns_domaine","dns_mx","dns_spf","dns_dmarc","dns_verdict"]
 rows = []
 import sys, unicodedata; sys.path.insert(0, L)
@@ -24,9 +25,11 @@ for f in [f for f in FILES if os.path.exists(L+f+".json")]:
         r["email_a_utiliser"], r["email_a_utiliser_type"] = email_envoi(r)
         dom = r["email_a_utiliser"].split("@")[-1].lower() if r["email_a_utiliser"] else email_domain(r)
         r["dns_domaine"] = dom; r.update(DNSC.get(dom, {}))
+        r["score_v1"] = r["score_priorite"]
+        if r.get("score_revu") in ("A","B","C"): r["score_priorite"] = r["score_revu"]
         r["segment"] = f.upper(); rows.append(r)
 rows.sort(key=lambda r: (int(r["cible"]), r["score_priorite"], r.get("entreprise") or "zz"))
-HEAD = ["segment"]+COLS+DNS
+HEAD = ["segment"]+COLS[:17]+PERSO+["score_v1"]+COLS[17:]+DNS
 fill = {"A":"C6EFCE","B":"FFEB9C","C":"F4CCCC"}
 def sheet(ws, data, head):
     ws.append(head)
@@ -36,14 +39,15 @@ def sheet(ws, data, head):
         if "score_priorite" in head:
             ws.cell(ws.max_row, head.index("score_priorite")+1).fill = PatternFill("solid", fgColor=fill.get(r.get("score_priorite"), "FFFFFF"))
     for i, h in enumerate(head, 1):
-        w = {"signal":60,"perso_angle":60,"poste":40,"source_signal":40,"source_contact":40,"entreprise":28,"linkedin_url":38,"taille":25,"specialite_secteur":30}.get(h, 16)
+        w = {"signal":60,"perso_angle":60,"perso_faits":80,"accroche":70,"douleur_confidentialite":50,"qualif_commentaire":50,"maturite_ia":30,"outils_ia_cites":25,"poste":40,"source_signal":40,"source_contact":40,"entreprise":28,"linkedin_url":38,"taille":25,"specialite_secteur":30}.get(h, 16)
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.freeze_panes = "C2"; ws.auto_filter.ref = ws.dimensions
 wb = Workbook(); s = wb.active; s.title = "Synthèse"
 from collections import Counter
-s.append(["Hexagone AI × Cely — Listes M1 — V1 (recherche du 2026-11-12)"]); s["A1"].font = Font(bold=True, size=14)
+s.append(["Hexagone AI × Cely — Listes M1 — V2 qualifiée + personnalisation (recherche du 2026-11-12)"]); s["A1"].font = Font(bold=True, size=14)
 s.append([]); s.append(["Cible","Objectif","Obtenus","A","B","C","Vérifié","Déduit","À vérifier","Avec LinkedIn","E-mail publié","E-mail déduit","Générique seul","Domaine sans MX"])
 for c in s[3]: c.font = Font(bold=True)
+for r in rows: r.setdefault("score_revu","")
 names = {1:"1 · Avocats d'affaires",2:"2 · Expertise comptable",3:"3 · Partenaires Anthropic",4:"4 · Directions juridiques"}
 goal = {1:55,2:35,3:30,4:30}
 for k in [1,2,3,4]:
@@ -58,6 +62,7 @@ for k in range(2,12): s.column_dimensions[get_column_letter(k)].width = 13
 sheet(wb.create_sheet("Tous"), rows, HEAD)
 for k in [1,2,3,4]:
     sheet(wb.create_sheet(f"Cible {k}"), [r for r in rows if int(r["cible"])==k], HEAD)
+sheet(wb.create_sheet("Accroches"), [r for r in rows if r.get("accroche")], ["cible","score_priorite","entreprise","prenom","nom","poste","email_a_utiliser","maturite_ia","douleur_confidentialite","accroche","perso_faits","linkedin_url"])
 # Cible 3 firm list
 md = open(L+"c3_cabinets.md").read().split("\n")
 def table(start, stop):
@@ -93,10 +98,10 @@ P = [
 ]
 if os.path.exists(L+"pistes_v1.json"): P = [tuple(x) for x in json.load(open(L+"pistes_v1.json"))]
 sheet(wb.create_sheet("Pistes à creuser"), [dict(cible=a, piste=b, pourquoi=c) for a,b,c in P], ["cible","piste","pourquoi"])
-out = L + "../Hexagone_AI_leads_M1_V1.xlsx"; wb.save(out)
+out = L + "../Hexagone_AI_leads_M1_V2.xlsx"; wb.save(out)
 # Lemlist : uniquement les lignes avec une adresse à utiliser (nominative publiée > déduite d'un motif observé > générique) sur un domaine qui a un MX
-send = [r for r in rows if r["email_a_utiliser"] and not r.get("dns_verdict","").startswith(("PAS DE MX","ERREUR"))]
-with open(L + "../Hexagone_AI_leads_M1_V1_lemlist.csv","w",newline="",encoding="utf-8-sig") as f:
-    w = csv.DictWriter(f, fieldnames=COLS+["email_a_utiliser","email_a_utiliser_type","dns_verdict"], extrasaction="ignore"); w.writeheader(); [w.writerow(r) for r in send]
+send = [r for r in rows if not str(r.get("qualif_commentaire","")).upper().startswith("À RETIRER") and r["email_a_utiliser"] and not r.get("dns_verdict","").startswith(("PAS DE MX","ERREUR"))]
+with open(L + "../Hexagone_AI_leads_M1_V2_lemlist.csv","w",newline="",encoding="utf-8-sig") as f:
+    w = csv.DictWriter(f, fieldnames=COLS+["email_a_utiliser","email_a_utiliser_type","dns_verdict","accroche","douleur_confidentialite","maturite_ia","perso_faits"], extrasaction="ignore"); w.writeheader(); [w.writerow(r) for r in send]
 print("lemlist:", len(send))
 print(out, len(rows))
