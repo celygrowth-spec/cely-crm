@@ -19,7 +19,14 @@
   "perso_angle": "Son programme de formation inclut 'Sécurité : anonymisation, travail hors ligne' et 'IA locale' : il connaît exactement le problème ; à approcher en prescripteur (cofondateur du groupe WhatsApp Experts-Comptables 2.0, 1 400 membres, selon le podcast CodEC).",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — a créé et déployé ses propres « systèmes d'anonymisation des données clients » et assistants IA ; forme +500 pros via Venissien.ai",
+  "outils_ia_cites": "ChatGPT, Claude, Perplexity, Gemini, Gamma",
+  "douleur_confidentialite": "Son programme de formation inclut « Sécurité : anonymisation, travail hors ligne » et « IA locale » : il a déjà bricolé une réponse au problème qu'Hexagone industrialise.",
+  "perso_faits": "Page formation : « dashboards d'analyse financière automatisés, systèmes d'anonymisation des données clients, assistants IA spécialisés par mission » (2026) — https://www.aumconseil.fr/formation/ ‖ Même page : module « Nouveautés 2025-2026 : agents IA, protocole MCP, IA locale » ; +500 experts-comptables, avocats et collaborateurs formés — https://www.aumconseil.fr/formation/ ‖ Accounting Business Club #32 « Des cas concrets de ChatGPT en cabinet d'expertise comptable » : précautions de confidentialité des données (date non relevée) — https://podcast.ausha.co/accounting-business-club/cas-chatgtp-experts-comptables-venissien-ducarre",
+  "accroche": "Vous expliquez avoir construit vos propres « systèmes d'anonymisation des données clients » et enseignez l'IA locale à plus de 500 professionnels. Une pseudonymisation automatique et réversible devant ChatGPT ou Claude serait-elle utile aux cabinets que vous formez ?",
+  "qualif_commentaire": "Décideur confirmé (fondateur) ; petit cabinet (0-20 salariés ciblés) → prescripteur plutôt que client ; risque : a sa propre solution d'anonymisation maison. Aucun e-mail nominatif publié.",
+  "score_revu": "A"
  },
  {
   "cible": 2,
@@ -41,7 +48,14 @@
   "perso_angle": "Cabinet 'stack digitale' (Pennylane, OCR, IA) qui revendique un hébergement souverain et le RGPD : angle 'étendre la même exigence de souveraineté à l'usage de ChatGPT/Claude par l'équipe'.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — stack Pennylane avec « OCR, IA » mise en avant et engagement d'hébergement souverain RGPD",
+  "outils_ia_cites": "Pennylane (OCR, IA)",
+  "douleur_confidentialite": "Le site promet un « Hébergement souverain et mesures de sécurité conformes aux exigences RGPD » ; l'usage de ChatGPT/Claude sur des dossiers d'apports, holdings et acquisitions sortirait de ce cadre.",
+  "perso_faits": "Fiche fondateur : crée Nexco en 2021 ; holdings, opérations d'apports, transformations, acquisitions, audit légal — https://www.nexco-expertise.com/equipe/raphael-berguig ‖ Site : « Hébergement souverain et mesures de sécurité conformes aux exigences RGPD » ; partenaire officiel Pennylane (« OCR, IA ») — https://www.nexco-expertise.com/",
+  "accroche": "Nexco promet à ses clients un « hébergement souverain » conforme RGPD. Sur vos dossiers d'apports et d'acquisitions, comment étendez-vous cette promesse au moment où un collaborateur colle un document dans ChatGPT ou Claude ?",
+  "qualif_commentaire": "Décideur confirmé (fondateur & président) ; 2 associés, +250 entreprises (site) ; aucun e-mail nominatif publié (contact@nexco.fr).",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -63,7 +77,14 @@
   "perso_angle": "Ancien chef de mission et développeur, il pilote l'automatisation et la data du cabinet : interlocuteur technique naturel pour un outil de pseudonymisation local.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — pilote la stack Pennylane « OCR, IA » et l'automatisation du cabinet",
+  "outils_ia_cites": "Pennylane (OCR, IA)",
+  "douleur_confidentialite": "Même promesse d'« hébergement souverain » RGPD côté cabinet ; profil technique à même d'évaluer une brique locale de pseudonymisation.",
+  "perso_faits": "Fiche associé : expert-comptable mémorialiste et spécialiste IT, ancien « développeur informatique en start-up » — https://www.nexco-expertise.com/equipe/alexandre-ohayon ‖ Site : il « pilote la stack digitale, l'automatisation et l'organisation des flux » — https://www.nexco-expertise.com/",
+  "accroche": "Ancien développeur, vous pilotez la stack et l'automatisation de Nexco, qui promet un « hébergement souverain ». Une brique locale qui pseudonymise les données clients avant tout appel à ChatGPT ou Claude trouverait-elle sa place dans votre architecture ?",
+  "qualif_commentaire": "Associé confirmé (fiche équipe) ; interlocuteur technique idéal en binôme avec R. Berguig. Aucun e-mail nominatif publié.",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -85,7 +106,14 @@
   "perso_angle": "Invité de l'Accounting Business Club (09/11/2025) 'IA et facture électronique : comment garder la main sur son cabinet' ; aujourd'hui président de l'Ordre francilien (qui anime le club Inovacio sur l'IA générative) : approcher au titre de son cabinet, avec tact, ou en prescripteur.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — parle d'IA et d'agents intelligents en podcast ; aucun outil IA nommé",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "(déduit du métier) Cabinet d'ingénierie patrimoniale et de fusions-acquisitions : holdings familiales, cessions, transmissions — données patrimoniales parmi les plus sensibles.",
+  "perso_faits": "Accounting Business Club « IA et facture électronique : comment garder la main sur son cabinet » : « IA et agents intelligents : menace ou opportunité pour la profession ? » (épisode 63) — https://podcast.ausha.co/accounting-business-club/63-ia-et-facture-electronique-comment-garder-la-main-sur-son-cabinet-gilles-boesiger ‖ Président de l'Ordre des experts-comptables Paris IdF depuis fin janv. 2026 (rapport moral 2025 : « Fin janvier 2026, j'ai transmis la présidence à Gilles Bösiger ») — https://www.oec-paris.fr/wp-content/uploads/2026/07/rapport-moral-2025.pdf",
+  "accroche": "Dans l'Accounting Business Club, vous parliez de « garder la main » face à l'IA et à la facture électronique. Sur des dossiers patrimoniaux et de cession, garder la main suppose aussi que les données clients ne partent pas sur les serveurs d'OpenAI.",
+  "qualif_commentaire": "À RETIRER : président en exercice de l'OEC Paris IdF depuis janv. 2026 (institution exclue, règle 7) — à garder seulement en prescripteur institutionnel ; pour Stengelin, passer par B. Forgette. Aucun e-mail nominatif publié.",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -107,7 +135,14 @@
   "perso_angle": "Associé en charge des systèmes d'information : décideur technique pour un déploiement on-premise.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — cabinet dont le cofondateur s'exprime sur l'IA ; aucun outil IA nommé",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "(déduit du métier) Holdings patrimoniales, groupes familiaux, transmissions et SI financiers clients : données financières et patrimoniales très sensibles.",
+  "perso_faits": "Épisode Accounting Business Club du cofondateur (50 collaborateurs, 6 M€ de CA) sur l'IA et la facture électronique — https://podcast.ausha.co/accounting-business-club/63-ia-et-facture-electronique-comment-garder-la-main-sur-son-cabinet-gilles-boesiger ‖ Site Stengelin : holding patrimoniale, groupes familiaux, transmission des PME et ETI — https://stengelin.fr/",
+  "accroche": "Stengelin accompagne holdings familiales, cessions et transmissions, des dossiers où une fuite coûte cher. Côté systèmes d'information, comment encadrez-vous l'usage de ChatGPT ou Claude par les équipes sur ces données ?",
+  "qualif_commentaire": "Poste (DG associé, SI financiers & consulting) non revérifié : la page d'accueil stengelin.fr ne liste pas l'équipe → à vérifier ; devient le contact principal si G. Bösiger est retiré. Aucun e-mail nominatif publié.",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -129,7 +164,14 @@
   "perso_angle": "Accounting Business Club (01/06/2025) : elle utilise un GPT personnalisé ('Challenge-moi') et Mistral et insiste sur l'indépendance technologique ; données de santé/officines = sensibilité forte.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — cite son GPT personnalisé « Challenge-moi » (ChatGPT) et Mistral ; développe des outils internes",
+  "outils_ia_cites": "ChatGPT (GPT personnalisé « Challenge-moi »), Mistral",
+  "douleur_confidentialite": "Cabinet spécialisé à 95 % en pharmacie d'officine (installation, cession, valorisation) qui revendique son « indépendance technologique » : comptes et projets de cession d'officines, paie des équipes.",
+  "perso_faits": "Accounting Business Club : « intégrer l'intelligence artificielle dans les processus comptables tout en gardant son indépendance technologique » ; ressources citées : GPT « Challenge-moi », Mistral — https://podcast.ausha.co/accounting-business-club/specialisation-et-reprise-familiale-d-un-cabinet-d-expertise-comptable-mathea-quercy-quercy-associes ‖ Même épisode : cabinet familial créé en 1979, 50 collaborateurs, 95 % pharmacie d'officine — https://podcast.ausha.co/accounting-business-club/specialisation-et-reprise-familiale-d-un-cabinet-d-expertise-comptable-mathea-quercy-quercy-associes ‖ Invitée du podcast Orizona « Acheter sa pharmacie : les indicateurs financiers à analyser » — https://podcast.ausha.co/orizona/3-acheter-sa-pharmacie-les-indicateurs-financiers-a-analyser-mathea-quercy-quercy-associes",
+  "accroche": "Dans l'Accounting Business Club, vous évoquez votre GPT « Challenge-moi », Mistral et votre attachement à l'indépendance technologique. Sur des dossiers d'officines, cette indépendance peut aussi signifier utiliser ChatGPT sans qu'aucun chiffre client ne quitte le cabinet.",
+  "qualif_commentaire": "Décideure confirmée (présidente) ; taille confirmée (50 collaborateurs, 5 associés) ; usage ChatGPT/Mistral nommé + discours souveraineté = cible idéale. Aucun e-mail nominatif publié.",
+  "score_revu": "A"
  },
  {
   "cible": 2,
@@ -151,7 +193,14 @@
   "perso_angle": "Associé du cabinet familial spécialisé pharmacie ; même angle confidentialité des données d'officines.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — cabinet qui utilise un GPT personnalisé et Mistral (épisode de la présidente)",
+  "outils_ia_cites": "ChatGPT, Mistral",
+  "douleur_confidentialite": "(déduit du métier) Comptes, valorisations et cessions d'officines pharmaceutiques ; paie des équipes officinales.",
+  "perso_faits": "Associé du cabinet familial (50 collaborateurs, 95 % pharmacie) dont la présidente décrit l'intégration de l'IA « tout en gardant son indépendance technologique » — https://podcast.ausha.co/accounting-business-club/specialisation-et-reprise-familiale-d-un-cabinet-d-expertise-comptable-mathea-quercy-quercy-associes ‖ Fiche associé : expert-comptable, CAC ; M2 Ingénierie financière et stratégie fiscale (Paris 1), M2 Droit fiscal (Paris 2) — https://www.cabinetquercysa.com/le-cabinet/",
+  "accroche": "Quercy & Associés intègre l'IA en revendiquant son indépendance technologique. Sur les valorisations et cessions d'officines que vous suivez, une pseudonymisation locale permet d'utiliser ChatGPT ou Mistral sans exposer le nom ni les chiffres d'une pharmacie.",
+  "qualif_commentaire": "Associé confirmé (page « Le cabinet ») ; contacter après Mathéa Quercy. Aucun e-mail nominatif publié.",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -173,7 +222,14 @@
   "perso_angle": "Accounting Business Club (17/01/2026) : outils développés en interne depuis 20 ans, Lynkia (90-95 % de présaisie par IA) et Impulse Data (800 000 FEC mutualisés entre 15 cabinets) : volumes de données clients énormes, sujet confidentialité central.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — développe ses outils en interne : Lynkia (90-95 % de présaisie par IA) ; consortium Impulse Data (800 000 FEC mutualisés)",
+  "outils_ia_cites": "Lynkia (outil interne), Impulse Data",
+  "douleur_confidentialite": "Mutualisation de 800 000 FEC entre 15 cabinets et 290 collaborateurs : volume de données clients colossal, et usages IA hors production (mails, notes) non encadrés publiquement.",
+  "perso_faits": "Accounting Business Club #67 « Financiarisation : pourquoi Cocerto a dit non » : Lynkia, « 90-95% de présaisie automatique via l'IA » — https://podcast.ausha.co/accounting-business-club/67-financiarisation-pourquoi-cocerto-a-dit-non-jonathan-sturm ‖ Même épisode : « Impulse Data : comment 15 cabinets d'experts-comptables mutualisent 800 000 FEC » ; financiarisation « refermée en 30 secondes » — https://podcast.ausha.co/accounting-business-club/67-financiarisation-pourquoi-cocerto-a-dit-non-jonathan-sturm ‖ Page équipe : expert-comptable et CAC associé, directeur général de Cocerto (Paris) — https://cocerto.fr/equipe/",
+  "accroche": "Dans l'épisode #67 de l'Accounting Business Club, vous présentez Lynkia et les 800 000 FEC mutualisés d'Impulse Data. Hors outils de production, comment vos 290 collaborateurs utilisent-ils ChatGPT ou Claude sans exposer ces données clients ?",
+  "qualif_commentaire": "Décideur confirmé (DG) ; taille confirmée (290 collaborateurs, 19 associés, 30 M€) ; budget réel ; risque : culture « on développe nous-mêmes ». Aucun e-mail nominatif publié.",
+  "score_revu": "A"
  },
  {
   "cible": 2,
@@ -195,7 +251,14 @@
   "perso_angle": "Associé en charge du développement informatique d'un cabinet qui construit ses propres outils (Lynkia) : interlocuteur pour une brique de pseudonymisation on-premise.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — associé responsable du développement informatique d'un cabinet qui construit ses propres outils IA (Lynkia)",
+  "outils_ia_cites": "Lynkia (outil interne)",
+  "douleur_confidentialite": "Cabinet de 290 collaborateurs qui développe en interne et mutualise des FEC : besoin d'une brique on-premise pour les LLM du marché plutôt que d'un outil cloud.",
+  "perso_faits": "Lynkia, outil de production maison avec « 90-95% de présaisie automatique via l'IA » (Accounting Business Club #67) — https://podcast.ausha.co/accounting-business-club/67-financiarisation-pourquoi-cocerto-a-dit-non-jonathan-sturm ‖ Page équipe : « Responsable développement informatique associé », Rennes — https://cocerto.fr/equipe/",
+  "accroche": "Vous développez les outils de Cocerto, dont Lynkia. Plutôt que de coder une couche de confidentialité devant ChatGPT ou Claude, une brique on-premise qui pseudonymise et réidentifie les données clients vous ferait-elle gagner du temps ?",
+  "qualif_commentaire": "Associé confirmé (page équipe) ; décideur technique en binôme avec J. Sturm. Aucun e-mail nominatif publié.",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -217,7 +280,14 @@
   "perso_angle": "Sa citation : « nos métiers sont des métiers de communication. Et cela le sera de plus en plus avec le déploiement de l'IA » — angle : libérer du temps de relation client avec l'IA sans exposer les données.",
   "score_priorite": "B",
   "statut_verification": "déduit",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — évoque le déploiement de l'IA sur sa fiche ; aucun outil nommé",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "(déduit du métier) Expertise comptable, gestion sociale et patrimoine (DU de gestion de patrimoine) : données de paie et patrimoniales des clients.",
+  "perso_faits": "Citation sur sa fiche : « nos métiers sont des métiers de communication. Et cela le sera de plus en plus avec le déploiement de l'IA. » — https://www.bewiz.fr/team ‖ Même fiche : a racheté à 30 ans le cabinet où elle avait fait son stage, puis s'est associée à Laurent Benoudiz ; diplôme RSE — https://www.bewiz.fr/team",
+  "accroche": "Sur votre fiche Bewiz, vous écrivez que nos métiers de communication le seront « de plus en plus avec le déploiement de l'IA ». Pour que cette IA serve la relation client sans exposer les données de paie ou de patrimoine, une pseudonymisation locale aide.",
+  "qualif_commentaire": "Associée confirmée ; e-mail awiduch@bewiz.fr reste déduit (motif nliodenot@bewiz.fr revu sur les mentions légales).",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -239,7 +309,14 @@
   "perso_angle": "Podcast Les Geeks des Chiffres (févr. 2025) 'De 2 à 120 collaborateurs' : sa devise 'Qu'est-ce que je ferais si je n'avais pas peur ?' ; il a validé l'article du cabinet sur les plaintes CNIL contre ChatGPT.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — le cabinet publie sur l'IA et la CNIL et vend du conseil en transformation digitale ; aucun outil IA nommé",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "L'article CECCA rappelle les plaintes à la CNIL contre « la collecte de données effectuée par ChatGPT » ; 3 500 clients et +140 collaborateurs.",
+  "perso_faits": "Article « La CNIL va-t-elle instaurer des règlementations strictes autour de l'IA ? » (publié 05/06/2023, mis à jour 21/11/2025) « Vérifié par : Cédrick Meïer » — https://cecca.fr/blog/digitalisation/cnil-reglementations-ia/ ‖ Mentions légales : directeur de la publication, expert-comptable et CAC — https://cecca.fr/mentions-legales/",
+  "accroche": "L'article CECCA que vous avez vérifié rappelle les plaintes déposées à la CNIL contre la collecte de données de ChatGPT. Avec 3 500 clients, comment vos collaborateurs utilisent-ils ces outils sans y verser de données clients ?",
+  "qualif_commentaire": "Décideur confirmé (fondateur, directeur de publication). Corrigé : l'article n'est pas de lui — rédigé par Éric Niddam, revu par J. Khalfa, vérifié par C. Meïer ; publié en juin 2023 (signal ancien). Orthographe site : Meïer. Aucun e-mail nominatif publié.",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -261,7 +338,14 @@
   "perso_angle": "Relecteur de l'article CECCA sur ChatGPT et la CNIL ; conseille startups et franchises en croissance.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — relecteur de l'article CECCA sur l'IA et la CNIL ; aucun outil IA nommé",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "(déduit du métier) Clients startups et franchises en croissance : données financières, levées, pactes ; plaintes CNIL contre ChatGPT rappelées par le cabinet.",
+  "perso_faits": "Article CECCA sur la CNIL et ChatGPT (mis à jour 21/11/2025) : « Revu par : Jonathan Khalfa » — https://cecca.fr/blog/digitalisation/cnil-reglementations-ia/ ‖ Page équipe CECCA — https://cecca.fr/equipe/",
+  "accroche": "Vous avez relu l'article CECCA sur les plaintes CNIL visant la collecte de données de ChatGPT. Pour les startups et franchises que vous suivez, utiliser ces outils sans y exposer leurs chiffres devient un vrai sujet : nous le réglons en local.",
+  "qualif_commentaire": "Associé (page équipe). Corrigé : « relecteur » = « Revu par » ; l'auteur est Éric Niddam. À contacter après C. Meïer. Aucun e-mail nominatif publié.",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -283,7 +367,14 @@
   "perso_angle": "Cas client Cegid (27/08/2024) : « Notre ADN c'est la data » ; associé SI qui a industrialisé les tableaux de bord (Cegid Loop + Oxtaam) : interlocuteur naturel pour encadrer l'usage des LLM sur les données clients.",
   "score_priorite": "B",
   "statut_verification": "déduit",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — Cegid Loop (« robot comptable à base d'IA ») et Oxtaam One pour industrialiser la data",
+  "outils_ia_cites": "Cegid Loop, Oxtaam One, Power BI",
+  "douleur_confidentialite": "(déduit du métier) 2 600 clients et un socle data commun compta/social/juridique : analyses et synthèses sur données sociales et comptables très sensibles.",
+  "perso_faits": "Cas client Cegid : « Notre ADN c'est la data. » ; « Son robot comptable à base d'IA assimile très facilement les flux de factures » (cas client, date à revérifier, 2024 selon passe 1) — https://www.cegid.com/fr/cas-client/logiciel-cegid-loop-oxtaam-data-cabinet-firex/ ‖ Même source : refonte du SI dès 2018 avec « un socle commun à tous les métiers du groupe (compta, social juridique) » — https://www.cegid.com/fr/cas-client/logiciel-cegid-loop-oxtaam-data-cabinet-firex/",
+  "accroche": "« Notre ADN c'est la data », disiez-vous dans le cas client Cegid. Quand ces données comptables et sociales passent dans ChatGPT ou Claude pour une note ou une analyse, une pseudonymisation locale permet de garder le même contrôle.",
+  "qualif_commentaire": "Associé en charge des SI confirmé (page équipe) ; taille confirmée (120 collaborateurs) ; source IA de 2024 → à vérifier pour 2025-26. E-mail guillaume.noyer@firex.fr déduit (motif nicolas.viret@firex.fr revu).",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -305,7 +396,14 @@
   "perso_angle": "Associé responsable de la publication du site du groupe ; e-mail nominatif publié.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — cabinet sur Cegid Loop (IA) et Oxtaam ; aucun propos IA personnel",
+  "outils_ia_cites": "Cegid Loop, Oxtaam One",
+  "douleur_confidentialite": "(déduit du métier) 2 600 clients, missions comptables, sociales et juridiques.",
+  "perso_faits": "Cas client Cegid Firex : passage à Cegid Loop en 2020 puis industrialisation des tableaux de bord avec Oxtaam — https://www.cegid.com/fr/cas-client/logiciel-cegid-loop-oxtaam-data-cabinet-firex/ ‖ Mentions légales : « Responsable publication : Nicolas Viret nicolas.viret@firex.fr » — https://www.firex.fr/mentions-legales/",
+  "accroche": "Firex a fait de la data son ADN, de Cegid Loop à Oxtaam. Pour les usages d'IA générative hors production, nous permettons d'utiliser ChatGPT ou Claude sans que les données des 2 600 clients du groupe ne sortent du cabinet.",
+  "qualif_commentaire": "Associé confirmé ; e-mail nominatif publié (vérifié). Contacter de préférence G. Noyer (SI) d'abord.",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -327,7 +425,14 @@
   "perso_angle": "Dans Cegid (2025) il dit attendre « un robot conversationnel, sorte de ChatGPT spécialisé, capable d'analyser les données de nos clients » : exactement le cas d'usage à sécuriser par pseudonymisation ; cofondateur d'AutoApps (applications 100 % locales) : profil technophile et prescripteur.",
   "score_priorite": "A",
   "statut_verification": "à vérifier",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — utilise ChatGPT, Copilot, Claude et Power Automate ; cabinet pilote de Cegid Quadra Plus (IA générative embarquée)",
+  "outils_ia_cites": "ChatGPT, Copilot, Claude, Power Automate, Cegid Quadra Plus",
+  "douleur_confidentialite": "Il attend « un chatGPT spécialisé […] capable notamment d'analyser les données de nos client·es » ; en podcast, il conseille de coller des erreurs dans ChatGPT : usage quotidien d'IA grand public dans un cabinet de 11 personnes.",
+  "perso_faits": "Cas client Cegid : « Un robot conversationnel, comme un chatGPT spécialisé, intégré dans Cegid Quadra Plus, capable notamment d'analyser les données de nos client·es… j'ai hâte de le tester ! » — https://www.cegid.com/fr/cas-client/quadra-plus-aura-finance/ ‖ Podcast CodEC (août 2026) : « nous avons ChatGPT, Copilot, Cloud, qui peut aider, qui peut débuguer » ; démos Power Automate — https://podcast.ausha.co/codec/power-automate-microsoft-l-outil-gratuit-que-votre-cabinet-n-exploite-pas ‖ Cabinet pilote Cegid Quadra Plus depuis févr. 2024 ; « Je suis technophile » — https://www.cegid.com/fr/cas-client/quadra-plus-aura-finance/",
+  "accroche": "Vous disiez avoir « hâte de tester » un ChatGPT spécialisé « capable d'analyser les données de nos client·es ». Sans attendre, nous permettons d'utiliser ChatGPT, Copilot ou Claude sur ces données, pseudonymisées localement avant chaque requête.",
+  "qualif_commentaire": "Associé confirmé (Cegid) ; petite structure (3 associés, 8 collaborateurs) donc budget limité, mais champion technophile et visible (CodEC). Pas de site ni d'e-mail trouvés.",
+  "score_revu": "A"
  },
  {
   "cible": 2,
@@ -349,7 +454,14 @@
   "perso_angle": "Il assume de rester à 30 personnes et de miser sur la proximité client face à la financiarisation : l'IA sécurisée comme levier pour un cabinet indépendant. Aucun site officiel trouvé.",
   "score_priorite": "B",
   "statut_verification": "à vérifier",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — aborde l'IA en podcast (mai 2026) ; aucun outil nommé",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "(déduit du métier) 700 clients et 1 001 liasses en 2025 ; cabinet de proximité qui refuse la financiarisation : la confiance client est l'argument central.",
+  "perso_faits": "Les Geeks des Chiffres (mai 2026) : ~30 personnes, 2,5 M€ de CA, 700 clients, 1 001 liasses en 2025 ; « Pourquoi rester à 30 personnes peut être un vrai choix stratégique » — https://podcast.ausha.co/les-geeks-des-chiffres/la-realite-du-cabinet-comptable-a-30-personnes-entre-ia-financiarisation-doutes-et-facture-electronique-olivier ‖ Même épisode : la phrase de ses enfants « Papa, quand est-ce que tu vends le cabinet pour passer plus de temps et jouer avec nous ? » — https://podcast.ausha.co/les-geeks-des-chiffres/la-realite-du-cabinet-comptable-a-30-personnes-entre-ia-financiarisation-doutes-et-facture-electronique-olivier ‖ Expert-comptable inscrit depuis 2015, cabinet créé en 2008 à Olonne-sur-Mer (annuaire) — https://www.compteo.fr/expert-comptable/belledhaine-20013",
+  "accroche": "Dans les Geeks des Chiffres, vous défendez un cabinet de 30 personnes qui mise sur la proximité face à la financiarisation. Utiliser l'IA sans livrer les données de vos 700 clients à des serveurs américains peut faire partie de cette différence.",
+  "qualif_commentaire": "Associé confirmé (podcast + annuaire) ; pas de site ni d'e-mail trouvés ; signal IA faible.",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -371,7 +483,14 @@
   "perso_angle": "Cabinet repris et transformé, turnover divisé par 7 en 2 ans (podcast) ; signal IA faible. Aucun site officiel trouvé.",
   "score_priorite": "C",
   "statut_verification": "à vérifier",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — l'IA abordée en podcast ; aucun outil nommé",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "(déduit du métier) Cabinet de 10-19 salariés : données comptables, fiscales et sociales de TPE/PME toulousaines.",
+  "perso_faits": "Les Geeks des Chiffres : « Il faut qu'on arrive à prendre un peu plus de recul pour passer plus de temps au conseil et moins de temps à la production » ; thème IA et nouvelles technologies — https://podcast.ausha.co/les-geeks-des-chiffres/expert-comptable-vs-collaborateur-les-dessous-de-la-relation-vincent-bouchard-hyphen-expertise ‖ Registre : dirigeants Vincent Bouchard et Marie-Emilie Laurens ; 10-19 salariés, CA ≈ 2,01 M€ (2022) ; fusion-absorption d'Hyphen Finance (2024) — https://www.pappers.fr/entreprise/398717280",
+  "accroche": "Dans les Geeks des Chiffres, vous vouliez « passer plus de temps au conseil et moins de temps à la production ». L'IA générative y aide, à condition que les données de vos clients ne quittent pas le cabinet.",
+  "qualif_commentaire": "Dirigeant confirmé (registre). Corrigé taille : 10-19 salariés, CA ≈ 2 M€ (Pappers, 2022), cabinet créé en 1994 (pas un cabinet récent). Signal IA faible ; pas de site ni d'e-mail.",
+  "score_revu": "C"
  },
  {
   "cible": 2,
@@ -393,7 +512,14 @@
   "perso_angle": "Accroche du site « GARDEZ LE CONTRÔLE — Entre intelligence humaine et artificielle » : parfait pour parler de garder le contrôle des données clients envoyées aux IA ; cabinet passé de 10 à 120 collaborateurs.",
   "score_priorite": "B",
   "statut_verification": "à vérifier",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — le site revendique une approche « entre intelligence humaine et artificielle » ; aucun outil IA nommé",
+  "outils_ia_cites": "Slack, Monday",
+  "douleur_confidentialite": "(déduit du métier) Une centaine de collaborateurs (Paris, Lyon) : volume de dossiers clients élevé, usage IA diffus non encadré publiquement.",
+  "perso_faits": "Site : « GARDEZ LE CONTRÔLE » — « Entre intelligence humaine et artificielle, Experts Entreprendre offre à ses clients le meilleur des deux mondes » — https://www.experts-entreprendre.com/ ‖ Les Geeks des Chiffres : « Passer de 10 à 120 collaborateurs, ça ne s'est pas fait en étant hyper procédurier » ; mini squads, Slack, Monday, data — https://podcast.ausha.co/les-geeks-des-chiffres/de-10-a-120-collaborateurs-avec-une-strategie-100-organique-arnaud-girod-experts-entreprendre",
+  "accroche": "Votre site promet de « garder le contrôle », « entre intelligence humaine et artificielle ». Côté IA, garder le contrôle veut aussi dire que les données clients ne partent pas chez OpenAI quand un collaborateur utilise ChatGPT.",
+  "qualif_commentaire": "Associé selon le podcast (les associés ne sont pas nommés sur le site) → statut à vérifier ; aucun e-mail nominatif publié (paris@ / lyon@).",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -415,6 +541,13 @@
   "perso_angle": "Cabinet en semaine de 4 jours (vendredi offert) grâce aux gains de productivité : l'IA sécurisée comme prolongement.",
   "score_priorite": "C",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "0 — aucune trace IA ; digitalisation et semaine de 4 jours",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "(déduit du métier) ~10 collaborateurs : données comptables et fiscales de TPE/PME toulousaines.",
+  "perso_faits": "Les Geeks des Chiffres : « La journée du vendredi, elle est offerte. Le ressenti que j'ai, c'est que sur cette période-là, en 4 jours les gens sont plus productifs. » — https://podcast.ausha.co/les-geeks-des-chiffres/la-vraie-vie-d-un-cabinet-comptable-de-10-personnes-raphael-madar-censea-partners ‖ Mentions légales : fondateur et responsable de la publication — https://www.censea-partners.com/mentions-legales/",
+  "accroche": "Votre semaine de 4 jours repose sur des gains de productivité. L'IA générative peut en apporter d'autres, à condition que les données de vos clients ne quittent pas le cabinet : c'est ce que nous permettons avec ChatGPT ou Claude.",
+  "qualif_commentaire": "Décideur confirmé ; petite structure sans signal IA → priorité basse. Aucun e-mail nominatif publié.",
+  "score_revu": "C"
  }
 ]

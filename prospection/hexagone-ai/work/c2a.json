@@ -19,7 +19,14 @@
   "perso_angle": "Son article 'IA et secret professionnel : pseudonymiser les données clients' décrit exactement le besoin couvert par Hexagone AI ; voir aussi 'IA souveraine ou cloud américain : où traiter vos données financières en 2026' (hayot-expertise.fr/blog/ia-souveraine-vs-cloud-us-donnees-finance).",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — publie sur l'IA et le secret professionnel (avr.-juin 2026) et déclare utiliser Inqom pour imputation/lettrage",
+  "outils_ia_cites": "Inqom, Pennylane, Dext, Silae",
+  "douleur_confidentialite": "Son propre article : exposer une donnée client à un service d'IA en ligne « sans précaution suffisante peut constituer une violation de ce secret » (art. 21 ord. 1945) ; il recommande de pseudonymiser avant toute soumission.",
+  "perso_faits": "Article signé « IA et secret professionnel : pseudonymiser les données clients » (30 avr. 2026) : « La confidentialité n'est pas un obstacle à l'IA, c'est sa condition d'usage. » — https://hayot-expertise.fr/blog/ia-secret-professionnel-pseudonymisation-donnees ‖ Article « IA souveraine ou cloud américain : où traiter vos données financières en 2026 » (21 juin 2026), matrice par sensibilité dont « IA grand public possible après anonymisation » — https://hayot-expertise.fr/blog/ia-souveraine-vs-cloud-us-donnees-finance ‖ Partenaire certifié Pennylane ; « nous utilisons Inqom pour accélérer la production » (2026) — https://hayot-expertise.fr/outils/inqom",
+  "accroche": "Dans votre article du 30 avril, vous écrivez que « la confidentialité n'est pas un obstacle à l'IA, c'est sa condition d'usage ». La pseudonymisation que vous décrivez à la main, nous l'automatisons en local avant ChatGPT ou Claude, réidentification comprise.",
+  "qualif_commentaire": "Décideur confirmé (fondateur, représentant légal) ; cabinet solo donc budget modeste, mais adéquation parfaite au message : bon candidat early adopter / témoignage. Aucun e-mail nominatif publié (contact@ seulement).",
+  "score_revu": "A"
  },
  {
   "cible": 2,
@@ -41,7 +48,14 @@
   "perso_angle": "Son anonymiseur gratuit fait la même promesse qu'Hexagone (pseudonymiser puis réidentifier) : à aborder plutôt en partenaire/prescriptrice (elle forme les cabinets au secret professionnel et à l'IA) qu'en cliente ; aussi présente à Accountex Londres 2026 avec CodEC.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — vend des formations IA (Lab IA avec Claude) et publie un « Anonymiseur de FEC et de documents » gratuit",
+  "outils_ia_cites": "Claude, ChatGPT, Le Chat",
+  "douleur_confidentialite": "Sa page d'accueil cible des cabinets dont les « collaborateurs […] utilisent déjà ChatGPT, sans cadre et parfois avec des données clients » ; ses formations enseignent à « anonymiser un document » avant de travailler sur de vrais dossiers.",
+  "perso_faits": "Page d'accueil : « Des collaborateurs qui utilisent déjà ChatGPT, sans cadre et parfois avec des données clients. » + Lab IA de démonstration avec Claude (2026) — https://worldofnumeric.fr/ ‖ Outil gratuit « Anonymiseur de FEC et de documents » proposé sur le site (2026) — https://worldofnumeric.fr/ ‖ Compta Online (27 mai 2026) : « L'IA n'est pas une fin en soi, c'est un moyen au service de nos clients. […] Nous apprenons en marchant » — https://www.compta-online.com/x-ao8638 ‖ A montré au Congrès national des experts-comptables le gain de temps permis par l'IA (mesinfos.fr) — https://mesinfos.fr/auvergne-rhone-alpes/ia-trois-exemples-pour-faciliter-le-travail-des-experts-comptables-en-quelques-clics-230218.html",
+  "accroche": "Votre site décrit des collaborateurs qui utilisent ChatGPT « sans cadre et parfois avec des données clients », et votre anonymiseur de FEC y répond. Pour les cabinets que vous formez, une pseudonymisation locale automatique et réversible pourrait-elle compléter votre offre ?",
+  "qualif_commentaire": "Décideure confirmée (directrice de publication, SASU) ; structure solo de formation → à approcher en prescriptrice/partenaire, pas en cliente ; risque : son anonymiseur gratuit recouvre en partie la promesse Hexagone.",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -63,7 +77,14 @@
   "perso_angle": "Son article 'La Tech' et l'intrapreneuriat ? Ça se passe chez Bewiz' (28/01/2025) : un logiciel juridique né en interne — angle 'donner aux intrapreneurs l'accès aux LLM sans exposer les dossiers clients'.",
   "score_priorite": "B",
   "statut_verification": "déduit",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — cabinet qui se dit innovant (logiciel juridique né en interne, janv. 2025) ; une associée évoque le déploiement de l'IA ; aucun outil IA nommé",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "(déduit du métier) Cabinet d'une cinquantaine de personnes en expertise comptable, paie/RH, CAC et ingénierie patrimoniale : données sociales, paie et patrimoniales des clients ; logiciels développés en interne par des collaborateurs.",
+  "perso_faits": "Article signé « La Tech' et l'intrapreneuriat ? Ça se passe chez Bewiz » (janv. 2025) : un collaborateur a conçu un logiciel pour le pôle juridique, que le cabinet a racheté — https://www.bewiz.fr/articles/la-tech-et-lintrapreneuriat-ca-se-passe-chez-bewiz ‖ Associée A.-S. Widuch sur la page équipe : nos métiers de communication le seront « de plus en plus avec le déploiement de l'IA » — https://www.bewiz.fr/team",
+  "accroche": "Votre article sur l'intrapreneuriat chez Bewiz raconte comment un collaborateur a créé le logiciel du pôle juridique. Le jour où vos équipes brancheront ChatGPT ou Claude sur ces outils, comment garder les dossiers clients hors des serveurs de l'IA ?",
+  "qualif_commentaire": "Décideur (associé, signataire d'articles) ; taille confirmée (~50) ; signal IA faible et article daté de janv. 2025 ; e-mail lbenoudiz@bewiz.fr reste déduit (motif nliodenot@bewiz.fr revu sur les mentions légales).",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -85,6 +106,13 @@
   "perso_angle": "Studeria (cas client publié le 02/11/2026) : outil de production IA sur mesure, 19 outils dans l'assistant de consultation livré ; la DG Mathilde Pauchon a quitté ses fonctions (BODACC 10/03/2026) : interlocuteur à confirmer.",
   "score_priorite": "B",
   "statut_verification": "à vérifier",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — outil de production IA sur mesure (moteurs d'imputation et de lettrage, assistant de consultation à 19 outils) déployé sur une machine virtuelle hébergée chez le cabinet (Studeria, 2026)",
+  "outils_ia_cites": "outils sur mesure Studeria (moteurs d'imputation et de lettrage, assistant de consultation)",
+  "douleur_confidentialite": "Le cas client Studeria pose comme contrainte « Des données sensibles qui doivent rester chez le cabinet » : tout a été déployé sur une VM hébergée chez ADITEC — mais l'usage de ChatGPT/Claude hors outils de production n'est pas couvert.",
+  "perso_faits": "Cas client Studeria (2026) : audit sur site en juin 2026, rapport de cadrage de plus de 100 pages, moteurs testés en aveugle avant production — https://www.studeria.fr/cas-clients/aditec-ia-expertise-comptable-outil-production ‖ Même source : « Déploiement de l'ensemble sur une machine virtuelle hébergée chez le cabinet » ; 380 dossiers clients — https://www.studeria.fr/cas-clients/aditec-ia-expertise-comptable-outil-production",
+  "accroche": "Le cas Studeria décrit votre exigence : des données sensibles « qui doivent rester chez le cabinet », d'où un déploiement sur votre propre machine virtuelle. Pour les usages hors production, mails, notes, synthèses avec ChatGPT ou Claude, appliquez-vous la même règle ?",
+  "qualif_commentaire": "Contact faible : Marc Chezot n'est pas nommé dans le cas client et son statut d'associé/décideur n'est pas confirmé ; pas de site officiel ni d'e-mail ; risque : vient d'investir avec un prestataire IA. Interlocuteur à confirmer avant envoi.",
+  "score_revu": "B"
  }
 ]

@@ -19,7 +19,14 @@
   "perso_angle": "A bâti un cabinet 100% télétravail (450 clients en 3 ans) et a présenté en podcast ses usages IA ; lui parler du risque de confidentialité quand les collaborateurs à distance envoient des données clients à ChatGPT.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — usages IA présentés en podcast (présentation bilan, templates juridiques, gains de temps) ; site « orienté vers le conseil, la digitalisation et l'IA » ; aucun outil IA nommé",
+  "outils_ia_cites": "Pennylane",
+  "douleur_confidentialite": "(déduit du métier) 30 collaborateurs, missions CFO à temps partagé / DAF externalisé : données de pilotage et juridiques des clients injectées dans des templates IA.",
+  "perso_faits": "Masterclass Les Geeks des Chiffres (2026) : « IA au cabinet : cas d'usage concrets (présentation bilan, templates juridiques, gains de temps) » et passage de 0 à 30 collaborateurs — https://podcast.ausha.co/les-geeks-des-chiffres/raly-conseil ‖ Site : « Accompagnement orienté vers le conseils, la digitalisation et l'IA » ; article de blog sur Pennylane — https://ralyconseils.com/ ‖ Même épisode : méthode d'onboarding client J0/J30/J90 et cartographie des flux — https://podcast.ausha.co/les-geeks-des-chiffres/raly-conseil",
+  "accroche": "Dans la masterclass des Geeks des Chiffres, vous montrez l'IA au service de vos présentations de bilan et de vos templates juridiques. Avec 30 collaborateurs, comment vous assurez-vous que les données clients ne partent pas chez OpenAI ou Anthropic ?",
+  "qualif_commentaire": "Décideur confirmé (cofondateur, co-éditeur du site) ; taille 30 collaborateurs (podcast) ; signal IA réel mais sans outil ni discours confidentialité → score abaissé. Aucun e-mail nominatif publié (hello@ / contact@).",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -41,7 +48,14 @@
   "perso_angle": "Les deux cofondateurs sont passés par KPMG puis par des cabinets parisiens ; ils mettent en avant un positionnement « expert-comptable entrepreneur ».",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — mêmes usages IA du cabinet présentés en podcast ; aucun outil IA nommé",
+  "outils_ia_cites": "Pennylane",
+  "douleur_confidentialite": "(déduit du métier) Missions DAF externalisé et pilotage : chiffres et données juridiques des clients manipulés par les collaborateurs avec l'IA.",
+  "perso_faits": "Co-invité de la masterclass Les Geeks des Chiffres (2026) : passage de la compliance au pilotage (CFO part-time, DAF externalisé) — https://podcast.ausha.co/les-geeks-des-chiffres/raly-conseil ‖ Même épisode : « La vérité sur la productivité : ce n'est pas l'outil qui compte, c'est ce que tu racontes avec les chiffres » (sujet de l'épisode) — https://podcast.ausha.co/les-geeks-des-chiffres/raly-conseil",
+  "accroche": "Vous défendez, dans les Geeks des Chiffres, l'idée que la productivité tient à ce qu'on raconte avec les chiffres plutôt qu'à l'outil. Quand l'IA aide à raconter ces chiffres, la question devient : où partent les données de vos clients ?",
+  "qualif_commentaire": "Décideur confirmé (cofondateur, mentions légales) ; doublon cabinet avec C. Alves : n'en contacter qu'un en premier. Aucun e-mail nominatif publié.",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -63,6 +77,13 @@
   "perso_angle": "Dans Sage (19/05/2026) il explique que les IA généralistes (ChatGPT, Gemini, Claude) servent surtout à la recherche et la rédaction ; newsletter 'La quatrième heure' sur l'IA pour les pros du chiffre ; prescripteur potentiel (forme des cabinets).",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — cabinet « expertise comptable, IA, data » qui vend formation et conseil en transformation Data/IA aux confrères",
+  "outils_ia_cites": "Claude, Cursor, ChatGPT, Gemini",
+  "douleur_confidentialite": "Interview Sage (mai 2026) : « Le premier point, c'est évidemment la confidentialité des données » ; il cite comme issue « des environnements fermés […] ou l'anonymisation des données ».",
+  "perso_faits": "Interview Sage (19 mai 2026) : « Une porte de sortie est le recours à des environnements fermés ou des solutions intégrées aux logiciels métiers ou l'anonymisation des données. » — https://www.sage.com/fr-fr/blog/intelligence-artificielle-comptable/ ‖ Podcast CodEC (avr. 2026), démos Claude et Cursor : « quand on construit l'outil, on met des données anonymisées » — https://podcast.ausha.co/codec/automatiser-son-cabinet-avec-l-ia-2-demonstrations-concretes-avec-vincent-lacomme ‖ Compta Online (15 juin 2026) : parle de 2026 comme de « l'année de vérité » pour l'IA en cabinet — https://www.compta-online.com/x-ao8701 ‖ Newsletter « La quatrième heure » sur l'IA pour les professionnels du chiffre — https://www.altanum.fr/",
+  "accroche": "Dans votre entretien Sage de mai, vous citez l'anonymisation des données comme « porte de sortie » au problème de confidentialité. C'est précisément ce que nous automatisons en local pour ChatGPT et Claude : utile pour vos missions de conseil Data/IA ?",
+  "qualif_commentaire": "Décideur confirmé (fondateur, directeur de publication) ; petite structure → valeur surtout de prescripteur/intégrateur auprès des cabinets qu'il forme. Aucun e-mail nominatif publié (contact@).",
+  "score_revu": "A"
  }
 ]

@@ -19,7 +19,14 @@
   "perso_angle": "Citation (Compta Online, 23/08/2026) : « Beaucoup de cabinets, en pensant bien faire, ont acheté des modules, souvent payants, qu'ils croyaient plus sécurisés. C'est faux. » Sa page IA met en avant « Sécurité IT & conformité… RGPD, souveraineté » : angle client ET partenaire intégrateur.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — le cabinet « industrialise l'usage de l'automatisation et de l'intelligence artificielle » et vend des projets IA (agents, RAG)",
+  "outils_ia_cites": "ChatGPT, agents IA, RAG",
+  "douleur_confidentialite": "Il affirme que des modules IA « croyaient plus sécurisés. C'est faux. » et sa page IA promet : « l'IA ne doit jamais ouvrir une brèche » (données sensibles, RGPD, souveraineté).",
+  "perso_faits": "Compta Online (23 août 2026) : « Beaucoup de cabinets, en pensant bien faire, ont acheté des modules, souvent payants, qu'ils croyaient plus sécurisés. C'est faux. » — https://www.compta-online.com/x-ao8833 ‖ Même article : atelier Qonto aux Universités d'Été de l'OEC IdF (1-2 sept. 2026) « IA en cabinet : passer du test individuel au déploiement maîtrisé » — https://www.compta-online.com/x-ao8833 ‖ Page IA : « Protection des données sensibles, gestion des accès, RGPD, souveraineté : l'IA ne doit jamais ouvrir une brèche. » — https://www.trevys.fr/intelligence-artificielle",
+  "accroche": "Vous avertissiez dans Compta Online que des cabinets ont acheté des modules « qu'ils croyaient plus sécurisés. C'est faux. » Notre approche est inverse : pseudonymiser en local avant ChatGPT ou Claude, pour que la sécurité ne dépende plus du fournisseur.",
+  "qualif_commentaire": "Décideur confirmé (fondateur) ; petite structure mais intégrateur IA → client ET partenaire ; risque modéré : membre élu du CROEC Paris IdF (pas président). Aucun e-mail nominatif publié.",
+  "score_revu": "A"
  },
  {
   "cible": 2,
@@ -41,7 +48,14 @@
   "perso_angle": "Interlocuteur technique naturel pour évaluer une brique de pseudonymisation locale à intégrer dans les projets IA que Trevys mène pour ses clients.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — directeur de l'innovation d'un cabinet qui intègre des briques IA (RAG, agents, open source) chez ses clients",
+  "outils_ia_cites": "RAG, agents IA, briques open source",
+  "douleur_confidentialite": "Page IA du cabinet : « Protection des données sensibles, gestion des accès, RGPD, souveraineté : l'IA ne doit jamais ouvrir une brèche. »",
+  "perso_faits": "Page IA : « Sélection des bons outils (éditeurs, modèles, briques open source) et intégration au plus près de vos usages » — https://www.trevys.fr/intelligence-artificielle ‖ Page cabinet : Walther Oettgen, directeur de l'innovation — https://www.trevys.fr/le-cabinet",
+  "accroche": "Votre page IA promet que « l'IA ne doit jamais ouvrir une brèche ». Pour les projets que Trevys intègre, une brique locale qui pseudonymise les données sensibles avant tout LLM puis les restitue pourrait-elle entrer dans votre catalogue ?",
+  "qualif_commentaire": "Poste confirmé (page cabinet), non expert-comptable : interlocuteur technique/partenariat. Aucun e-mail nominatif publié.",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -63,7 +77,14 @@
   "perso_angle": "Il raconte qu'un PowerPoint client qui lui prenait 4 h est produit en 10 min par l'IA : question naturelle — avec quelles données clients, et sous quel cadre secret pro (cabinet EC + avocats) ? Son 2e chantier IA (mails, présentations, rapports hors outils de production) est exactement le périmètre d'Hexagone AI.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — a retenu Claude et Copilot Business pour tout le cabinet ; BU Transformation digitale (consultants IA, codeurs, data analysts)",
+  "outils_ia_cites": "Claude, Copilot Business",
+  "douleur_confidentialite": "Il exige des « outils conformes au RGPD et au secret professionnel » alors que son 2e chantier IA (mails, présentations, rapports clients) passe par des LLM cloud ; groupe EC + Impulsa Avocats.",
+  "perso_faits": "Compta Online (17 juin 2026) : « je pouvais passer quatre heures à préparer un PowerPoint pour un client. Aujourd'hui, l'IA le produit en dix minutes » — https://www.compta-online.com/x-ao8715 ‖ Même interview : « Nous avons retenu quelques outils, notamment Claude et Copilot Business » ; formation de tous, « des associés aux stagiaires » — https://www.compta-online.com/x-ao8715 ‖ Même interview : signature apposée « en utilisant des outils conformes au RGPD et au secret professionnel » — https://www.compta-online.com/x-ao8715",
+  "accroche": "Vous racontez qu'un PowerPoint client de quatre heures sort désormais en dix minutes, avec Claude et Copilot Business. Pour garantir les outils « conformes au RGPD et au secret professionnel » que vous exigez, nous pseudonymisons localement les données clients avant chaque requête.",
+  "qualif_commentaire": "Décideur (CEO) ; taille confirmée (CA ≈ 10,9 M€ 2025, Pappers) ; à vérifier : un avis BODACC 2026 mentionne la fin de ses fonctions de DG d'IMPULSA CONSEIL (réorganisation probable). Aucun e-mail nominatif publié.",
+  "score_revu": "A"
  },
  {
   "cible": 2,
@@ -85,7 +106,14 @@
   "perso_angle": "En tant que COO, porteur probable du cadrage opérationnel (outils autorisés, process) des cas d'usage IA identifiés par métier.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — cabinet qui déploie Claude et Copilot Business via sa BU Transformation digitale",
+  "outils_ia_cites": "Claude, Copilot Business",
+  "douleur_confidentialite": "Déploiement IA à tous les métiers (compta, paie, juridique) et vente de l'expertise IA aux DAF/DRH clients : données de paie et RH en jeu.",
+  "perso_faits": "Compta Online (17 juin 2026) : la BU Transformation digitale identifie « dix cas d'usage par métier » ; accompagnement jusqu'au S2 2026 — https://www.compta-online.com/x-ao8715 ‖ Page groupe : associé COO, expert-comptable — https://impulsa.fr/le-groupe-impulsa/",
+  "accroche": "Impulsa déploie Claude et Copilot Business métier par métier, avec dix cas d'usage chacun. Côté opérations, comment cadrez-vous ce que les équipes peuvent y saisir ? Une pseudonymisation locale évite d'avoir à l'interdire.",
+  "qualif_commentaire": "Associé COO (page groupe) ; porteur opérationnel probable du déploiement. Aucun e-mail nominatif publié.",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -107,7 +135,14 @@
   "perso_angle": "Sa ligne sur l'IA : « intégrer sans précipitation, mais sans rester à quai » — Hexagone AI permet justement d'utiliser ChatGPT/Claude sans exposer le secret professionnel ; double casquette prescripteur (IFEC IDF).",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — rapporteur du Congrès 2026 du CNOEC sur l'axe IA ; cite Copilot ; aucun outil déployé nommé",
+  "outils_ia_cites": "Copilot",
+  "douleur_confidentialite": "Il conclut qu'il faut intégrer l'IA « en gardant à l'esprit la souveraineté numérique, qui me tient à cœur » ; Afigec : 34 associés, ~400 collaborateurs, 21 sites.",
+  "perso_faits": "Compta Online (17 sept. 2026) : intégrer l'IA à la stratégie « en gardant à l'esprit la souveraineté numérique, qui me tient à cœur » — https://www.compta-online.com/x-ao8893 ‖ Même entretien : « Se réjouir que Copilot résume les réunions Teams, c'est bien, mais ce n'est pas cela, utiliser l'IA. » — https://www.compta-online.com/x-ao8893 ‖ Rapporteur du Congrès 2026 du CNOEC (axe facture électronique et IA) et président de l'IFEC IDF — https://www.compta-online.com/x-ao8893",
+  "accroche": "Dans Compta Online, vous concluez qu'il faut intégrer l'IA « en gardant à l'esprit la souveraineté numérique ». Chez Afigec, une pseudonymisation locale permet d'utiliser ChatGPT ou Claude sans qu'aucune donnée client nominative ne quitte le cabinet.",
+  "qualif_commentaire": "Associé confirmé ; grand réseau (400 collaborateurs) ; double casquette prescripteur (IFEC IDF, syndicat, non exclu) ; à ménager vu son rôle au Congrès. Aucun e-mail nominatif publié.",
+  "score_revu": "A"
  },
  {
   "cible": 2,
@@ -129,7 +164,14 @@
   "perso_angle": "Citation (Compta Online) : « Les cabinets devront investir sur les collaborateurs, ce qui n'est pas naturel dans nos métiers. Il faudra laisser du temps pour apprendre. » NB : témoignage GenIA-L signé « cabinet Fidunion » — lien Fidunion/Afigec à confirmer.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — utilise au quotidien l'assistant GenIA-L Expert-Comptable (Lefebvre Dalloz)",
+  "outils_ia_cites": "GenIA-L Expert-Comptable",
+  "douleur_confidentialite": "(déduit du métier) Usage d'un assistant juridique pour « préparer un échange client » : les questions posées contiennent souvent des éléments de dossier client.",
+  "perso_faits": "Compta Online (mai 2026) : témoignage « Dominique Périer, cabinet Fidunion » : GenIA-L lui sert à « vérifier rapidement un point de droit, de conforter une analyse ou de préparer un échange client » — https://www.compta-online.com/x-ao8613 ‖ Page associés Afigec : Dominique Perier — https://www.afigec.com/les-associes/",
+  "accroche": "Vous utilisez GenIA-L pour préparer vos échanges clients. Pour aller plus loin avec ChatGPT ou Claude sur les éléments du dossier lui-même, une pseudonymisation locale garantit qu'aucune donnée client ne sort.",
+  "qualif_commentaire": "Associé Afigec confirmé ; lien Fidunion/Afigec non confirmé (même personne probable). Corrigé : la citation « Les cabinets devront investir… » de la passe 1 n'apparaît pas sur la page lue → retirée. Aucun e-mail nominatif publié.",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -151,7 +193,14 @@
   "perso_angle": "« Nous sommes 8 au cabinet, 4 disposent d'une licence Claude » : les skills Claude modélisent les process clients avant de passer à Nia — question directe sur les données clients envoyées à Claude. Porte d'entrée possible vers le groupement Force d'Experts.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — agent maison « Nia » sur serveur physique du cabinet, 4 licences Claude sur 8 personnes, plateforme IA du groupement Force d'Experts",
+  "outils_ia_cites": "Claude, ChatGPT, Nia (agent maison), fulll, SharePoint, plateforme IA Force d'Experts",
+  "douleur_confidentialite": "Il veut « aucune exposition extérieure » pour Nia (serveur dans la baie de brassage) mais 4 collaborateurs modélisent les process clients dans Claude, outil cloud.",
+  "perso_faits": "Compta Online (oct. 2026) : « Nous sommes 8 au cabinet, 4 disposent d'une licence Claude » — https://www.compta-online.com/x-ao8998 ‖ Même interview : « Je voulais une architecture très sécurisée […] aucune exposition extérieure. Nia tourne sur un serveur physique du cabinet » — https://www.compta-online.com/x-ao8998 ‖ Même interview : « je refuse un contexte où l'IA décide : je veux maîtriser ce que je lui transmets et à quel moment » — https://www.compta-online.com/x-ao8998",
+  "accroche": "Vous avez installé Nia sur un serveur du cabinet, avec « aucune exposition extérieure », tandis que quatre collaborateurs travaillent sur Claude. Pour ces usages-là, une pseudonymisation locale garantit que les process clients modélisés ne contiennent aucune donnée nominative.",
+  "qualif_commentaire": "Dirigeant confirmé ; associé d'Xtremum Audit depuis déc. 2025 (societe.com) ; 8 personnes = petit budget, mais porte d'entrée vers le groupement Force d'Experts. Aucun e-mail nominatif publié.",
+  "score_revu": "A"
  },
  {
   "cible": 2,
@@ -173,7 +222,14 @@
   "perso_angle": "Cité nommément par Gabriel Dabi-Schwebel (DécisionIA) comme le cabinet de 20 personnes qui « ne se définit plus comme un saisisseur mais comme un architecte financier » : le conseil DAF externalisé nourri par l'IA manipule des données PME très sensibles.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — client du cabinet de conseil IA DécisionIA, cité comme cabinet pivotant vers le conseil grâce à l'IA",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "(déduit du métier) Conseil financier « d'architecte financier » pour PME à impact : données financières et stratégiques de PME.",
+  "perso_faits": "Compta Online (28 avr. 2026), G. Dabi-Schwebel (DécisionIA) : « Il ne se définit plus comme un saisisseur mais comme un architecte financier au service de ses clients PME » — https://www.compta-online.com/x-ao8576 ‖ Même article : « Oranova, c'est 20 collaborateurs en Essonne », positionnement entreprises à impact — https://www.compta-online.com/x-ao8576",
+  "accroche": "Gabriel Dabi-Schwebel vous cite dans Compta Online comme le cabinet devenu « architecte financier » plutôt que saisisseur. Ce conseil nourri par l'IA suppose d'y confier des données PME sensibles : nous permettons de le faire sans qu'elles quittent le cabinet.",
+  "qualif_commentaire": "Décideur confirmé (gérant, directeur de publication) ; 20 collaborateurs ; accompagné par un conseil IA (DécisionIA) → vérifier qu'il ne prescrit pas déjà une solution. Aucun e-mail nominatif publié (bonjour@).",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -195,7 +251,14 @@
   "perso_angle": "Citation : « L'IA n'a pas de responsabilité juridique, c'est le professionnel qui la supporte. » Angle : garder la maîtrise (données pseudonymisées, revue humaine) plutôt que renoncer à l'IA.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — interviewée sur les risques de l'IA générative en cabinet (juil. 2026) ; aucun outil nommé",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Elle rappelle que « L'IA n'a pas de responsabilité juridique, c'est le professionnel qui la supporte » : la responsabilité inclut le secret professionnel sur les données confiées à l'IA.",
+  "perso_faits": "Compta Online (19 juil. 2026) : « L'IA n'a pas de responsabilité juridique, c'est le professionnel qui la supporte » — https://www.compta-online.com/x-ao8804 ‖ Même article : elle parle d'« analyse apparente » à propos des résultats faux qui semblent vrais — https://www.compta-online.com/x-ao8804 ‖ Registre : gérante d'ADCO-EXPERTS (nom d'usage Perrin), société créée en 2019, siège Lyon 3e — https://www.pappers.fr/entreprise/851368605",
+  "accroche": "« L'IA n'a pas de responsabilité juridique, c'est le professionnel qui la supporte », disiez-vous dans Compta Online. Cette responsabilité couvre aussi le secret professionnel : pseudonymiser les données clients avant ChatGPT ou Claude permet de l'assumer sereinement.",
+  "qualif_commentaire": "Décideure confirmée (gérante) ; petit cabinet, taille non publiée ; aucun e-mail nominatif publié (contact@).",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -217,7 +280,14 @@
   "perso_angle": "Podcast Les Geeks des Chiffres (mai 2026) « Construire un cabinet comme une startup : produit, process, data » ; leur article sur les abonnements ChatGPT/Claude en charges ouvre la question de l'usage de ces outils sur les données clients du cabinet.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — blog « IA & digitalisation » actif en 2026 (AI Act, abonnements ChatGPT/Claude) ; cabinet « construit comme un produit »",
+  "outils_ia_cites": "ChatGPT, Claude, Pennylane",
+  "douleur_confidentialite": "(déduit du métier) 28-30 personnes et 700 clients sur une stack data ; le cabinet explique aux clients comment déduire ChatGPT/Claude sans dire comment il les utilise lui-même sur leurs données.",
+  "perso_faits": "Article « Abonnements IA en charges : ChatGPT, Claude ou Notion peuvent alléger la note fiscale de votre entreprise » (29 juin 2026) — https://strattt.com/blog/categorie/ia-digitalisation/ ‖ Article « AI Act : l'Europe assouplit le calendrier… » (15 juin 2026) — https://strattt.com/blog/categorie/ia-digitalisation/ ‖ Les Geeks des Chiffres (mai 2026) : de zéro à 28 personnes et 700 clients, « construire le cabinet comme un produit » — https://podcast.ausha.co/les-geeks-des-chiffres/strattt",
+  "accroche": "Votre article du 29 juin explique que les abonnements ChatGPT ou Claude sont déductibles. Chez Strattt, ces outils manipulent-ils aussi les données de vos 700 clients ? Nous permettons de le faire sans qu'elles quittent le cabinet.",
+  "qualif_commentaire": "Décideur confirmé (cofondateur, directeur de publication) ; taille confirmée (28-30 personnes). Aucun e-mail nominatif publié (contact@).",
+  "score_revu": "B"
  },
  {
   "cible": 2,
@@ -239,6 +309,13 @@
   "perso_angle": "Même épisode Geeks des Chiffres (2026) : « comment la tech, les process et la data libèrent du temps pour le conseil ».",
   "score_priorite": "C",
   "statut_verification": "à vérifier",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — cofondateur d'un cabinet tech-first qui publie sur l'IA en 2026",
+  "outils_ia_cites": "ChatGPT, Claude, Pennylane",
+  "douleur_confidentialite": "(déduit du métier) Cabinet data-driven, 700 clients : données comptables et sociales centralisées.",
+  "perso_faits": "Les Geeks des Chiffres (mai 2026) : « Comment la tech, les process et la data permettent de libérer du temps pour le conseil » ; offres Smart, Business et Premium — https://podcast.ausha.co/les-geeks-des-chiffres/strattt ‖ Blog Strattt « IA & digitalisation » (juin-juil. 2026) — https://strattt.com/blog/categorie/ia-digitalisation/",
+  "accroche": "Strattt a été pensé « comme un produit », avec la tech et la data pour libérer du temps de conseil. Pour que l'IA générative y contribue sans exposer les données de vos 700 clients, nous pseudonymisons localement avant ChatGPT ou Claude.",
+  "qualif_commentaire": "Cofondateur confirmé (podcast) ; relevé de C à B (signal cabinet + décideur) ; contacter après T. Palmieri. Aucun e-mail nominatif publié.",
+  "score_revu": "B"
  }
 ]
