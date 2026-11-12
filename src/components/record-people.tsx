@@ -3,8 +3,9 @@
 import { attempt } from "@/lib/client/query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Mail, Pencil, Phone, Plus, Star, Trash2 } from "lucide-react";
-import { deletePersonAction, upsertPersonAction } from "@/app/actions";
+import { Mail, Pencil, Phone, Plus, Star } from "lucide-react";
+import { upsertPersonAction } from "@/app/actions";
+import { TrashButton } from "./trash/trash-button";
 import type { Person } from "@/lib/crm/types";
 
 type PersonConflict = { person_id: string; company_id: string; company_name: string; person_name: string; reason: string };
@@ -51,12 +52,6 @@ function PersonRow({ ctx, person: p, onEdit }: { ctx: RecordCtx; person: Person;
     if (!res.ok) return toast.error(res.error);
     await ctx.reload();
   }
-  async function remove() {
-    if (!confirm(`Retirer ${personName(p)} de la fiche ? Les échanges déjà enregistrés sont conservés.`)) return;
-    const res = await attempt(() => deletePersonAction(p.id));
-    if (!res.ok) return toast.error(res.error);
-    await ctx.reload();
-  }
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line px-3 py-2">
       <div className="min-w-0">
@@ -78,7 +73,7 @@ function PersonRow({ ctx, person: p, onEdit }: { ctx: RecordCtx; person: Person;
       <div className="flex gap-1">
         {!p.is_primary && <Button size="sm" variant="ghost" onClick={makePrimary} title="Définir comme contact principal"><Star size={14} /></Button>}
         <Button size="sm" variant="ghost" onClick={onEdit} aria-label="Modifier"><Pencil size={14} /></Button>
-        <Button size="sm" variant="ghost" onClick={remove} aria-label="Retirer"><Trash2 size={14} /></Button>
+        <TrashButton kind="person" id={p.id} onDone={() => void ctx.reload()} />
       </div>
     </div>
   );

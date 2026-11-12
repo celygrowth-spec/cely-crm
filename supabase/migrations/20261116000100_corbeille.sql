@@ -29,6 +29,7 @@ create table public.trash_items (
   context text check (context is null or char_length(context) <= 300),
   summary jsonb not null default '{}' check (jsonb_typeof(summary) = 'object'),   -- éléments liés, par table
   parents jsonb not null default '[]' check (jsonb_typeof(parents) = 'array'),    -- [{t, id}] : parents directs
+  meta jsonb not null default '{}' check (jsonb_typeof(meta) = 'object'),          -- état à rétablir (crochets par type)
   actor text not null default 'user' check (actor in ('user', 'claude')),
   deleted_at timestamptz not null default now(),
   purge_after timestamptz not null default now() + interval '30 days',
@@ -158,7 +159,7 @@ returns jsonb language plpgsql set search_path = '' as $$
 declare
   v_table text := trash_private.kind_table(p_kind);
   v_item public.trash_items;
-  v_desc jsonb; v_rows jsonb; v_id uuid;
+  v_desc jsonb; v_rows jsonb; v_id uuid; v_meta jsonb;
 begin
   perform public.assert_owner();
   if v_table is null then raise exception 'Type d''élément inconnu' using errcode = '22023'; end if;
@@ -172,10 +173,14 @@ begin
   v_desc := trash_private.describe(p_kind, p_id);
   if v_desc is null then raise exception 'Élément introuvable' using errcode = 'P0002'; end if;
   select coalesce(jsonb_agg(jsonb_build_object('t', c.row_table, 'id', c.row_id)), '[]') into v_rows from trash_private.collect(p_kind, p_id) c;
-  insert into public.trash_items (kind, row_table, row_id, label, context, summary, parents, actor)
+  -- crochet facultatif trash_private.before_<kind>(id) : prépare l'élément encore visible (renvoie l'état à rétablir)
+  if to_regprocedure(format('trash_private.before_%s(uuid)', p_kind)) is not null then
+    execute format('select trash_private.before_%s($1)', p_kind) into v_meta using p_id;
+  end if;
+  insert into public.trash_items (kind, row_table, row_id, label, context, summary, parents, meta, actor)
   values (p_kind, v_table, p_id, left(coalesce(nullif(btrim(v_desc ->> 'label'), ''), 'Sans nom'), 300),
           left(nullif(btrim(coalesce(v_desc ->> 'context', '')), ''), 300),
-          trash_private.summary(v_rows, v_table, p_id), coalesce(v_desc -> 'parents', '[]'), public.current_actor())
+          trash_private.summary(v_rows, v_table, p_id), coalesce(v_desc -> 'parents', '[]'), coalesce(v_meta, '{}'), public.current_actor())
   returning id into v_id;
   insert into public.trash_rows (trash_id, row_table, row_id)
   select distinct v_id, r ->> 't', (r ->> 'id')::uuid from jsonb_array_elements(v_rows) r
@@ -211,6 +216,10 @@ begin
     end loop;
   end if;
   delete from public.trash_items where id = v_item.id;
+  -- crochet facultatif trash_private.after_restore_<kind>(id, meta) : rétablit l'état noté à la mise à la corbeille
+  if to_regprocedure(format('trash_private.after_restore_%s(uuid,jsonb)', v_item.kind)) is not null then
+    execute format('select trash_private.after_restore_%s($1, $2)', v_item.kind) using v_item.row_id, v_item.meta;
+  end if;
   return jsonb_build_object('restored', true, 'trash_id', v_item.id, 'label', v_item.label, 'kind', v_item.kind,
                             'row_table', v_item.row_table, 'row_id', v_item.row_id);
 end; $$;

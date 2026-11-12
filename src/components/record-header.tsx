@@ -2,6 +2,7 @@
 
 // En-tête commun à toute la fiche : qui, où j'en suis, contact principal, actions. Reste visible au défilement.
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Archive, ArchiveRestore, Ban, CheckSquare, ChevronDown, ExternalLink, FileUp, Mail, Maximize2, MessageSquarePlus, MoreHorizontal, Pencil, Phone, Plus, Sparkles, StickyNote, Timer, UserRound, X } from "lucide-react";
@@ -17,6 +18,7 @@ import { useCrm } from "./app-shell";
 import type { RecordCtx, RecordTab } from "./company-record";
 import { useMoveCompany } from "./use-move-company";
 import { Badge, Button, SaveIndicator, cn } from "./ui";
+import { TrashButton } from "./trash/trash-button";
 
 const TABS: { key: RecordTab; label: string }[] = [
   { key: "overview", label: "Aperçu" },
@@ -154,6 +156,7 @@ function ContactControl({ ctx }: { ctx: RecordCtx }) {
 
 export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx: RecordCtx; tab: RecordTab; onClose?: () => void; page?: boolean; save: "idle" | "saving" | "saved" | "error"; onPreload: () => void }) {
   const c = ctx.detail.company;
+  const router = useRouter();
   const timer = useTimer();
   const timing = timer.running?.company_id === c.id;
 
@@ -233,6 +236,9 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
           <QuickAction icon={Mail} label="Envoyer un mail" onClick={() => ctx.compose({})} warn={c.do_not_contact} />
           <QuickAction icon={CheckSquare} label="Créer une tâche" onClick={ctx.newTask} />
           <DraftsAccess ctx={ctx} />
+          <TrashButton kind="company" id={c.id} size="sm" variant="secondary" className="max-md:h-8 max-md:w-9 max-md:px-0"
+            sync={[["companies"], ["company", c.id], ["pipeline-cards"], ["company-timeline"]]}
+            onDone={() => { if (page) router.push("/prospection"); else onClose?.(); }} />
           <Popover label="Actions" align="right"
             triggerClass="inline-flex h-8 items-center gap-1 rounded-lg border border-line bg-white px-2.5 text-xs font-semibold hover:bg-surface"
             trigger={<><MoreHorizontal size={14} /> <span className="max-md:hidden">Actions</span><ChevronDown size={12} className="text-muted max-md:hidden" /></>}>
