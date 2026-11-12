@@ -308,7 +308,7 @@ export function registerProjectTools(tool: RegisterTool) {
     {
       title: "Enregistrer le planning",
       description:
-        "Remplace le planning entier : l'ordre reçu devient l'ordre des phases, et toute phase ou tout jalon absent de la liste est SUPPRIMÉ. Lisez d'abord get_project et renvoyez tout ce qu'il faut garder, avec les identifiants. Une suppression, un jalon rendu visible ou un changement sur un projet publié demandent confirmed_by_user=true.",
+        "Remplace le planning entier : l'ordre reçu devient l'ordre des phases ; toute phase absente de la liste part à la corbeille avec ses jalons (restaurable 30 jours), tout autre jalon absent est SUPPRIMÉ. Lisez d'abord get_project et renvoyez tout ce qu'il faut garder, avec les identifiants. Une suppression, un jalon rendu visible ou un changement sur un projet publié demandent confirmed_by_user=true.",
       inputSchema: z.object({ project_id: uuid, phases: z.array(phase).max(20), milestones: z.array(milestone).max(50), confirmed_by_user }),
     },
     async ({ project_id, phases, milestones, confirmed_by_user: ok }, sb) => {
@@ -372,15 +372,15 @@ export function registerProjectTools(tool: RegisterTool) {
   tool(
     "unlink_project_meeting",
     {
-      title: "Détacher un point de suivi",
-      description: "Détache le point du projet : le rendez-vous reste intact, mais le récapitulatif du point est DÉFINITIVEMENT supprimé. Demande confirmed_by_user=true.",
+      title: "Retirer un point de suivi (corbeille)",
+      description: "Met le point de suivi et son récapitulatif à la corbeille du CRM (restaurables 30 jours depuis la Corbeille de l'application) : le rendez-vous reste intact dans l'agenda. Demande confirmed_by_user=true.",
       inputSchema: z.object({ meeting_id: uuid, confirmed_by_user }),
     },
     async ({ meeting_id, confirmed_by_user: ok }, sb) => {
       await row(sb, "project_meetings", "id", meeting_id, "Point");
-      if (!ok) return waiting("Le point quitte le projet et son récapitulatif sera définitivement supprimé.");
+      if (!ok) return waiting("Le point et son récapitulatif partiront à la corbeille (restaurables 30 jours) ; le rendez-vous reste dans l'agenda.");
       await svc.unlinkMeeting(sb, meeting_id);
-      return text({ resultat: "point détaché, récapitulatif supprimé" });
+      return text({ resultat: "point mis à la corbeille avec son récapitulatif (restaurable 30 jours depuis la Corbeille de l'application)" });
     },
   );
 
@@ -472,15 +472,15 @@ export function registerProjectTools(tool: RegisterTool) {
   tool(
     "delete_project_task",
     {
-      title: "Supprimer une tâche d'espace client",
-      description: "Supprime DÉFINITIVEMENT la tâche et ses commentaires. Demande confirmed_by_user=true.",
+      title: "Supprimer une tâche d'espace client (corbeille)",
+      description: "Met la tâche et ses commentaires à la corbeille du CRM (restaurables 30 jours depuis la Corbeille de l'application). Demande confirmed_by_user=true.",
       inputSchema: z.object({ task_id: uuid, confirmed_by_user }),
     },
     async ({ task_id, confirmed_by_user: ok }, sb) => {
       const t = await row<{ title: string }>(sb, "project_tasks", "title", task_id, "Tâche");
-      if (!ok) return waiting(`La tâche « ${t.title} » et ses commentaires seront définitivement supprimés.`);
+      if (!ok) return waiting(`La tâche « ${t.title} » et ses commentaires partiront à la corbeille (restaurables 30 jours).`);
       await svc.deleteTask(sb, task_id);
-      return text({ resultat: "tâche supprimée" });
+      return text({ resultat: "tâche mise à la corbeille (restaurable 30 jours depuis la Corbeille de l'application)" });
     },
   );
 

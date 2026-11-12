@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui";
 import { PROJECT_STATUS_LABELS, PROJECT_STATUS_TONES } from "@/lib/projects/types";
 import { ProjectSalePanel } from "@/components/sales/project-sale-panel";
 import { ProjectTabs } from "./tabs";
+import { TrashAndLeave } from "@/components/trash/trash-and-leave";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -24,6 +25,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
           <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">{p.name}</h1>
           <Badge tone={PROJECT_STATUS_TONES[p.status]}>{PROJECT_STATUS_LABELS[p.status]}</Badge>
           {p.portal_published ? <Badge tone="success">Visible sur le portail</Badge> : <Badge>Non publié</Badge>}
+          <span className="ml-auto"><TrashAndLeave kind="project" id={p.id} href="/projets" label="Supprimer le projet" /></span>
         </div>
         <p className="mt-1 text-sm text-muted">
           Client : <Link href={`/fiches/${p.company_id}`} className="font-semibold text-ink hover:underline">{p.company_name}</Link>

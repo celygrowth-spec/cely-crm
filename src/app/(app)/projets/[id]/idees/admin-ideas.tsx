@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ListPlus } from "lucide-react";
 import { commentIdeaAction, createIdeaAction, decideIdeaAction, ideaToTaskAction } from "@/app/projets-actions";
 import { Button, Input, Select } from "@/components/ui";
+import { TrashButton } from "@/components/trash/trash-button";
 import { IDEA_STATUSES, IdeaCard, IdeaForm, run } from "@/components/projects/ideas";
 import { attempt } from "@/lib/client/query";
 import { IDEA_STATUS_LABELS, type Idea, type IdeaStatus } from "@/lib/projects/types";
@@ -33,7 +34,7 @@ export function AdminIdeas({ projectId, ideas }: { projectId: string; ideas: Ide
             key={i.id + i.updated_at + i.comments.length}
             idea={i}
             onComment={async (body) => !!(await run(() => attempt(() => commentIdeaAction(i.id, body)))) && (router.refresh(), true)}
-            admin={<Decide idea={i} projectId={projectId} onDone={() => router.refresh()} />}
+            admin={<><Decide idea={i} projectId={projectId} onDone={() => router.refresh()} /><div className="mt-2 flex justify-end"><TrashButton kind="project_idea" id={i.id}>Supprimer</TrashButton></div></>}
           />
         ))}
       </div>
