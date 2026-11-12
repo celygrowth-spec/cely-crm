@@ -71,6 +71,9 @@ if __name__ == "__main__":
                 d = email_domain(r)
                 if d:
                     doms.add(d)
+                for k in ("email", "format_email_suppose", "email_generique"):
+                    for m in EMAIL_RE.finditer(str(r.get(k) or "")):
+                        doms.add(m.group(1).lower().strip("."))
     cache = {}
     for d in sorted(doms):
         cache[d] = check(d)

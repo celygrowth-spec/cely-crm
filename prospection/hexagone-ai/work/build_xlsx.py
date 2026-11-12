@@ -4,7 +4,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 import os; L = os.path.dirname(os.path.abspath(__file__)) + "/"
 COLS = ["cible","entreprise","site_web","taille","ville","specialite_secteur","prenom","nom","poste","linkedin_url","email","email_generique","format_email_suppose","signal","source_signal","source_contact","perso_angle","score_priorite","statut_verification","date_recherche"]
-DNS = ["email_a_utiliser","email_a_utiliser_type","dns_mx","dns_spf","dns_dmarc","dns_verdict"]
+DNS = ["email_a_utiliser","email_a_utiliser_type","dns_domaine","dns_mx","dns_spf","dns_dmarc","dns_verdict"]
 rows = []
 import sys, unicodedata; sys.path.insert(0, L)
 from dns_check import FILES, email_domain, EMAIL_RE
@@ -22,7 +22,8 @@ def email_envoi(r):
 for f in [f for f in FILES if os.path.exists(L+f+".json")]:
     for r in json.load(open(L+f+".json")):
         r["email_a_utiliser"], r["email_a_utiliser_type"] = email_envoi(r)
-        r.update(DNSC.get(email_domain(r), {}))
+        dom = r["email_a_utiliser"].split("@")[-1].lower() if r["email_a_utiliser"] else email_domain(r)
+        r["dns_domaine"] = dom; r.update(DNSC.get(dom, {}))
         r["segment"] = f.upper(); rows.append(r)
 rows.sort(key=lambda r: (int(r["cible"]), r["score_priorite"], r.get("entreprise") or "zz"))
 HEAD = ["segment"]+COLS+DNS
