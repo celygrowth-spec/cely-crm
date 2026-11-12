@@ -4,7 +4,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 import os; L = os.path.dirname(os.path.abspath(__file__)) + "/"
 COLS = ["cible","entreprise","site_web","taille","ville","specialite_secteur","prenom","nom","poste","linkedin_url","email","email_generique","format_email_suppose","signal","source_signal","source_contact","perso_angle","score_priorite","statut_verification","date_recherche"]
-DNS = ["email_envoi","email_envoi_type","dns_mx","dns_spf","dns_dmarc","dns_verdict"]
+DNS = ["email_a_utiliser","email_a_utiliser_type","dns_mx","dns_spf","dns_dmarc","dns_verdict"]
 rows = []
 import sys, unicodedata; sys.path.insert(0, L)
 from dns_check import FILES, email_domain, EMAIL_RE
@@ -15,11 +15,13 @@ def email_envoi(r):
     if r.get("email"): return r["email"].strip(), "publié"
     for m in EMAIL_RE.finditer(str(r.get("format_email_suppose") or "")):
         loc = _ascii(m.group(0).split("@")[0]); nom = _ascii(r.get("nom"))
-        if nom and nom[:5] in loc: return m.group(0).strip(".,;)"), "déduit"
+        if nom and nom[:5] in loc and "non confirm" not in str(r.get("format_email_suppose")).lower(): return m.group(0).strip(".,;)"), "déduit (motif observé)"
+    m = EMAIL_RE.search(str(r.get("email_generique") or ""))
+    if m: return m.group(0).strip(".,;)"), "générique"
     return "", ""
 for f in [f for f in FILES if os.path.exists(L+f+".json")]:
     for r in json.load(open(L+f+".json")):
-        r["email_envoi"], r["email_envoi_type"] = email_envoi(r)
+        r["email_a_utiliser"], r["email_a_utiliser_type"] = email_envoi(r)
         r.update(DNSC.get(email_domain(r), {}))
         r["segment"] = f.upper(); rows.append(r)
 rows.sort(key=lambda r: (int(r["cible"]), r["score_priorite"], r.get("entreprise") or "zz"))
@@ -39,14 +41,14 @@ def sheet(ws, data, head):
 wb = Workbook(); s = wb.active; s.title = "Synthèse"
 from collections import Counter
 s.append(["Hexagone AI × Cely — Listes M1 — V1 (recherche du 2026-11-12)"]); s["A1"].font = Font(bold=True, size=14)
-s.append([]); s.append(["Cible","Objectif","Obtenus","A","B","C","Vérifié","Déduit","À vérifier","Avec LinkedIn","E-mail publié","E-mail déduit","Domaine sans MX"])
+s.append([]); s.append(["Cible","Objectif","Obtenus","A","B","C","Vérifié","Déduit","À vérifier","Avec LinkedIn","E-mail publié","E-mail déduit","Générique seul","Domaine sans MX"])
 for c in s[3]: c.font = Font(bold=True)
 names = {1:"1 · Avocats d'affaires",2:"2 · Expertise comptable",3:"3 · Partenaires Anthropic",4:"4 · Directions juridiques"}
 goal = {1:55,2:35,3:30,4:30}
 for k in [1,2,3,4]:
     d = [r for r in rows if int(r["cible"])==k]; sc = Counter(r["score_priorite"] for r in d); st = Counter(r["statut_verification"] for r in d)
-    s.append([names[k], goal[k], len(d), sc["A"], sc["B"], sc["C"], st["vérifié"], st["déduit"], st["à vérifier"], sum(1 for r in d if r.get("linkedin_url")), sum(1 for r in d if r.get("email")), sum(1 for r in d if r["email_envoi_type"]=="déduit"), sum(1 for r in d if r.get("dns_verdict","").startswith("PAS DE MX"))])
-s.append(["TOTAL", 150, len(rows), *[sum(1 for r in rows if r["score_priorite"]==x) for x in "ABC"], *[sum(1 for r in rows if r["statut_verification"]==x) for x in ["vérifié","déduit","à vérifier"]], sum(1 for r in rows if r.get("linkedin_url")), sum(1 for r in rows if r.get("email")), sum(1 for r in rows if r["email_envoi_type"]=="déduit"), sum(1 for r in rows if r.get("dns_verdict","").startswith("PAS DE MX"))])
+    s.append([names[k], goal[k], len(d), sc["A"], sc["B"], sc["C"], st["vérifié"], st["déduit"], st["à vérifier"], sum(1 for r in d if r.get("linkedin_url")), sum(1 for r in d if r.get("email")), sum(1 for r in d if r["email_a_utiliser_type"].startswith("déduit")), sum(1 for r in d if r["email_a_utiliser_type"]=="générique"), sum(1 for r in d if r.get("dns_verdict","").startswith("PAS DE MX"))])
+s.append(["TOTAL", 150, len(rows), *[sum(1 for r in rows if r["score_priorite"]==x) for x in "ABC"], *[sum(1 for r in rows if r["statut_verification"]==x) for x in ["vérifié","déduit","à vérifier"]], sum(1 for r in rows if r.get("linkedin_url")), sum(1 for r in rows if r.get("email")), sum(1 for r in rows if r["email_a_utiliser_type"].startswith("déduit")), sum(1 for r in rows if r["email_a_utiliser_type"]=="générique"), sum(1 for r in rows if r.get("dns_verdict","").startswith("PAS DE MX"))])
 s.append([])
 NOTES = open(L+"notes_v1.txt").read().splitlines() if os.path.exists(L+"notes_v1.txt") else []
 for line in NOTES: s.append([line])
@@ -91,9 +93,9 @@ P = [
 if os.path.exists(L+"pistes_v1.json"): P = [tuple(x) for x in json.load(open(L+"pistes_v1.json"))]
 sheet(wb.create_sheet("Pistes à creuser"), [dict(cible=a, piste=b, pourquoi=c) for a,b,c in P], ["cible","piste","pourquoi"])
 out = L + "../Hexagone_AI_leads_M1_V1.xlsx"; wb.save(out)
-# Lemlist : uniquement les lignes avec une adresse (publiée ou déduite) sur un domaine qui a un MX
-send = [dict(r, email=r["email_envoi"]) for r in rows if r["email_envoi"] and not r.get("dns_verdict","").startswith(("PAS DE MX","ERREUR"))]
+# Lemlist : uniquement les lignes avec une adresse à utiliser (nominative publiée > déduite d'un motif observé > générique) sur un domaine qui a un MX
+send = [r for r in rows if r["email_a_utiliser"] and not r.get("dns_verdict","").startswith(("PAS DE MX","ERREUR"))]
 with open(L + "../Hexagone_AI_leads_M1_V1_lemlist.csv","w",newline="",encoding="utf-8-sig") as f:
-    w = csv.DictWriter(f, fieldnames=COLS+["email_envoi_type","dns_verdict"], extrasaction="ignore"); w.writeheader(); [w.writerow(r) for r in send]
+    w = csv.DictWriter(f, fieldnames=COLS+["email_a_utiliser","email_a_utiliser_type","dns_verdict"], extrasaction="ignore"); w.writeheader(); [w.writerow(r) for r in send]
 print("lemlist:", len(send))
 print(out, len(rows))
