@@ -8,6 +8,7 @@ import { Copy, Download, Pencil, Plus, X } from "lucide-react";
 import { cancelInvoiceAction, cancelPaymentAction } from "@/app/finance-actions";
 import { Button, Card, EmptyState, Input, PageHeader, Select, cn } from "@/components/ui";
 import { InvoiceBadge } from "@/components/finance/bits";
+import { TrashButton } from "@/components/trash/trash-button";
 import { CreditNoteModal, InvoiceModal, PaymentModal, type InvoiceDefaults } from "@/components/finance/forms";
 import { settingsAt } from "@/lib/finance/calc";
 
@@ -298,6 +299,12 @@ function InvoicePanel({ invoice: i, data, onClose, onPay, onCredit, onEdit, onDu
           </div>
         )}
 
+        <div className="mt-3">
+          <TrashButton kind="finance_invoice" id={i.id} size="md" variant="danger" onDone={onClose}>
+            Supprimer {i.kind === "avoir" ? "l'avoir" : "la facture"}
+          </TrashButton>
+        </div>
+
         {i.kind === "facture" && (
           <section className="mt-5">
             <h3 className="font-label text-xs font-bold text-muted uppercase">Paiements</h3>
@@ -312,6 +319,7 @@ function InvoicePanel({ invoice: i, data, onClose, onPay, onCredit, onEdit, onDu
                         Annuler
                       </button>
                     )}
+                    <TrashButton kind="finance_payment" id={p.id} />
                   </li>
                 ))}
               </ul>

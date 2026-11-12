@@ -69,7 +69,7 @@ describe("connecteur MCP : authentification", () => {
 });
 
 describe("connecteur MCP : périmètre des outils", () => {
-  test("outils prévus uniquement : ni envoi, ni fusion, suppressions limitées aux espaces client", async () => {
+  test("outils prévus uniquement : ni envoi, ni fusion ; toute suppression passe par la corbeille", async () => {
     const { registerTools } = await import("@/lib/mcp/tools");
     const names: string[] = [];
     registerTools({ registerTool: (n: string) => names.push(n) } as never, () => ({}) as never);
@@ -116,6 +116,7 @@ describe("connecteur MCP : périmètre des outils", () => {
       "log_interaction",
       "move_company",
       "move_project_files",
+      "move_to_trash",
       "open_diagnostic",
       "open_project_onboarding",
       "postpone_task",

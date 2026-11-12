@@ -5,7 +5,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ExternalLink, Plus, Trash2 } from "lucide-react";
-import { commentTaskAction, deleteTaskAction, updateTaskAction } from "@/app/projets-actions";
+import { commentTaskAction, updateTaskAction } from "@/app/projets-actions";
+import { TrashButton } from "@/components/trash/trash-button";
 import { Button, Field, Input, Modal, Skeleton, Textarea } from "@/components/ui";
 import { apiGet, attempt } from "@/lib/client/query";
 import { formatDateTime } from "@/lib/format";
@@ -103,13 +104,7 @@ function AdminForm({ data, onSaved, onDeleted, reload }: { data: { task: AdminTa
       </div>
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" disabled={busy} onClick={save}>Enregistrer</Button>
-        <Button variant="danger" disabled={busy} onClick={async () => {
-          if (!confirm("Supprimer cette tâche et ses commentaires ?")) return;
-          const r = await attempt(() => deleteTaskAction(t.id));
-          if (!r.ok) return toast.error(r.error);
-          toast.success("Tâche supprimée");
-          onDeleted(t.id);
-        }}>Supprimer</Button>
+        <TrashButton kind="project_task" id={t.id} size="md" variant="danger" onDone={() => onDeleted(t.id)}>Supprimer</TrashButton>
       </div>
       <Comments comments={data.comments} onAdd={async (body) => {
         const r = await attempt(() => commentTaskAction(t.id, body));

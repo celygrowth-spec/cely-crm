@@ -5,6 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { savePlanningAction } from "@/app/projets-actions";
+import { TrashButton } from "@/components/trash/trash-button";
 import { Button, Card, EmptyState, Input, Select, Textarea, cn } from "@/components/ui";
 import { attempt, useSync } from "@/lib/client/query";
 import { PHASE_COLORS, PHASE_STATUS_LABELS, type Milestone, type Phase, type PhaseColor, type PhaseStatus, type Project } from "@/lib/projects/types";
@@ -95,7 +96,11 @@ export function PlanningEditor({ project, initial, today }: { project: Project; 
               <div className="ml-auto flex">
                 <Button size="sm" variant="ghost" disabled={i === 0} aria-label="Monter" onClick={() => { const x = [...phases]; [x[i - 1], x[i]] = [x[i], x[i - 1]]; setPhases(x); setDirty(true); }}><ArrowUp size={13} /></Button>
                 <Button size="sm" variant="ghost" disabled={i === phases.length - 1} aria-label="Descendre" onClick={() => { const x = [...phases]; [x[i + 1], x[i]] = [x[i], x[i + 1]]; setPhases(x); setDirty(true); }}><ArrowDown size={13} /></Button>
-                <Button size="sm" variant="ghost" aria-label="Supprimer la phase" onClick={() => { setPhases(phases.filter((x) => x.key !== p.key)); setDirty(true); }}><Trash2 size={13} /></Button>
+                {p.id ? (
+                  <TrashButton kind="project_phase" id={p.id} onDone={() => { setPhases((l) => l.filter((x) => x.key !== p.key)); setMs((l) => l.filter((m) => m.phase_id !== p.id)); }} />
+                ) : (
+                  <Button size="sm" variant="ghost" aria-label="Supprimer la phase" onClick={() => { setPhases(phases.filter((x) => x.key !== p.key)); setDirty(true); }}><Trash2 size={13} /></Button>
+                )}
               </div>
             </div>
             <div className="grid gap-2 md:grid-cols-2">

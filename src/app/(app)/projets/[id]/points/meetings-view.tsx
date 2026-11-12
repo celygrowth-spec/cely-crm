@@ -8,8 +8,9 @@ import Link from "next/link";
 import { AlertTriangle, CalendarPlus, Eye, Link2, ListPlus, Plus, RefreshCw, Trash2, Video, X } from "lucide-react";
 import {
   cancelMeetingAction, createMeetingAction, linkMeetingAction, publishRecapAction, rescheduleMeetingAction, restoreGoogleEventAction,
-  saveRecapAction, syncGoogleNowAction, taskFromRecapAction, unlinkMeetingAction, updateMeetingAction,
+  saveRecapAction, syncGoogleNowAction, taskFromRecapAction, updateMeetingAction,
 } from "@/app/projets-actions";
+import { TrashButton } from "@/components/trash/trash-button";
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, Select, Textarea } from "@/components/ui";
 import { attempt, useSync } from "@/lib/client/query";
 import { formatDateTime } from "@/lib/format";
@@ -125,7 +126,7 @@ function MeetingCard({ m, projectId }: { m: AdminMeeting; projectId: string }) {
           <Button size="sm" variant="ghost" onClick={() => setOpen(open === "edit" ? "none" : "edit")}>Ordre du jour et visibilité</Button>
           {!cancelled && !past && <Button size="sm" variant="ghost" onClick={() => setOpen(open === "move" ? "none" : "move")}>Reporter</Button>}
           {!cancelled && !past && <Button size="sm" variant="ghost" disabled={busy} onClick={() => confirm("Annuler ce point ? L'événement Google est supprimé ; le point reste visible comme annulé.") && act(() => cancelMeetingAction(m.booking_id, null), "Point annulé")}><X size={13} /> Annuler</Button>}
-          <Button size="sm" variant="ghost" disabled={busy} title="Le rendez-vous reste dans Rendez-vous" onClick={() => confirm(m.recap ? "Détacher ce point du projet ? Son récapitulatif sera supprimé. Le rendez-vous reste intact." : "Détacher ce point du projet ? Le rendez-vous reste intact.") && act(() => unlinkMeetingAction(m.id), "Point détaché")}><Trash2 size={13} /></Button>
+          <TrashButton kind="project_meeting" id={m.id} />
         </div>
         {open === "move" && (
           <div className="pop-in mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-line p-3">

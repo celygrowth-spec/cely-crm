@@ -190,10 +190,11 @@ export async function upsertPerson(
   ) as WriteResult;
 }
 
+/** Met le contact à la corbeille (accès au portail fermé, restaurable 30 jours) : jamais de suppression directe. */
 export async function deletePerson(sb: SupabaseClient, personId: string) {
   parse(idSchema, personId);
-  const res = check(await sb.from("people").delete().eq("id", personId).select("id"));
-  if (!res?.length) throw new CrmError("Suppression impossible.");
+  const { error } = await sb.rpc("trash_put", { p_kind: "person", p_id: personId });
+  if (error) throw new CrmError(friendlyError(error));
 }
 
 export async function setArchived(sb: SupabaseClient, ids: string[], archived: boolean): Promise<number> {

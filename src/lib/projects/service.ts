@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { CrmError, friendlyError } from "@/lib/crm/service";
 import { confirmUpload, fileUrl, updateFile } from "@/lib/crm/files";
+import { trashPut } from "@/lib/trash/service";
 import {
   meetingPatchSchema, milestoneSchema, phaseSchema, projectCreateSchema, projectPatchSchema, recapSchema, taskPatchSchema,
   type MilestoneInput, type PhaseInput, type ProjectCreateInput, type ProjectPatch, type RecapInput, type TaskPatch,
@@ -67,7 +68,10 @@ export const revokeAccess = (sb: SupabaseClient, personId: string) => rpc(sb, "p
 
 // Planning ------------------------------------------------------------------------------
 
-/** Enregistre phases et jalons d'un projet (ordre = ordre reçu ; les éléments retirés sont supprimés). */
+/**
+ * Enregistre phases et jalons d'un projet (ordre = ordre reçu). Une phase retirée part à la corbeille avec ses
+ * jalons (restaurable 30 jours) ; un jalon retiré est supprimé.
+ */
 export async function savePlanning(sb: SupabaseClient, projectId: string, phases: PhaseInput[], milestones: MilestoneInput[]) {
   const pid = idv(projectId);
   const ph = v(z.array(phaseSchema).max(20, "20 phases maximum"), phases);
@@ -84,11 +88,17 @@ export async function savePlanning(sb: SupabaseClient, projectId: string, phases
       keepPh.push((row as { id: string }).id);
     }
   }
-  const delPh = sb.from("project_phases").delete().eq("project_id", pid);
-  await ok(keepPh.length ? delPh.not("id", "in", `(${keepPh.join(",")})`) : delPh);
+  const { data: current, error: curErr } = await sb.from("project_phases").select("id").eq("project_id", pid);
+  if (curErr) throw new CrmError(friendlyError(curErr));
+  for (const { id } of (current ?? []) as { id: string }[]) if (!keepPh.includes(id)) await trashPut(sb, "project_phase", id);
+  // jalons partis à la corbeille avec leur phase : ignorés
+  const { data: liveMs, error: msErr } = await sb.from("project_milestones").select("id").eq("project_id", pid);
+  if (msErr) throw new CrmError(friendlyError(msErr));
+  const live = new Set(((liveMs ?? []) as { id: string }[]).map((r) => r.id));
   const keepMs: string[] = [];
   for (const m of ms) {
     const { id, done, ...data } = m;
+    if (id && !live.has(id)) continue;
     const row = { ...data, phase_id: data.phase_id && keepPh.includes(data.phase_id) ? data.phase_id : null, done_at: done ? new Date().toISOString() : null };
     if (id) {
       const { data: prev } = await sb.from("project_milestones").select("done_at").eq("id", id).maybeSingle();
@@ -114,8 +124,8 @@ export const linkMeeting = (sb: SupabaseClient, projectId: string, bookingId: st
 export const updateMeeting = (sb: SupabaseClient, meetingId: string, patch: z.input<typeof meetingPatchSchema>) =>
   changed(sb.from("project_meetings").update(v(meetingPatchSchema, patch)).eq("id", idv(meetingId)).select("id"));
 
-/** Détache le point du projet : le rendez-vous reste intact ; le récapitulatif éventuel est supprimé. */
-export const unlinkMeeting = (sb: SupabaseClient, meetingId: string) => changed(sb.from("project_meetings").delete().eq("id", idv(meetingId)).select("id"));
+/** Met le point à la corbeille (avec son récapitulatif, restaurables 30 jours) : le rendez-vous reste intact. */
+export const unlinkMeeting = (sb: SupabaseClient, meetingId: string) => trashPut(sb, "project_meeting", idv(meetingId));
 
 export const saveRecap = (sb: SupabaseClient, meetingId: string, input: RecapInput) =>
   ok(sb.from("meeting_recaps").upsert({ meeting_id: idv(meetingId), ...v(recapSchema, input) }, { onConflict: "meeting_id" }));
@@ -153,7 +163,8 @@ export async function updateTask(sb: SupabaseClient, id: string, patch: TaskPatc
   return data as AdminTask;
 }
 
-export const deleteTask = (sb: SupabaseClient, id: string) => changed(sb.from("project_tasks").delete().eq("id", idv(id)).select("id"));
+/** Met la tâche et ses commentaires à la corbeille (restaurables 30 jours). */
+export const deleteTask = (sb: SupabaseClient, id: string) => trashPut(sb, "project_task", idv(id));
 
 export const commentTask = (sb: SupabaseClient, taskId: string, body: string) =>
   ok(sb.from("project_task_comments").insert({ task_id: idv(taskId), author_kind: "owner", body: v(z.string().trim().min(1, "Commentaire vide").max(1000, "1 000 caractères maximum"), body) }));

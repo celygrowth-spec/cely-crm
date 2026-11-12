@@ -15916,3 +15916,1287 @@ begin
     execute format('grant execute on function %s to authenticated', r.sig);
   end loop;
 end $$;
+
+
+-- ===== 20261116010100_corbeille.sql =====
+-- Corbeille, lot 1 : mécanisme commun (mise à la corbeille, restauration, purge après 30 jours).
+--
+-- Principe : un élément mis à la corbeille RESTE en base, inchangé. Ses lignes (et celles de ses éléments liés) sont
+-- inscrites dans trash_rows ; une politique d'accès restrictive, posée par les lots suivants sur chaque table
+-- concernée, les rend invisibles à toute lecture de l'API (listes, recherche, Aujourd'hui, totaux, exports, MCP).
+-- Les fonctions privilégiées du portail filtrent explicitement (lot Projets).
+--  * Restaurer = retirer l'inscription : l'élément revient exactement dans son état d'avant (aucune ligne réécrite,
+--    aucun déclencheur rejoué, numéro de facture conservé puisqu'il n'a jamais quitté la base).
+--  * Purger = supprimer physiquement l'élément, ses liés et leurs fichiers stockés (file d'attente trash_file_queue,
+--    retirés du stockage par l'application ou par la tâche planifiée).
+--  * Aucune action externe : ni mail, ni agenda, ni appel à un service.
+-- Additif : aucune table existante n'est modifiée par ce lot.
+
+create schema if not exists trash_private;
+revoke all on schema trash_private from public, anon;
+grant usage on schema trash_private to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Tables
+-- ---------------------------------------------------------------------------
+
+create table public.trash_items (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null check (kind in ('company', 'person', 'project', 'project_task', 'project_idea', 'project_phase',
+                                     'project_meeting', 'finance_mission', 'finance_invoice', 'finance_payment')),
+  row_table text not null,
+  row_id uuid not null,
+  label text not null check (char_length(label) between 1 and 300),
+  context text check (context is null or char_length(context) <= 300),
+  summary jsonb not null default '{}' check (jsonb_typeof(summary) = 'object'),   -- éléments liés, par table
+  parents jsonb not null default '[]' check (jsonb_typeof(parents) = 'array'),    -- [{t, id}] : parents directs
+  meta jsonb not null default '{}' check (jsonb_typeof(meta) = 'object'),          -- état à rétablir (crochets par type)
+  actor text not null default 'user' check (actor in ('user', 'claude')),
+  deleted_at timestamptz not null default now(),
+  purge_after timestamptz not null default now() + interval '30 days',
+  purge_error text check (purge_error is null or char_length(purge_error) <= 500),
+  purge_attempts integer not null default 0,
+  unique (row_table, row_id)
+);
+create index trash_items_purge_idx on public.trash_items (purge_after);
+
+-- Une ligne n'appartient qu'à un seul élément de la corbeille.
+create table public.trash_rows (
+  trash_id uuid not null references public.trash_items (id) on delete cascade,
+  row_table text not null,
+  row_id uuid not null,
+  primary key (row_table, row_id)
+);
+create index trash_rows_trash_idx on public.trash_rows (trash_id);
+
+-- Fichiers à retirer du stockage après une purge (réessayés tant qu'ils n'ont pas été retirés).
+create table public.trash_file_queue (
+  path text primary key,
+  bucket text not null default 'company-files' check (bucket in ('company-files')),
+  queued_at timestamptz not null default now(),
+  attempts integer not null default 0,
+  last_error text check (last_error is null or char_length(last_error) <= 500)
+);
+
+alter table public.trash_items enable row level security;
+alter table public.trash_rows enable row level security;
+alter table public.trash_file_queue enable row level security;
+-- Réservé au propriétaire ; jamais au portail (anon) ni à un autre compte.
+create policy owner_select on public.trash_items for select to authenticated using ((select public.is_app_owner()));
+create policy owner_insert on public.trash_items for insert to authenticated with check ((select public.is_app_owner()));
+create policy owner_delete on public.trash_items for delete to authenticated using ((select public.is_app_owner()));
+create policy owner_select on public.trash_rows for select to authenticated using ((select public.is_app_owner()));
+create policy owner_insert on public.trash_rows for insert to authenticated with check ((select public.is_app_owner()));
+create policy owner_select on public.trash_file_queue for select to authenticated using ((select public.is_app_owner()));
+revoke all on public.trash_items, public.trash_rows, public.trash_file_queue from anon;
+revoke update on public.trash_items, public.trash_rows from authenticated;
+revoke insert, update, delete on public.trash_file_queue from authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Outils
+-- ---------------------------------------------------------------------------
+
+-- Vrai si la ligne est inscrite à la corbeille (utilisé par les fonctions privilégiées du portail).
+create or replace function public.in_trash(p_table text, p_id uuid)
+returns boolean language sql stable set search_path = '' as $$
+  select p_id is not null and exists (select 1 from public.trash_rows r where r.row_table = p_table and r.row_id = p_id);
+$$;
+
+create or replace function trash_private.kind_table(p_kind text)
+returns text language plpgsql immutable set search_path = '' as $$
+begin
+  return case p_kind
+    when 'company' then 'companies' when 'person' then 'people' when 'project' then 'projects'
+    when 'project_task' then 'project_tasks' when 'project_idea' then 'project_ideas'
+    when 'project_phase' then 'project_phases' when 'project_meeting' then 'project_meetings'
+    when 'finance_mission' then 'finance_missions' when 'finance_invoice' then 'finance_invoices'
+    when 'finance_payment' then 'finance_payments'
+    else null end;
+end; $$;
+
+-- Pose la politique restrictive « invisible si à la corbeille » sur une table.
+-- p_refs : couples colonne:table vérifiés (la ligne elle-même, et ses parents directs).
+-- Exemple : trash_private.hide('project_tasks', array['id:project_tasks', 'project_id:projects']).
+create or replace function trash_private.hide(p_table text, p_refs text[])
+returns void language plpgsql set search_path = '' as $$
+declare v_list text; v_expr text;
+begin
+  select string_agg(format('(%L, %I.%I)', split_part(r, ':', 2), p_table, split_part(r, ':', 1)), ', ')
+    into v_list from unnest(p_refs) r;
+  v_expr := format('not exists (select 1 from public.trash_rows r where (r.row_table, r.row_id) in (%s))', v_list);
+  execute format('drop policy if exists trash_hidden on public.%I', p_table);
+  execute format('create policy trash_hidden on public.%I as restrictive for all to authenticated using (%s) with check (%s)',
+                 p_table, v_expr, v_expr);
+end; $$;
+revoke all on function trash_private.hide(text, text[]) from public, authenticated;
+
+-- Description d'un élément (fonction trash_private.describe_<kind>, définie par le lot du module) :
+-- {label, context, parents: [{t, id}], warnings: [texte]} ; null si l'élément est introuvable (ou déjà caché).
+create or replace function trash_private.describe(p_kind text, p_id uuid)
+returns jsonb language plpgsql stable set search_path = '' as $$
+declare v jsonb;
+begin
+  if trash_private.kind_table(p_kind) is null then raise exception 'Type d''élément inconnu' using errcode = '22023'; end if;
+  if to_regprocedure(format('trash_private.describe_%s(uuid)', p_kind)) is null then
+    raise exception 'Ce type d''élément ne se met pas encore à la corbeille' using errcode = '0A000';
+  end if;
+  execute format('select trash_private.describe_%s($1)', p_kind) into v using p_id;
+  return v;
+end; $$;
+
+-- Lignes qui partent avec l'élément (lui compris) : fonction trash_private.collect_<kind>.
+-- Lue avec les droits de l'appelant : une ligne déjà à la corbeille n'est pas reprise.
+create or replace function trash_private.collect(p_kind text, p_id uuid)
+returns table (row_table text, row_id uuid) language plpgsql stable set search_path = '' as $$
+begin
+  return query execute format('select c.row_table, c.row_id from trash_private.collect_%s($1) c', p_kind) using p_id;
+end; $$;
+
+create or replace function trash_private.summary(p_rows jsonb, p_table text, p_id uuid)
+returns jsonb language sql immutable set search_path = '' as $$
+  select coalesce(jsonb_object_agg(t, n), '{}') from (
+    select r ->> 't' as t, count(*) as n from jsonb_array_elements(p_rows) r
+     where not (r ->> 't' = p_table and (r ->> 'id')::uuid = p_id) group by 1) s;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Aperçu (fenêtre de confirmation), mise à la corbeille, restauration
+-- ---------------------------------------------------------------------------
+
+create or replace function public.trash_preview(p_kind text, p_id uuid)
+returns jsonb language plpgsql stable set search_path = '' as $$
+declare v_desc jsonb; v_rows jsonb; v_table text := trash_private.kind_table(p_kind);
+begin
+  perform public.assert_owner();
+  v_desc := trash_private.describe(p_kind, p_id);
+  if v_desc is null then raise exception 'Élément introuvable (déjà à la corbeille ?)' using errcode = 'P0002'; end if;
+  select coalesce(jsonb_agg(jsonb_build_object('t', c.row_table, 'id', c.row_id)), '[]') into v_rows from trash_private.collect(p_kind, p_id) c;
+  return v_desc || jsonb_build_object('kind', p_kind, 'summary', trash_private.summary(v_rows, v_table, p_id));
+end; $$;
+
+-- Tout ou rien : une seule transaction. Un double clic retrouve l'élément déjà mis à la corbeille.
+create or replace function public.trash_put(p_kind text, p_id uuid)
+returns jsonb language plpgsql set search_path = '' as $$
+declare
+  v_table text := trash_private.kind_table(p_kind);
+  v_item public.trash_items;
+  v_desc jsonb; v_rows jsonb; v_id uuid; v_meta jsonb;
+begin
+  perform public.assert_owner();
+  if v_table is null then raise exception 'Type d''élément inconnu' using errcode = '22023'; end if;
+  if p_id is null then raise exception 'Élément introuvable' using errcode = 'P0002'; end if;
+  perform pg_advisory_xact_lock(hashtextextended('trash:' || p_id::text, 0));
+  select i.* into v_item from public.trash_rows r join public.trash_items i on i.id = r.trash_id
+   where r.row_table = v_table and r.row_id = p_id;
+  if found then
+    return jsonb_build_object('trash_id', v_item.id, 'already', true, 'label', v_item.label, 'kind', v_item.kind);
+  end if;
+  v_desc := trash_private.describe(p_kind, p_id);
+  if v_desc is null then raise exception 'Élément introuvable' using errcode = 'P0002'; end if;
+  select coalesce(jsonb_agg(jsonb_build_object('t', c.row_table, 'id', c.row_id)), '[]') into v_rows from trash_private.collect(p_kind, p_id) c;
+  -- crochet facultatif trash_private.before_<kind>(id) : prépare l'élément encore visible (renvoie l'état à rétablir)
+  if to_regprocedure(format('trash_private.before_%s(uuid)', p_kind)) is not null then
+    execute format('select trash_private.before_%s($1)', p_kind) into v_meta using p_id;
+  end if;
+  insert into public.trash_items (kind, row_table, row_id, label, context, summary, parents, meta, actor)
+  values (p_kind, v_table, p_id, left(coalesce(nullif(btrim(v_desc ->> 'label'), ''), 'Sans nom'), 300),
+          left(nullif(btrim(coalesce(v_desc ->> 'context', '')), ''), 300),
+          trash_private.summary(v_rows, v_table, p_id), coalesce(v_desc -> 'parents', '[]'), coalesce(v_meta, '{}'), public.current_actor())
+  returning id into v_id;
+  insert into public.trash_rows (trash_id, row_table, row_id)
+  select distinct v_id, r ->> 't', (r ->> 'id')::uuid from jsonb_array_elements(v_rows) r
+  on conflict do nothing;
+  -- la racine est toujours inscrite, même si la collecte l'omettait
+  insert into public.trash_rows (trash_id, row_table, row_id) values (v_id, v_table, p_id) on conflict do nothing;
+  return jsonb_build_object('trash_id', v_id, 'already', false, 'label', v_desc ->> 'label', 'kind', p_kind,
+                            'summary', trash_private.summary(v_rows, v_table, p_id));
+end; $$;
+
+-- Restaure un élément. Si un parent est encore à la corbeille, rien n'est fait : la réponse le nomme
+-- (needs_parent) ; avec p_with_parent, le parent est restauré d'abord (avec ses propres liés).
+create or replace function public.trash_restore(p_trash uuid, p_with_parent boolean default false)
+returns jsonb language plpgsql set search_path = '' as $$
+declare v_item public.trash_items; v_parent record; v_blocking jsonb;
+begin
+  perform public.assert_owner();
+  perform pg_advisory_xact_lock(hashtextextended('trash-restore:' || coalesce(p_trash::text, ''), 0));
+  select * into v_item from public.trash_items where id = p_trash;
+  if not found then return jsonb_build_object('restored', false, 'already', true); end if;
+  select coalesce(jsonb_agg(distinct jsonb_build_object('trash_id', i.id, 'label', i.label, 'kind', i.kind)), '[]') into v_blocking
+    from jsonb_to_recordset(v_item.parents) p (t text, id uuid)
+    join public.trash_rows r on r.row_table = p.t and r.row_id = p.id
+    join public.trash_items i on i.id = r.trash_id
+   where i.id <> v_item.id;
+  if jsonb_array_length(v_blocking) > 0 then
+    if not p_with_parent then
+      return jsonb_build_object('restored', false, 'needs_parent', v_blocking -> 0, 'parents', v_blocking,
+                                'label', v_item.label, 'kind', v_item.kind);
+    end if;
+    for v_parent in select (x ->> 'trash_id')::uuid as id from jsonb_array_elements(v_blocking) x loop
+      perform public.trash_restore(v_parent.id, true);
+    end loop;
+  end if;
+  delete from public.trash_items where id = v_item.id;
+  -- crochet facultatif trash_private.after_restore_<kind>(id, meta) : rétablit l'état noté à la mise à la corbeille
+  if to_regprocedure(format('trash_private.after_restore_%s(uuid,jsonb)', v_item.kind)) is not null then
+    execute format('select trash_private.after_restore_%s($1, $2)', v_item.kind) using v_item.row_id, v_item.meta;
+  end if;
+  return jsonb_build_object('restored', true, 'trash_id', v_item.id, 'label', v_item.label, 'kind', v_item.kind,
+                            'row_table', v_item.row_table, 'row_id', v_item.row_id);
+end; $$;
+
+-- ---------------------------------------------------------------------------
+-- Purge (droits d'administration : l'élément est invisible pour l'API)
+-- ---------------------------------------------------------------------------
+
+-- Supprime des lignes et tout ce qui les référence sans suppression en cascade (restrict / no action).
+-- Les fichiers des fiches sont mis en file d'attente pour être retirés du stockage.
+create or replace function trash_private.delete_rows(p_table text, p_ids uuid[])
+returns void language plpgsql set search_path = '' as $$
+declare
+  v_rel regclass := to_regclass('public.' || p_table);
+  fk record; v_child uuid[]; v_has_id boolean;
+begin
+  if v_rel is null or p_ids is null or cardinality(p_ids) = 0 then return; end if;
+  if p_table = 'company_files' then
+    insert into public.trash_file_queue (path) select f.storage_path from public.company_files f where f.id = any (p_ids) on conflict do nothing;
+  end if;
+  if p_table = 'finance_missions' then
+    -- une vente qui reste garde sa fiche, sans le revenu purgé (garde-fou de suppression des revenus vendus)
+    update public.sales set mission_id = null where mission_id = any (p_ids);
+  end if;
+  for fk in
+    select c.conrelid::regclass::text as child_rel, cl.relname as child, a.attname as col, c.confdeltype as del
+      from pg_constraint c
+      join pg_class cl on cl.oid = c.conrelid
+      join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+     where c.contype = 'f' and c.confrelid = v_rel and cardinality(c.conkey) = 1
+       and cl.relnamespace = 'public'::regnamespace
+       and (c.confdeltype in ('r', 'a') or (c.confdeltype = 'c' and cl.relname = 'company_files'))
+  loop
+    select exists (select 1 from pg_attribute where attrelid = fk.child_rel::regclass and attname = 'id' and atttypid = 'uuid'::regtype and not attisdropped)
+      into v_has_id;
+    if v_has_id then
+      execute format('select array_agg(id) from %s where %I = any ($1) and not (%L = %L and id = any ($1))', fk.child_rel, fk.col, fk.child, p_table)
+        into v_child using p_ids;
+      perform trash_private.delete_rows(fk.child, v_child);
+    else
+      execute format('delete from %s where %I = any ($1)', fk.child_rel, fk.col) using p_ids;
+    end if;
+  end loop;
+  execute format('delete from %s where id = any ($1)', v_rel) using p_ids;
+end; $$;
+
+-- Retire les éléments dont la ligne principale n'existe plus (purgée avec un parent).
+create or replace function trash_private.cleanup()
+returns void language plpgsql set search_path = '' as $$
+declare t text;
+begin
+  for t in select distinct row_table from public.trash_items loop
+    if to_regclass('public.' || t) is not null then
+      execute format('delete from public.trash_items i where i.row_table = %L and not exists (select 1 from public.%I x where x.id = i.row_id)', t, t);
+    end if;
+  end loop;
+  delete from public.trash_rows r where not exists (select 1 from public.trash_items i where i.id = r.trash_id);
+end; $$;
+
+create or replace function trash_private.purge_item(p_trash uuid)
+returns boolean language plpgsql set search_path = '' as $$
+declare v_item public.trash_items; t record;
+begin
+  select * into v_item from public.trash_items where id = p_trash for update;
+  if not found then return false; end if;
+  perform trash_private.delete_rows(v_item.row_table, array[v_item.row_id]);
+  for t in select r.row_table, array_agg(r.row_id) as ids from public.trash_rows r
+            where r.trash_id = p_trash and r.row_table <> v_item.row_table group by r.row_table loop
+    perform trash_private.delete_rows(t.row_table, t.ids);
+  end loop;
+  -- lignes de la même table que la racine (ex. avoirs d'une facture)
+  perform trash_private.delete_rows(v_item.row_table,
+    array(select r.row_id from public.trash_rows r where r.trash_id = p_trash and r.row_table = v_item.row_table));
+  delete from public.trash_items where id = p_trash;
+  perform trash_private.cleanup();
+  return true;
+end; $$;
+
+-- « Supprimer définitivement » (propriétaire, depuis l'application uniquement : jamais par Claude).
+-- Renvoie les fichiers à retirer du stockage (l'application les retire avec la session du propriétaire).
+create or replace function public.trash_purge(p_trash uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_done boolean;
+begin
+  perform public.assert_owner();
+  if public.current_actor() <> 'user' then
+    raise exception 'La suppression définitive se fait depuis la Corbeille de l''application' using errcode = '42501';
+  end if;
+  v_done := trash_private.purge_item(p_trash);
+  return jsonb_build_object('purged', v_done,
+    'files', coalesce((select jsonb_agg(q.path order by q.queued_at) from public.trash_file_queue q), '[]'));
+end; $$;
+
+-- Fichiers retirés (ou déjà absents) : sortis de la file. Un échec est noté pour le prochain passage.
+create or replace function public.trash_files_done(p_paths text[], p_error text default null)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  perform public.assert_owner();
+  if p_error is null then
+    delete from public.trash_file_queue where path = any (p_paths);
+  else
+    update public.trash_file_queue set attempts = attempts + 1, last_error = left(p_error, 500) where path = any (p_paths);
+  end if;
+end; $$;
+
+-- Purge automatique (tâche planifiée, clé serveur) : éléments arrivés à échéance, un par un ; un échec est noté
+-- sur l'élément et n'empêche pas les suivants. Les fichiers en attente reçoivent une autorisation de suppression
+-- de 10 minutes (même mécanisme que le portail) pour être retirés du stockage par la tâche.
+create or replace function public.trash_purge_due(p_server_key text, p_limit integer default 50)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v record; v_ok integer := 0; v_ko integer := 0; v_files jsonb;
+begin
+  perform appt_private.assert_server(p_server_key);
+  for v in select id from public.trash_items where purge_after <= now()
+            order by purge_after limit greatest(1, least(coalesce(p_limit, 50), 200)) loop
+    begin
+      if trash_private.purge_item(v.id) then v_ok := v_ok + 1; end if;
+    exception when others then
+      v_ko := v_ko + 1;
+      update public.trash_items set purge_attempts = purge_attempts + 1, purge_error = left(sqlerrm, 500) where id = v.id;
+    end;
+  end loop;
+  select coalesce(jsonb_agg(q.path order by q.queued_at), '[]') into v_files from (select path, queued_at from public.trash_file_queue order by queued_at limit 200) q;
+  insert into public.portal_storage_grants (object_name, action, expires_at)
+  select f #>> '{}', a.action, now() + interval '10 minutes' from jsonb_array_elements(v_files) f cross join (values ('read'), ('delete')) a (action);
+  return jsonb_build_object('purged', v_ok, 'failed', v_ko, 'files', v_files);
+end; $$;
+
+create or replace function public.trash_files_done_server(p_server_key text, p_paths text[], p_error text default null)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  perform appt_private.assert_server(p_server_key);
+  if p_error is null then
+    delete from public.trash_file_queue where path = any (p_paths);
+    delete from public.portal_storage_grants where object_name = any (p_paths);
+  else
+    update public.trash_file_queue set attempts = attempts + 1, last_error = left(p_error, 500) where path = any (p_paths);
+  end if;
+end; $$;
+
+-- ---------------------------------------------------------------------------
+-- Droits : propriétaire connecté (application et Claude) ; purge planifiée par clé serveur. Jamais le portail.
+-- ---------------------------------------------------------------------------
+revoke all on function public.in_trash(text, uuid), public.trash_preview(text, uuid), public.trash_put(text, uuid),
+  public.trash_restore(uuid, boolean), public.trash_purge(uuid), public.trash_files_done(text[], text) from public, anon;
+grant execute on function public.in_trash(text, uuid), public.trash_preview(text, uuid), public.trash_put(text, uuid),
+  public.trash_restore(uuid, boolean), public.trash_purge(uuid), public.trash_files_done(text[], text) to authenticated;
+revoke all on function public.trash_purge_due(text, integer), public.trash_files_done_server(text, text[], text) from public, authenticated;
+grant execute on function public.trash_purge_due(text, integer), public.trash_files_done_server(text, text[], text) to anon;
+revoke all on all functions in schema trash_private from public, anon, authenticated;
+grant execute on function trash_private.kind_table(text), trash_private.describe(text, uuid), trash_private.collect(text, uuid),
+  trash_private.summary(jsonb, text, uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Passage planifié « corbeille » (purge des éléments arrivés à 30 jours), suivi comme les autres tâches.
+-- La liste autorisée est complétée sans retirer une tâche ajoutée entre-temps par une autre migration.
+-- ---------------------------------------------------------------------------
+do $$
+declare v text;
+begin
+  select pg_get_constraintdef(oid) into v from pg_constraint
+   where conrelid = 'public.scheduled_jobs'::regclass and conname = 'scheduled_jobs_job_check';
+  if v is not null and v not like '%''corbeille''%' and v like '%ARRAY[%' then
+    alter table public.scheduled_jobs drop constraint scheduled_jobs_job_check;
+    execute 'alter table public.scheduled_jobs add constraint scheduled_jobs_job_check ' || replace(v, 'ARRAY[', 'ARRAY[''corbeille''::text, ');
+  end if;
+end $$;
+
+
+-- ===== 20261116010200_corbeille_finance.sql =====
+-- Corbeille, lot 2 : Finance (revenus, factures et avoirs, règlements).
+--  * Un règlement part seul ; une facture part avec ses règlements et ses avoirs (et leurs remboursements) ;
+--    un revenu part avec ses factures. Les totaux de Finance les ignorent aussitôt (vues sous RLS).
+--  * Tout se supprime après confirmation, y compris une facture émise ou réglée. Son numéro reste réservé :
+--    il n'est jamais réattribué (contrôle étendu aux factures à la corbeille) et la facture le retrouve à la
+--    restauration (rien n'est réécrit).
+--  * Un revenu lié à une vente : la vente reste, sans ce revenu.
+-- Additif : politiques restrictives ajoutées ; finance_record_invoice et finance_update_invoice redéfinies
+-- entièrement (seul changement : le contrôle du numéro voit aussi les factures à la corbeille).
+
+-- ---------------------------------------------------------------------------
+-- Invisibilité imposée par la base
+-- ---------------------------------------------------------------------------
+select trash_private.hide('finance_missions', array['id:finance_missions', 'company_id:companies']);
+select trash_private.hide('finance_invoices', array['id:finance_invoices', 'company_id:companies', 'mission_id:finance_missions', 'credited_invoice_id:finance_invoices']);
+select trash_private.hide('finance_payments', array['id:finance_payments', 'invoice_id:finance_invoices']);
+
+-- ---------------------------------------------------------------------------
+-- Outils
+-- ---------------------------------------------------------------------------
+create or replace function trash_private.eur(p numeric)
+returns text language sql immutable set search_path = '' as $$
+  select replace(replace(to_char(coalesce(p, 0), 'FM999,999,990.00'), ',', ' '), '.', ',') || ' €';
+$$;
+
+create or replace function trash_private.fr_date(p date)
+returns text language sql immutable set search_path = '' as $$ select to_char(p, 'DD/MM/YYYY'); $$;
+
+-- Numéro de facture déjà pris pour ce client, factures à la corbeille comprises (droits d'administration : une
+-- facture à la corbeille est invisible pour l'appelant). Ne renvoie qu'un booléen.
+create or replace function public.finance_reference_reserved(p_company uuid, p_ref text, p_exclude uuid default null)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select public.is_app_owner() and p_ref is not null and exists (
+    select 1 from public.finance_invoices
+     where company_id = p_company and kind = 'facture' and cancelled_at is null
+       and lower(reference) = lower(btrim(p_ref)) and (p_exclude is null or id <> p_exclude));
+$$;
+revoke all on function public.finance_reference_reserved(uuid, text, uuid) from public, anon;
+grant execute on function public.finance_reference_reserved(uuid, text, uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Règlement
+-- ---------------------------------------------------------------------------
+create or replace function trash_private.describe_finance_payment(p_id uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object(
+    'label', case when p.kind = 'remboursement' then 'Remboursement de ' else 'Règlement de ' end
+             || trash_private.eur(p.amount) || ' du ' || trash_private.fr_date(p.paid_on),
+    'context', case when i.kind = 'avoir' then 'Avoir' else 'Facture' end || coalesce(' ' || i.reference, ' du ' || trash_private.fr_date(i.issue_date))
+               || ' · ' || c.name,
+    'parents', jsonb_build_array(jsonb_build_object('t', 'finance_invoices', 'id', i.id)),
+    'warnings', case when p.cancelled_at is null and p.kind = 'paiement'
+                     then jsonb_build_array('Le reste à encaisser de la facture augmentera de ' || trash_private.eur(p.amount) || '.')
+                     else '[]'::jsonb end)
+    from public.finance_payments p
+    join public.finance_invoices i on i.id = p.invoice_id
+    join public.companies c on c.id = i.company_id
+   where p.id = p_id;
+$$;
+
+create or replace function trash_private.collect_finance_payment(p_id uuid)
+returns table (row_table text, row_id uuid) language sql stable set search_path = '' as $$
+  select 'finance_payments', p.id from public.finance_payments p where p.id = p_id;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Facture (ou avoir) : ses règlements, ses avoirs et leurs remboursements
+-- ---------------------------------------------------------------------------
+create or replace function trash_private.describe_finance_invoice(p_id uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object(
+    'label', case when o.kind = 'avoir' then 'Avoir' else 'Facture' end
+             || coalesce(' ' || o.reference, ' du ' || trash_private.fr_date(o.issue_date))
+             || ' · ' || trash_private.eur(o.amount_ttc) || ' TTC',
+    'context', o.company_name || coalesce(' · ' || o.mission_label, ''),
+    'parents', jsonb_build_array(jsonb_build_object('t', 'companies', 'id', o.company_id))
+               || case when o.mission_id is not null then jsonb_build_array(jsonb_build_object('t', 'finance_missions', 'id', o.mission_id)) else '[]'::jsonb end
+               || case when o.credited_invoice_id is not null then jsonb_build_array(jsonb_build_object('t', 'finance_invoices', 'id', o.credited_invoice_id)) else '[]'::jsonb end,
+    'warnings', to_jsonb(array_remove(array[
+      case when o.kind = 'facture' and o.status = 'payee' and o.paid_net > 0
+           then 'Facture réglée : ' || trash_private.eur(o.paid_net) || ' encaissés sortent des totaux de Finance (ils y reviennent à la restauration).' end,
+      case when o.kind = 'facture' and o.status <> 'payee' and o.paid_net > 0
+           then 'Règlement partiel : ' || trash_private.eur(o.paid_net) || ' encaissés sur ' || trash_private.eur(o.amount_ttc) || ' ; ils partent avec la facture.' end,
+      case when o.kind = 'facture' and o.balance > 0 and o.cancelled_at is null
+           then trash_private.eur(o.balance) || ' sortent du reste à encaisser.' end,
+      case when o.reference is not null
+           then 'Son numéro « ' || o.reference || ' » reste réservé : il ne sera pas réattribué et la facture le retrouvera si vous la restaurez.' end
+    ], null)))
+    from public.finance_invoice_overview o
+   where o.id = p_id;
+$$;
+
+create or replace function trash_private.collect_finance_invoice(p_id uuid)
+returns table (row_table text, row_id uuid) language sql stable set search_path = '' as $$
+  with inv as (
+    select i.id from public.finance_invoices i where i.id = p_id
+    union
+    select a.id from public.finance_invoices a where a.credited_invoice_id = p_id
+  )
+  select 'finance_invoices', id from inv
+  union all
+  select 'finance_payments', p.id from public.finance_payments p where p.invoice_id in (select id from inv);
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Revenu : ses factures (et ce qui part avec elles)
+-- ---------------------------------------------------------------------------
+create or replace function trash_private.describe_finance_mission(p_id uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object(
+    'label', m.label,
+    'context', c.name || case when m.amount is not null then ' · ' || trash_private.eur(m.amount) || ' HT'
+                              || case when m.kind = 'recurrent' then ' par échéance' else '' end else '' end,
+    'parents', jsonb_build_array(jsonb_build_object('t', 'companies', 'id', m.company_id)),
+    'warnings', to_jsonb(array_remove(array[
+      case when exists (select 1 from public.sales s where s.mission_id = m.id)
+           then 'Ce revenu est lié à la vente de ' || c.name || ' : la vente reste, sans ce revenu (il revient si vous le restaurez).' end,
+      case when exists (select 1 from public.finance_invoices i where i.mission_id = m.id and i.kind = 'facture')
+           then 'Ses factures partent avec lui ; leurs numéros restent réservés.' end
+    ], null)))
+    from public.finance_missions m join public.companies c on c.id = m.company_id
+   where m.id = p_id;
+$$;
+
+create or replace function trash_private.collect_finance_mission(p_id uuid)
+returns table (row_table text, row_id uuid) language sql stable set search_path = '' as $$
+  select 'finance_missions', m.id from public.finance_missions m where m.id = p_id
+  union all
+  select c.row_table, c.row_id from public.finance_invoices i
+   cross join lateral trash_private.collect_finance_invoice(i.id) c
+   where i.mission_id = p_id and i.kind = 'facture';
+$$;
+
+revoke all on function trash_private.eur(numeric), trash_private.fr_date(date),
+  trash_private.describe_finance_payment(uuid), trash_private.collect_finance_payment(uuid),
+  trash_private.describe_finance_invoice(uuid), trash_private.collect_finance_invoice(uuid),
+  trash_private.describe_finance_mission(uuid), trash_private.collect_finance_mission(uuid) from public, anon;
+grant execute on function trash_private.eur(numeric), trash_private.fr_date(date),
+  trash_private.describe_finance_payment(uuid), trash_private.collect_finance_payment(uuid),
+  trash_private.describe_finance_invoice(uuid), trash_private.collect_finance_invoice(uuid),
+  trash_private.describe_finance_mission(uuid), trash_private.collect_finance_mission(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Numéro de facture réservé (redéfinitions complètes)
+-- ---------------------------------------------------------------------------
+create or replace function public.finance_update_invoice(p_id uuid, p_data jsonb)
+returns jsonb
+language plpgsql
+as $$
+declare v_inv public.finance_invoices; v_ht numeric(12,2); v_vat numeric(12,2); v_ttc numeric(12,2); v_paid numeric(12,2); v_mission uuid;
+begin
+  perform public.assert_owner();
+  select * into v_inv from public.finance_invoices where id = p_id for update;
+  if v_inv.id is null then raise exception 'Facture introuvable' using errcode = 'P0002'; end if;
+  v_ht := case when p_data ? 'amount_ht' then public.finance_num(p_data, 'amount_ht') else v_inv.amount_ht end;
+  if v_ht is null or v_ht <= 0 then raise exception 'Le montant HT doit être positif' using errcode = '22023'; end if;
+  v_vat := case when p_data ? 'vat_amount' then public.finance_num(p_data, 'vat_amount') else v_inv.vat_amount end;
+  v_ttc := case when p_data ? 'amount_ttc' then public.finance_num(p_data, 'amount_ttc')
+                when p_data ? 'amount_ht' or p_data ? 'vat_amount' then v_ht + coalesce(v_vat, 0) else v_inv.amount_ttc end;
+  if v_vat is not null and v_ttc <> v_ht + v_vat then
+    raise exception 'HT + TVA ne correspond pas au TTC' using errcode = '22023';
+  end if;
+  select paid_net into v_paid from public.finance_invoice_overview where id = p_id;
+  if v_ttc < coalesce(v_paid, 0) then
+    raise exception 'Le montant TTC serait inférieur aux paiements déjà reçus' using errcode = '22023';
+  end if;
+  v_mission := case when p_data ? 'mission_id' then nullif(p_data ->> 'mission_id', '')::uuid else v_inv.mission_id end;
+  if v_mission is not null and not exists (select 1 from public.finance_missions where id = v_mission and company_id = v_inv.company_id) then
+    raise exception 'Ce revenu appartient à un autre client.' using errcode = '22023';
+  end if;
+  if v_inv.kind = 'facture' and p_data ? 'reference' and public.finance_txt(p_data, 'reference') is not null
+     and lower(public.finance_txt(p_data, 'reference')) is distinct from lower(v_inv.reference)
+     and public.finance_reference_reserved(v_inv.company_id, public.finance_txt(p_data, 'reference'), p_id) then
+    raise exception 'La facture « % » est déjà enregistrée pour ce client.', public.finance_txt(p_data, 'reference') using errcode = '23505';
+  end if;
+  update public.finance_invoices set
+    reference = case when p_data ? 'reference' then public.finance_txt(p_data, 'reference') else reference end,
+    issue_date = coalesce(case when p_data ? 'issue_date' then public.finance_date(p_data, 'issue_date') end, issue_date),
+    due_date = case when p_data ? 'due_date' then public.finance_date(p_data, 'due_date') else due_date end,
+    amount_ht = v_ht,
+    vat_rate = case when p_data ? 'vat_rate' then nullif(p_data ->> 'vat_rate', '')::numeric(5,2) else vat_rate end,
+    vat_amount = v_vat, amount_ttc = v_ttc,
+    note = case when p_data ? 'note' then public.finance_txt(p_data, 'note') else note end,
+    mission_id = v_mission,
+    forecast_due_date = case when p_data ? 'forecast_due_date' then public.finance_date(p_data, 'forecast_due_date')
+                             when v_mission is distinct from v_inv.mission_id then null else forecast_due_date end
+  where id = p_id;
+  return jsonb_build_object('id', p_id);
+end;
+$$;
+
+create or replace function public.finance_record_invoice(p_data jsonb, p_idempotency_key text default null)
+returns jsonb
+language plpgsql
+as $$
+declare
+  v_prev jsonb; v_id uuid; v_company uuid; v_mission uuid; v_m public.finance_missions;
+  v_ht numeric(12,2); v_vat numeric(12,2); v_ttc numeric(12,2); v_cover date; v_ref text; v_billed numeric(12,2);
+begin
+  perform public.assert_owner();
+  v_prev := public.idem_get(p_idempotency_key);
+  if v_prev is not null then return v_prev; end if;
+  v_company := nullif(p_data ->> 'company_id', '')::uuid;
+  v_mission := nullif(p_data ->> 'mission_id', '')::uuid;
+  if not exists (select 1 from public.companies where id = v_company and merged_into_id is null) then
+    raise exception 'Fiche client introuvable' using errcode = 'P0002';
+  end if;
+  if v_mission is not null then
+    select * into v_m from public.finance_missions where id = v_mission for update;
+    if v_m.id is null or v_m.company_id <> v_company then
+      raise exception 'Ce revenu appartient à un autre client.' using errcode = '22023';
+    end if;
+  end if;
+  v_ht := public.finance_num(p_data, 'amount_ht');
+  v_vat := public.finance_num(p_data, 'vat_amount');
+  v_ttc := coalesce(public.finance_num(p_data, 'amount_ttc'), v_ht + coalesce(v_vat, 0));
+  if v_ht is null or v_ht <= 0 then raise exception 'Le montant HT doit être positif' using errcode = '22023'; end if;
+  if v_vat is not null and v_ttc <> v_ht + v_vat then
+    raise exception 'HT + TVA ne correspond pas au TTC' using errcode = '22023';
+  end if;
+  v_ref := public.finance_txt(p_data, 'reference');
+  -- numéro réservé : une facture à la corbeille le garde (jamais réattribué, retrouvé à la restauration)
+  if v_ref is not null and public.finance_reference_reserved(v_company, v_ref, null) then
+    raise exception 'La facture « % » est déjà enregistrée pour ce client.', v_ref using errcode = '23505';
+  end if;
+  if v_m.id is not null and v_m.kind = 'ponctuel' and v_m.amount is not null then
+    select coalesce(sum(amount_ht), 0) into v_billed from public.finance_invoices
+     where mission_id = v_m.id and kind = 'facture' and cancelled_at is null;
+    if v_billed + v_ht > v_m.amount then
+      raise exception 'Le total facturé (% €) dépasserait le montant du revenu (% €) : modifiez d''abord le revenu.',
+        v_billed + v_ht, v_m.amount using errcode = '22023';
+    end if;
+  end if;
+  v_cover := public.finance_date(p_data, 'forecast_due_date');
+
+  insert into public.finance_invoices (company_id, mission_id, reference, issue_date, due_date, amount_ht, vat_rate, vat_amount,
+                                       amount_ttc, forecast_due_date, note)
+  values (v_company, v_mission, v_ref, public.finance_date(p_data, 'issue_date'),
+          public.finance_date(p_data, 'due_date'), v_ht, nullif(p_data ->> 'vat_rate', '')::numeric(5,2), v_vat, v_ttc,
+          v_cover, public.finance_txt(p_data, 'note'))
+  returning id, forecast_due_date into v_id, v_cover;
+
+  if v_cover is not null and v_m.id is not null and v_m.kind = 'recurrent' and v_m.next_due_date = v_cover then
+    update public.finance_missions set next_due_date = public.finance_add_frequency(v_cover, v_m.frequency) where id = v_m.id;
+  end if;
+  return public.idem_put(p_idempotency_key, 'finance_record_invoice', jsonb_build_object('id', v_id));
+end;
+$$;
+
+
+-- ===== 20261116010300_corbeille_projets.sql =====
+-- Corbeille, lot 3 : Projets (projet client, tâches, idées, phases du planning, points de suivi).
+--  * Un projet part avec tout son contenu : tâches et commentaires, idées, planning (phases, jalons), points de
+--    suivi et récapitulatifs, dossiers, liens vers les documents, historique, onboarding.
+--  * Les documents restent sur la fiche (ce sont des fichiers de la fiche) et dans les autres projets qui les
+--    partagent : seul le lien avec ce projet part.
+--  * Un projet à la corbeille ferme l'accès de ses contacts à ce projet au portail ; la restauration le rouvre
+--    (les accès eux-mêmes ne sont pas modifiés). Le rendez-vous d'un point de suivi reste dans l'agenda.
+-- Additif : politiques restrictives ajoutées ; fonctions du portail redéfinies entièrement (définitions en vigueur,
+-- seul ajout : l'élément à la corbeille est ignoré).
+
+-- ---------------------------------------------------------------------------
+-- Invisibilité imposée par la base (application, Claude)
+-- ---------------------------------------------------------------------------
+select trash_private.hide('projects', array['id:projects', 'company_id:companies']);
+select trash_private.hide('project_members', array['project_id:projects', 'person_id:people']);
+select trash_private.hide('project_tasks', array['id:project_tasks', 'project_id:projects']);
+select trash_private.hide('project_task_comments', array['id:project_task_comments', 'task_id:project_tasks']);
+select trash_private.hide('project_ideas', array['id:project_ideas', 'project_id:projects']);
+select trash_private.hide('project_idea_comments', array['id:project_idea_comments', 'idea_id:project_ideas']);
+select trash_private.hide('project_phases', array['id:project_phases', 'project_id:projects']);
+select trash_private.hide('project_milestones', array['id:project_milestones', 'project_id:projects', 'phase_id:project_phases']);
+select trash_private.hide('project_meetings', array['id:project_meetings', 'project_id:projects']);
+select trash_private.hide('meeting_recaps', array['meeting_id:project_meetings']);
+select trash_private.hide('project_folders', array['id:project_folders', 'project_id:projects']);
+select trash_private.hide('project_files', array['id:project_files', 'project_id:projects']);
+select trash_private.hide('project_activity', array['project_id:projects']);  -- identifiant numérique : suit son projet
+select trash_private.hide('project_onboarding', array['project_id:projects']);
+select trash_private.hide('project_onboarding_items', array['id:project_onboarding_items', 'project_id:projects']);
+select trash_private.hide('project_onboarding_decks', array['id:project_onboarding_decks', 'project_id:projects']);
+
+-- ---------------------------------------------------------------------------
+-- Projet
+-- ---------------------------------------------------------------------------
+create or replace function trash_private.describe_project(p_id uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object(
+    'label', p.name,
+    'context', c.name,
+    'parents', jsonb_build_array(jsonb_build_object('t', 'companies', 'id', p.company_id)),
+    'warnings', to_jsonb(array_remove(array[
+      (select case when count(*) > 0 then
+         count(*) || ' contact' || case when count(*) > 1 then 's' else '' end || ' du portail ne verr'
+         || case when count(*) > 1 then 'ont' else 'a' end || ' plus ce projet ; l''accès est rouvert si vous le restaurez.' end
+         from public.project_members m where m.project_id = p.id and p.portal_published),
+      case when exists (select 1 from public.project_files f where f.project_id = p.id)
+           then 'Les documents restent sur la fiche ' || c.name || ' et dans les autres projets qui les partagent.' end,
+      case when exists (select 1 from public.project_meetings m where m.project_id = p.id)
+           then 'Les rendez-vous des points de suivi restent dans l''agenda.' end,
+      case when exists (select 1 from public.sales s where s.project_id = p.id)
+           then 'La vente liée reste, sans ce projet.' end
+    ], null)))
+    from public.projects p join public.companies c on c.id = p.company_id
+   where p.id = p_id;
+$$;
+
+create or replace function trash_private.collect_project(p_id uuid)
+returns table (row_table text, row_id uuid) language sql stable set search_path = '' as $$
+  select 'projects', id from public.projects where id = p_id
+  union all select 'project_tasks', id from public.project_tasks where project_id = p_id
+  union all select 'project_task_comments', c.id from public.project_task_comments c join public.project_tasks t on t.id = c.task_id where t.project_id = p_id
+  union all select 'project_ideas', id from public.project_ideas where project_id = p_id
+  union all select 'project_idea_comments', c.id from public.project_idea_comments c join public.project_ideas i on i.id = c.idea_id where i.project_id = p_id
+  union all select 'project_phases', id from public.project_phases where project_id = p_id
+  union all select 'project_milestones', id from public.project_milestones where project_id = p_id
+  union all select 'project_meetings', id from public.project_meetings where project_id = p_id
+  union all select 'project_folders', id from public.project_folders where project_id = p_id
+  union all select 'project_files', id from public.project_files where project_id = p_id
+  union all select 'project_onboarding_items', id from public.project_onboarding_items where project_id = p_id
+  union all select 'project_onboarding_decks', id from public.project_onboarding_decks where project_id = p_id;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Tâche, idée, phase, point de suivi
+-- ---------------------------------------------------------------------------
+create or replace function trash_private.describe_project_task(p_id uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object(
+    'label', t.title, 'context', 'Projet ' || p.name,
+    'parents', jsonb_build_array(jsonb_build_object('t', 'projects', 'id', t.project_id)),
+    'warnings', case when t.visible_to_client and p.portal_published
+                     then jsonb_build_array('Visible au portail : elle en disparaît aussi.') else '[]'::jsonb end)
+    from public.project_tasks t join public.projects p on p.id = t.project_id where t.id = p_id;
+$$;
+create or replace function trash_private.collect_project_task(p_id uuid)
+returns table (row_table text, row_id uuid) language sql stable set search_path = '' as $$
+  select 'project_tasks', id from public.project_tasks where id = p_id
+  union all select 'project_task_comments', id from public.project_task_comments where task_id = p_id;
+$$;
+
+create or replace function trash_private.describe_project_idea(p_id uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object(
+    'label', i.title, 'context', 'Projet ' || p.name,
+    'parents', jsonb_build_array(jsonb_build_object('t', 'projects', 'id', i.project_id)),
+    'warnings', to_jsonb(array_remove(array[
+      case when p.portal_published then 'Les idées sont visibles au portail : elle en disparaît aussi.' end,
+      case when exists (select 1 from public.project_tasks t where t.idea_id = i.id) then 'La tâche créée à partir de cette idée reste.' end
+    ], null)))
+    from public.project_ideas i join public.projects p on p.id = i.project_id where i.id = p_id;
+$$;
+create or replace function trash_private.collect_project_idea(p_id uuid)
+returns table (row_table text, row_id uuid) language sql stable set search_path = '' as $$
+  select 'project_ideas', id from public.project_ideas where id = p_id
+  union all select 'project_idea_comments', id from public.project_idea_comments where idea_id = p_id;
+$$;
+
+create or replace function trash_private.describe_project_phase(p_id uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object(
+    'label', ph.name, 'context', 'Planning du projet ' || p.name,
+    'parents', jsonb_build_array(jsonb_build_object('t', 'projects', 'id', ph.project_id)),
+    'warnings', case when p.portal_published then jsonb_build_array('Le planning est visible au portail : la phase en disparaît aussi.') else '[]'::jsonb end)
+    from public.project_phases ph join public.projects p on p.id = ph.project_id where ph.id = p_id;
+$$;
+create or replace function trash_private.collect_project_phase(p_id uuid)
+returns table (row_table text, row_id uuid) language sql stable set search_path = '' as $$
+  select 'project_phases', id from public.project_phases where id = p_id
+  union all select 'project_milestones', id from public.project_milestones where phase_id = p_id;
+$$;
+
+create or replace function trash_private.describe_project_meeting(p_id uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object(
+    'label', coalesce(m.title, b.event_snapshot ->> 'name', 'Point de suivi') || ' du ' || to_char(b.starts_at at time zone 'Europe/Paris', 'DD/MM/YYYY'),
+    'context', 'Projet ' || p.name,
+    'parents', jsonb_build_array(jsonb_build_object('t', 'projects', 'id', m.project_id)),
+    'warnings', to_jsonb(array_remove(array[
+      'Le rendez-vous reste dans l''agenda : seul le point de suivi du projet part.',
+      case when exists (select 1 from public.meeting_recaps r where r.meeting_id = m.id) then 'Son récapitulatif part avec lui.' end
+    ], null)))
+    from public.project_meetings m join public.projects p on p.id = m.project_id join public.appt_bookings b on b.id = m.booking_id
+   where m.id = p_id;
+$$;
+create or replace function trash_private.collect_project_meeting(p_id uuid)
+returns table (row_table text, row_id uuid) language sql stable set search_path = '' as $$
+  select 'project_meetings', id from public.project_meetings where id = p_id;
+$$;
+
+revoke all on function trash_private.describe_project(uuid), trash_private.collect_project(uuid),
+  trash_private.describe_project_task(uuid), trash_private.collect_project_task(uuid),
+  trash_private.describe_project_idea(uuid), trash_private.collect_project_idea(uuid),
+  trash_private.describe_project_phase(uuid), trash_private.collect_project_phase(uuid),
+  trash_private.describe_project_meeting(uuid), trash_private.collect_project_meeting(uuid) from public, anon;
+grant execute on function trash_private.describe_project(uuid), trash_private.collect_project(uuid),
+  trash_private.describe_project_task(uuid), trash_private.collect_project_task(uuid),
+  trash_private.describe_project_idea(uuid), trash_private.collect_project_idea(uuid),
+  trash_private.describe_project_phase(uuid), trash_private.collect_project_phase(uuid),
+  trash_private.describe_project_meeting(uuid), trash_private.collect_project_meeting(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Portail client (fonctions privilégiées : le filtre y est explicite)
+-- ---------------------------------------------------------------------------
+-- portal_private.session_person
+CREATE OR REPLACE FUNCTION portal_private.session_person(p_server_key text, p_session_hash text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+declare
+  v_person uuid;
+  v_session uuid;
+begin
+  perform portal_private.assert_server(p_server_key);
+  select a.person_id, s.id into v_person, v_session
+    from public.portal_sessions s
+    join public.portal_accesses a on a.id = s.access_id
+   where s.token_hash = p_session_hash and s.revoked_at is null and s.expires_at > now()
+     and a.revoked_at is null and (a.expires_at is null or a.expires_at > now())
+     and not public.in_trash('portal_accesses', a.id) and not public.in_trash('people', a.person_id);
+  if v_person is null then
+    raise exception 'Session expirée' using errcode = '28000';
+  end if;
+  update public.portal_sessions set last_seen_at = now() where id = v_session and last_seen_at < now() - interval '5 minutes';
+  return v_person;
+end;
+$function$;
+
+-- portal_private.visible_projects
+CREATE OR REPLACE FUNCTION portal_private.visible_projects(p_person uuid)
+ RETURNS TABLE(project_id uuid, read_only boolean)
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select p.id, p.status = 'archive'
+    from public.project_members m
+    join public.projects p on p.id = m.project_id
+   where m.person_id = p_person and p.portal_published
+     and not public.in_trash('projects', p.id) and not public.in_trash('people', p_person)
+     and (p.status <> 'archive' or p.archived_portal = 'read_only');
+$function$;
+
+-- portal_private.project_view
+CREATE OR REPLACE FUNCTION portal_private.project_view(p_project uuid, p_person uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select jsonb_build_object(
+    'id', p.id, 'name', p.name, 'description', p.description, 'status', p.status,
+    'start_date', p.start_date, 'end_date', p.end_date, 'client_update', p.client_update,
+    'read_only', p.status = 'archive', 'company', c.name, 'updated_at', p.updated_at,
+    'today', (now() at time zone 'Europe/Paris')::date,
+    'phases', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', ph.id, 'name', ph.name, 'description', ph.description, 'deliverables', ph.deliverables,
+        'start_date', ph.start_date, 'end_date', ph.end_date, 'color', ph.color, 'status', ph.status,
+        'completed_at', ph.completed_at) order by ph.position, ph.start_date nulls last)
+      from public.project_phases ph where ph.project_id = p.id and not public.in_trash('project_phases', ph.id)), '[]'),
+    'milestones', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', ms.id, 'title', ms.title, 'due_date', ms.due_date, 'done', ms.done_at is not null, 'phase_id', ms.phase_id) order by ms.due_date)
+      from public.project_milestones ms where ms.project_id = p.id and ms.visible_to_client and not public.in_trash('project_milestones', ms.id)), '[]'),
+    'meetings', coalesce((select jsonb_agg(portal_private.meeting_json(m, b, false) order by b.starts_at)
+      from public.project_meetings m join public.appt_bookings b on b.id = m.booking_id
+     where m.project_id = p.id and m.visible_to_client and not public.in_trash('project_meetings', m.id) and b.status in ('confirmed','cancelled')), '[]'))
+    from public.projects p join public.companies c on c.id = p.company_id
+   where p.id = p_project and not public.in_trash('projects', p.id);
+$function$;
+
+-- portal_private.meeting_view
+CREATE OR REPLACE FUNCTION portal_private.meeting_view(p_project uuid, p_meeting uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select portal_private.meeting_json(m, b, true) || jsonb_build_object(
+    'recap', (select jsonb_build_object('summary', r.summary, 'decisions', r.decisions, 'actions', r.actions,
+                                        'next_step', r.next_step, 'links', r.links, 'published_at', r.published_at)
+                from public.meeting_recaps r where r.meeting_id = m.id and r.status = 'published'))
+    from public.project_meetings m join public.appt_bookings b on b.id = m.booking_id
+   where m.id = p_meeting and m.project_id = p_project and not public.in_trash('project_meetings', m.id) and m.visible_to_client and b.status in ('confirmed','cancelled');
+$function$;
+
+-- public.portal_tasks
+CREATE OR REPLACE FUNCTION public.portal_tasks(p_server_key text, p_session_hash text, p_project uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 300)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+begin
+  if p_project is not null then perform portal_private.assert_project(v_person, p_project); end if;
+  return coalesce((
+    select jsonb_agg(portal_private.task_json(t, v_person) order by t.status = 'termine', t.due_date nulls last, t.position, t.created_at)
+      from (select t.* from public.project_tasks t
+             where t.visible_to_client and not public.in_trash('project_tasks', t.id)
+               and t.project_id in (select project_id from portal_private.visible_projects(v_person))
+               and (p_project is null or t.project_id = p_project)
+             order by t.status = 'termine', t.due_date nulls last, t.position, t.created_at
+             limit greatest(1, least(p_limit, 500))) t), '[]');
+end; $function$;
+
+-- portal_private.task_json
+CREATE OR REPLACE FUNCTION portal_private.task_json(t public.project_tasks, p_person uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select jsonb_build_object(
+    'id', t.id, 'project_id', t.project_id, 'project_name', (select name from public.projects where id = t.project_id),
+    'title', t.title, 'status', t.status, 'due_date', t.due_date, 'blocked_reason', t.blocked_reason,
+    'assignee', case when t.assignee_kind = 'owner' then jsonb_build_object('kind', 'owner', 'name', 'Cely Growth')
+                     when t.assignee_person_id is null then jsonb_build_object('kind', 'team', 'name', 'Équipe client')
+                     else jsonb_build_object('kind', case when t.assignee_person_id = p_person then 'me' else 'person' end,
+                                             'name', (select btrim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')) from public.people where id = t.assignee_person_id)) end,
+    'meeting', (select jsonb_build_object('id', pm.id, 'title', coalesce(pm.title, b.event_snapshot ->> 'name'), 'starts_at', b.starts_at)
+                  from public.project_meetings pm join public.appt_bookings b on b.id = pm.booking_id
+                 where pm.id = t.meeting_id and pm.visible_to_client and not public.in_trash('project_meetings', pm.id) and b.status in ('confirmed','cancelled')),
+    'updated_at', t.updated_at, 'can_edit', portal_private.task_editable(t, p_person),
+    'comment_count', (select count(*) from public.project_task_comments c where c.task_id = t.id and not c.internal and not public.in_trash('project_task_comments', c.id)));
+$function$;
+
+-- portal_private.my_open_tasks
+CREATE OR REPLACE FUNCTION portal_private.my_open_tasks(p_project uuid, p_person uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select coalesce(jsonb_agg(portal_private.task_json(t, p_person) order by t.due_date nulls last, t.position), '[]')
+    from (select * from public.project_tasks t
+           where t.project_id = p_project and t.visible_to_client and not public.in_trash('project_tasks', t.id) and t.assignee_kind = 'client'
+             and (t.assignee_person_id is null or t.assignee_person_id = p_person) and t.status <> 'termine'
+           order by t.due_date nulls last, t.position limit 5) t;
+$function$;
+
+-- public.portal_task
+CREATE OR REPLACE FUNCTION public.portal_task(p_server_key text, p_session_hash text, p_task uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  t public.project_tasks;
+begin
+  select * into t from public.project_tasks where id = p_task and visible_to_client and not public.in_trash('project_tasks', p_task);
+  if not found or not exists (select 1 from portal_private.visible_projects(v_person) where project_id = t.project_id) then
+    raise exception 'Tâche introuvable' using errcode = 'P0002';
+  end if;
+  return portal_private.task_json(t, v_person) || jsonb_build_object(
+    'description', t.description, 'links', t.links,
+    'comments', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', c.id, 'body', c.body, 'created_at', c.created_at, 'mine', c.person_id = v_person,
+        'author', case when c.author_kind = 'owner' then 'Cely Growth'
+                       else (select btrim(coalesce(first_name, '') || ' ' || coalesce(last_name, '')) from public.people where id = c.person_id) end) order by c.created_at)
+      from public.project_task_comments c where c.task_id = t.id and not c.internal and not public.in_trash('project_task_comments', c.id)), '[]'));
+end; $function$;
+
+-- public.portal_task_update
+CREATE OR REPLACE FUNCTION public.portal_task_update(p_server_key text, p_session_hash text, p_task uuid, p_status text, p_blocked_reason text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  t public.project_tasks;
+begin
+  select * into t from public.project_tasks where id = p_task and visible_to_client and not public.in_trash('project_tasks', p_task) for update;
+  if not found or not exists (select 1 from portal_private.visible_projects(v_person) where project_id = t.project_id) then
+    raise exception 'Tâche introuvable' using errcode = 'P0002';
+  end if;
+  if not portal_private.task_editable(t, v_person) then
+    raise exception 'Cette tâche n''est pas attribuée à vous : vous pouvez la consulter et la commenter.' using errcode = '42501';
+  end if;
+  if p_status not in ('a_faire','en_cours','bloque','termine') then raise exception 'Statut invalide' using errcode = '22023'; end if;
+  if p_status = 'bloque' and coalesce(btrim(p_blocked_reason), '') = '' then
+    raise exception 'Expliquez en quelques mots ce qui bloque' using errcode = '22023';
+  end if;
+  update public.project_tasks set status = p_status, blocked_reason = nullif(btrim(coalesce(p_blocked_reason, '')), ''),
+         updated_by_kind = 'client', updated_by_person = v_person
+   where id = p_task returning * into t;
+  perform portal_private.log(t.project_id, 'client', v_person, 'task_status', jsonb_build_object('task_id', t.id, 'status', p_status));
+  return portal_private.task_json(t, v_person);
+end; $function$;
+
+-- public.portal_task_comment
+CREATE OR REPLACE FUNCTION public.portal_task_comment(p_server_key text, p_session_hash text, p_task uuid, p_body text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  t public.project_tasks;
+  v_id uuid;
+begin
+  select * into t from public.project_tasks where id = p_task and visible_to_client and not public.in_trash('project_tasks', p_task);
+  if not found then raise exception 'Tâche introuvable' using errcode = 'P0002'; end if;
+  perform portal_private.assert_project(v_person, t.project_id, true);
+  if coalesce(btrim(p_body), '') = '' or char_length(p_body) > 1000 then raise exception 'Commentaire vide ou trop long (1 000 caractères)' using errcode = '22023'; end if;
+  insert into public.project_task_comments (task_id, author_kind, person_id, body) values (p_task, 'client', v_person, btrim(p_body)) returning id into v_id;
+  perform portal_private.log(t.project_id, 'client', v_person, 'task_comment', jsonb_build_object('task_id', t.id));
+  return jsonb_build_object('id', v_id);
+end; $function$;
+
+-- public.portal_ideas
+CREATE OR REPLACE FUNCTION public.portal_ideas(p_server_key text, p_session_hash text, p_project uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+begin
+  perform portal_private.assert_project(v_person, p_project);
+  return coalesce((select jsonb_agg(portal_private.idea_json(i, v_person) order by i.created_at desc)
+                     from (select * from public.project_ideas where project_id = p_project and not public.in_trash('project_ideas', id) order by created_at desc limit 200) i), '[]');
+end; $function$;
+
+-- public.portal_idea_save
+CREATE OR REPLACE FUNCTION public.portal_idea_save(p_server_key text, p_session_hash text, p_project uuid, p_idea uuid, p_title text, p_description text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  i public.project_ideas;
+begin
+  perform portal_private.assert_project(v_person, p_project, true);
+  if coalesce(btrim(p_title), '') = '' or char_length(p_title) > 160 then raise exception 'Titre obligatoire (160 caractères maximum)' using errcode = '22023'; end if;
+  if char_length(coalesce(p_description, '')) > 4000 then raise exception 'Description trop longue' using errcode = '22023'; end if;
+  if p_idea is null then
+    if (select count(*) from public.project_ideas where author_person = v_person and created_at > now() - interval '1 hour') >= 20 then
+      raise exception 'Beaucoup d''idées en peu de temps : réessayez plus tard' using errcode = '22023';
+    end if;
+    insert into public.project_ideas (project_id, title, description, author_kind, author_person)
+    values (p_project, btrim(p_title), nullif(btrim(coalesce(p_description, '')), ''), 'client', v_person) returning * into i;
+    perform portal_private.log(p_project, 'client', v_person, 'idea_created', jsonb_build_object('idea_id', i.id));
+  else
+    select * into i from public.project_ideas where id = p_idea and project_id = p_project and not public.in_trash('project_ideas', p_idea) for update;
+    if not found then raise exception 'Idée introuvable' using errcode = 'P0002'; end if;
+    if i.author_kind <> 'client' or i.author_person is distinct from v_person then raise exception 'Seul l''auteur peut modifier cette idée' using errcode = '42501'; end if;
+    if i.status <> 'a_explorer' then raise exception 'Une décision a été prise : l''idée n''est plus modifiable, ajoutez plutôt un commentaire' using errcode = '42501'; end if;
+    update public.project_ideas set title = btrim(p_title), description = nullif(btrim(coalesce(p_description, '')), '') where id = i.id returning * into i;
+  end if;
+  return portal_private.idea_json(i, v_person);
+end; $function$;
+
+-- public.portal_idea_comment
+CREATE OR REPLACE FUNCTION public.portal_idea_comment(p_server_key text, p_session_hash text, p_project uuid, p_idea uuid, p_body text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+  i public.project_ideas;
+begin
+  perform portal_private.assert_project(v_person, p_project, true);
+  select * into i from public.project_ideas where id = p_idea and project_id = p_project and not public.in_trash('project_ideas', p_idea);
+  if not found then raise exception 'Idée introuvable' using errcode = 'P0002'; end if;
+  if coalesce(btrim(p_body), '') = '' or char_length(p_body) > 1000 then raise exception 'Commentaire vide ou trop long (1 000 caractères)' using errcode = '22023'; end if;
+  insert into public.project_idea_comments (idea_id, author_kind, person_id, body) values (i.id, 'client', v_person, btrim(p_body));
+  return portal_private.idea_json(i, v_person);
+end; $function$;
+
+-- portal_private.idea_json
+CREATE OR REPLACE FUNCTION portal_private.idea_json(i public.project_ideas, p_person uuid)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  select jsonb_build_object(
+    'id', i.id, 'title', i.title, 'description', i.description, 'status', i.status, 'decision_note', i.decision_note,
+    'created_at', i.created_at, 'updated_at', i.updated_at,
+    'author', case when i.author_kind = 'owner' then 'Cely Growth' else portal_private.person_name(i.author_person) end,
+    'mine', i.author_kind = 'client' and i.author_person = p_person,
+    'can_edit', i.author_kind = 'client' and i.author_person = p_person and i.status = 'a_explorer',
+    'has_task', exists (select 1 from public.project_tasks t where t.idea_id = i.id and not public.in_trash('project_tasks', t.id)),
+    'comments', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', c.id, 'body', c.body, 'created_at', c.created_at,
+        'author', case when c.author_kind = 'owner' then 'Cely Growth' else portal_private.person_name(c.person_id) end) order by c.created_at)
+      from public.project_idea_comments c where c.idea_id = i.id and not public.in_trash('project_idea_comments', c.id)), '[]'));
+$function$;
+
+-- public.portal_upcoming_meetings
+CREATE OR REPLACE FUNCTION public.portal_upcoming_meetings(p_server_key text, p_session_hash text, p_limit integer DEFAULT 3)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_person uuid := portal_private.session_person(p_server_key, p_session_hash);
+begin
+  return coalesce((
+    select jsonb_agg(x.j order by x.starts_at)
+      from (select portal_private.meeting_json(m, b, false) || jsonb_build_object('project_id', p.id, 'project_name', p.name) as j, b.starts_at
+              from portal_private.visible_projects(v_person) v
+              join public.projects p on p.id = v.project_id
+              join public.project_meetings m on m.project_id = p.id and m.visible_to_client and not public.in_trash('project_meetings', m.id)
+              join public.appt_bookings b on b.id = m.booking_id
+             where b.status = 'confirmed' and b.ends_at > now() and b.outcome is distinct from 'done'
+             order by b.starts_at
+             limit greatest(1, least(coalesce(p_limit, 3), 10))) x), '[]');
+end; $function$;
+
+revoke all on all functions in schema portal_private from public, anon, authenticated;
+
+
+-- ===== 20261116010400_corbeille_fiches.sql =====
+-- Corbeille, lot 4 : fiches (entreprises, contacts) et ventes associées.
+--  * Une entreprise part avec tout ce qui lui est rattaché : contacts (et leurs accès au portail), vente, tâches,
+--    historique, revenus, factures et règlements, projets (et tout leur contenu), fichiers, diagnostics,
+--    participations aux campagnes, temps, mails et appels enregistrés. Les rendez-vous restent dans l'agenda
+--    (sans fiche tant qu'elle est à la corbeille) : aucun changement d'agenda, aucun mail.
+--  * Un contact part avec son accès au portail (fermé) et sa place dans les projets ; ses échanges restent sur la
+--    fiche. S'il était contact principal, la fiche peut en désigner un autre ; il redevient principal à la
+--    restauration si la place est libre.
+-- Additif : politiques restrictives ajoutées (y compris sur les tables Mail, Fireflies, Diagnostic, Temps et
+-- Prospection rattachées à une fiche) ; aucune table du module Rendez-vous n'est modifiée.
+
+-- ---------------------------------------------------------------------------
+-- Invisibilité imposée par la base (application, Claude)
+-- ---------------------------------------------------------------------------
+select trash_private.hide('companies', array['id:companies']);
+select trash_private.hide('people', array['id:people', 'company_id:companies']);
+select trash_private.hide('sales', array['id:sales', 'company_id:companies']);
+select trash_private.hide('tasks', array['id:tasks', 'company_id:companies']);
+select trash_private.hide('interactions', array['id:interactions', 'company_id:companies']);
+select trash_private.hide('company_files', array['id:company_files', 'company_id:companies']);
+select trash_private.hide('company_file_texts', array['file_id:company_files']);
+select trash_private.hide('diagnostics', array['id:diagnostics', 'company_id:companies']);
+select trash_private.hide('diagnostic_questions', array['id:diagnostic_questions', 'diagnostic_id:diagnostics']);
+select trash_private.hide('diagnostic_versions', array['id:diagnostic_versions', 'diagnostic_id:diagnostics']);
+select trash_private.hide('list_members', array['company_id:companies']);
+select trash_private.hide('campaign_participants', array['id:campaign_participants', 'company_id:companies']);
+select trash_private.hide('participant_drafts', array['participant_id:campaign_participants']);
+select trash_private.hide('participant_actions', array['id:participant_actions', 'participant_id:campaign_participants']);
+select trash_private.hide('time_entries', array['id:time_entries', 'company_id:companies']);
+select trash_private.hide('mail_messages', array['id:mail_messages', 'company_id:companies']);
+select trash_private.hide('mail_attachments', array['mail_id:mail_messages']);
+select trash_private.hide('fireflies_calls', array['id:fireflies_calls', 'company_id:companies']);
+select trash_private.hide('fireflies_call_transcripts', array['call_id:fireflies_calls']);
+select trash_private.hide('portal_accesses', array['id:portal_accesses', 'person_id:people']);
+select trash_private.hide('portal_sessions', array['id:portal_sessions', 'access_id:portal_accesses']);
+select trash_private.hide('duplicate_dismissals', array['company_a:companies', 'company_b:companies']);
+select trash_private.hide('import_row_keys', array['company_id:companies']);
+select trash_private.hide('merges', array['kept_company_id:companies']);
+
+-- ---------------------------------------------------------------------------
+-- Contact
+-- ---------------------------------------------------------------------------
+create or replace function trash_private.person_name(p public.people)
+returns text language sql immutable set search_path = '' as $$
+  select coalesce(nullif(btrim(coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, '')), ''), p.email, 'Contact sans nom');
+$$;
+
+create or replace function trash_private.describe_person(p_id uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object(
+    'label', trash_private.person_name(p),
+    'context', c.name,
+    'parents', jsonb_build_array(jsonb_build_object('t', 'companies', 'id', p.company_id)),
+    'warnings', to_jsonb(array_remove(array[
+      case when exists (select 1 from public.portal_accesses a where a.person_id = p.id and a.revoked_at is null)
+           then 'Son accès au portail client est fermé ; il revient si vous restaurez le contact.' end,
+      (select case when count(*) > 0 then 'Retiré de ' || count(*) || ' projet' || case when count(*) > 1 then 's' else '' end || ' (il y revient à la restauration).' end
+         from public.project_members m where m.person_id = p.id),
+      case when p.is_primary then 'Contact principal : vous pourrez en désigner un autre ; il le redevient à la restauration si la place est libre.' end,
+      'Ses échanges, tâches et rendez-vous restent sur la fiche ' || c.name || '.'
+    ], null)))
+    from public.people p join public.companies c on c.id = p.company_id
+   where p.id = p_id;
+$$;
+
+create or replace function trash_private.collect_person(p_id uuid)
+returns table (row_table text, row_id uuid) language sql stable set search_path = '' as $$
+  select 'people', id from public.people where id = p_id
+  union all select 'portal_accesses', id from public.portal_accesses where person_id = p_id
+  union all select 'portal_sessions', s.id from public.portal_sessions s join public.portal_accesses a on a.id = s.access_id where a.person_id = p_id;
+$$;
+
+-- Date de modification : inchangée quand la corbeille ajuste un champ technique (contact principal ci-dessous).
+-- Redéfinition complète de la fonction partagée ; comportement identique hors de ce cas.
+create or replace function public.tg_set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  if coalesce(current_setting('cely.trash_keep_updated_at', true), '') = 'on' then
+    return new;
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+-- Contact principal : la place est libérée pendant le séjour en corbeille (seul champ modifié, date de modification
+-- conservée), puis rendue à la restauration si aucun autre contact n'est devenu principal entre-temps.
+create or replace function trash_private.before_person(p_id uuid)
+returns jsonb language plpgsql set search_path = '' as $$
+declare v boolean;
+begin
+  select is_primary into v from public.people where id = p_id;
+  if v then
+    perform set_config('cely.trash_keep_updated_at', 'on', true);
+    update public.people set is_primary = false where id = p_id;
+    perform set_config('cely.trash_keep_updated_at', 'off', true);
+    return jsonb_build_object('was_primary', true);
+  end if;
+  return '{}'::jsonb;
+end; $$;
+
+create or replace function trash_private.after_restore_person(p_id uuid, p_meta jsonb)
+returns void language plpgsql set search_path = '' as $$
+begin
+  if coalesce((p_meta ->> 'was_primary')::boolean, false) then
+    perform set_config('cely.trash_keep_updated_at', 'on', true);
+    update public.people p set is_primary = true
+     where p.id = p_id and not exists (select 1 from public.people o where o.company_id = p.company_id and o.is_primary and o.id <> p.id);
+    perform set_config('cely.trash_keep_updated_at', 'off', true);
+  end if;
+end; $$;
+
+-- ---------------------------------------------------------------------------
+-- Entreprise
+-- ---------------------------------------------------------------------------
+create or replace function trash_private.describe_company(p_id uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object(
+    'label', c.name,
+    'context', coalesce(c.domain_norm, c.website),
+    'parents', '[]'::jsonb,
+    'warnings', to_jsonb(array_remove(array[
+      (select case when count(*) = 1 then 'Son projet part avec elle : ses contacts n''y ont plus accès au portail (rouvert à la restauration).'
+                   when count(*) > 1 then count(*) || ' projets partent avec elle : leurs contacts n''y ont plus accès au portail (rouvert à la restauration).' end
+         from public.projects p where p.company_id = c.id),
+      (select case when count(*) = 1 then 'Sa facture sort des totaux de Finance (' || trash_private.eur(coalesce(sum(o.paid_net), 0)) || ' encaissés) ; son numéro reste réservé.'
+                   when count(*) > 1 then count(*) || ' factures sortent des totaux de Finance (' || trash_private.eur(coalesce(sum(o.paid_net), 0)) || ' encaissés) ; leurs numéros restent réservés.' end
+         from public.finance_invoice_overview o where o.company_id = c.id and o.kind = 'facture'),
+      case when exists (select 1 from public.sales s where s.company_id = c.id) then 'Sa vente part avec elle (Ventes).' end,
+      case when exists (select 1 from public.appt_bookings b where b.company_id = c.id)
+           then 'Ses rendez-vous restent dans l''agenda, sans fiche tant qu''elle est à la corbeille.' end
+    ], null)))
+    from public.companies c
+   where c.id = p_id and c.merged_into_id is null;
+$$;
+
+create or replace function trash_private.collect_company(p_id uuid)
+returns table (row_table text, row_id uuid) language sql stable set search_path = '' as $$
+  select 'companies', id from public.companies where id = p_id
+  union all select x.row_table, x.row_id from public.people p cross join lateral trash_private.collect_person(p.id) x where p.company_id = p_id
+  union all select 'sales', id from public.sales where company_id = p_id
+  union all select 'tasks', id from public.tasks where company_id = p_id
+  union all select 'interactions', id from public.interactions where company_id = p_id
+  union all select 'finance_missions', id from public.finance_missions where company_id = p_id
+  union all select 'finance_invoices', id from public.finance_invoices where company_id = p_id
+  union all select 'finance_payments', fp.id from public.finance_payments fp join public.finance_invoices i on i.id = fp.invoice_id where i.company_id = p_id
+  union all select x.row_table, x.row_id from public.projects pr cross join lateral trash_private.collect_project(pr.id) x where pr.company_id = p_id
+  union all select 'company_files', id from public.company_files where company_id = p_id
+  union all select 'diagnostics', id from public.diagnostics where company_id = p_id
+  union all select 'diagnostic_questions', q.id from public.diagnostic_questions q join public.diagnostics d on d.id = q.diagnostic_id where d.company_id = p_id
+  union all select 'diagnostic_versions', v.id from public.diagnostic_versions v join public.diagnostics d on d.id = v.diagnostic_id where d.company_id = p_id
+  union all select 'campaign_participants', id from public.campaign_participants where company_id = p_id
+  union all select 'participant_actions', a.id from public.participant_actions a join public.campaign_participants cp on cp.id = a.participant_id where cp.company_id = p_id
+  union all select 'time_entries', id from public.time_entries where company_id = p_id
+  union all select 'mail_messages', id from public.mail_messages where company_id = p_id
+  union all select 'fireflies_calls', id from public.fireflies_calls where company_id = p_id;
+$$;
+
+revoke all on function trash_private.person_name(public.people), trash_private.describe_person(uuid), trash_private.collect_person(uuid),
+  trash_private.before_person(uuid), trash_private.after_restore_person(uuid, jsonb),
+  trash_private.describe_company(uuid), trash_private.collect_company(uuid) from public, anon;
+grant execute on function trash_private.person_name(public.people), trash_private.describe_person(uuid), trash_private.collect_person(uuid),
+  trash_private.before_person(uuid), trash_private.after_restore_person(uuid, jsonb),
+  trash_private.describe_company(uuid), trash_private.collect_company(uuid) to authenticated;

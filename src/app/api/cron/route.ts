@@ -1,4 +1,4 @@
-// Passage planifié unique (C07, Q02, Q03) : agenda Google, rappels, réception Gmail, Fireflies.
+// Passage planifié unique (C07, Q02, Q03) : agenda Google, rappels, réception Gmail, Fireflies, purge de la corbeille.
 // Appelé par Vercel Cron (« Authorization: Bearer CRON_SECRET ») ou un planificateur externe (pg_cron), ou par le
 // propriétaire connecté. Route publique pour le proxy : l'autorisation est vérifiée ici. ?taches=rappels,gmail
 // limite le passage (planificateur fréquent).
@@ -10,6 +10,7 @@ import { requestOrigin } from "@/lib/appointments/http";
 import { firefliesApiKey } from "@/lib/fireflies/config";
 import { drainImports, rematchPending, syncRecent } from "@/lib/fireflies/worker";
 import { agendaJob, gmailJob, remindersJob, runJob, type JobName } from "@/lib/jobs/run";
+import { trashJob } from "@/lib/trash/job";
 
 export const maxDuration = 60;
 
@@ -29,7 +30,7 @@ async function ownerSession() {
   return data === true;
 }
 
-const ALL: JobName[] = ["agenda", "rappels", "gmail", "fireflies"];
+const ALL: JobName[] = ["agenda", "rappels", "gmail", "fireflies", "corbeille"];
 
 async function handle(req: Request) {
   if (!cronAuthorized(req) && !(await ownerSession())) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
@@ -47,6 +48,7 @@ async function handle(req: Request) {
         return { sync, drain: await drainImports(sb), rematched: await rematchPending(sb) };
       }));
     }
+    if (job === "corbeille") results.push(await runJob(job, trashJob));
   }
   return NextResponse.json({ results }, { headers: { "Cache-Control": "private, no-store" } });
 }

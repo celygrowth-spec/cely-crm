@@ -1,6 +1,6 @@
 # Passages planifiés (agenda, rappels, réception Gmail, Fireflies)
 
-Une seule route : `GET|POST /api/cron` (paramètre facultatif `?taches=agenda,rappels,gmail,fireflies`).
+Une seule route : `GET|POST /api/cron` (paramètre facultatif `?taches=agenda,rappels,gmail,fireflies,corbeille`).
 Autorisée par `Authorization: Bearer <CRON_SECRET>` (planificateur) ou par la session du propriétaire
 (bouton « Lancer maintenant » dans Paramètres › Passages planifiés). Chaque tâche est isolée : une erreur n'empêche
 pas les suivantes. Dernière réussite et dernière erreur sont enregistrées (`scheduled_jobs`) et affichées.
@@ -11,6 +11,7 @@ pas les suivantes. Dernière réussite et dernière erreur sont enregistrées (`
 | rappels | Envoie par Gmail les rappels dus (20 par passage au plus), après avoir vérifié la version du rendez-vous et la révision du rappel. Un résultat incertain n'est jamais renvoyé. Suspension globale : Rendez-vous › réglages des rappels |
 | gmail | Lit les emails reçus (initial : 30 jours, 150 messages ; ensuite incrémental) et rattache les réponses des contacts |
 | fireflies | Rattrape les appels manqués par le webhook |
+| corbeille | Supprime définitivement les éléments à la corbeille depuis 30 jours et retire leurs fichiers du stockage (voir `docs/corbeille.md`) |
 
 ## Fréquence
 - **Vercel (offre Hobby, actuelle)** : une tâche planifiée par jour au plus. `vercel.json` lance `/api/cron` chaque
