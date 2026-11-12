@@ -19,7 +19,14 @@
   "perso_angle": "Citation sur la page Louis : « En combinant la puissance de l'intelligence artificielle et l'expertise de nos avocats, nous réalisons en quelques heures ce qui prenait autrefois des jours » ; fondateur de Legaia.ai (assistant juridique IA par e-mail) — https://www.saintlouisavocats.com/startup",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — a fondé Legaia.ai (assistant juridique IA « Gaia » vendu aux cabinets) et porte le studio « Louis » où « notre IA réalise 80 % du travail » ; prix JINOV IA (févr. 2026)",
+  "outils_ia_cites": "Legaia (Gaia), IA maison du studio Louis",
+  "douleur_confidentialite": "Déjà traitée par son propre produit : Legaia promet que les données n'atteignent pas « les serveurs des fournisseurs de LLM » (article sécurité, janv. 2026) ; Louis affiche « Hébergement souverain (UE) – Secret professionnel – RGPD ».",
+  "perso_faits": "Saint-Louis Avocats primé « Meilleure solution IA dans un cabinet d'avocats » à JINOV (févr. 2026) — https://www.lemondedudroit.fr/mag/378-intelligence-artificielle/103080-jinov-une-premiere-edition-qui-confirme-lelan-de-linnovation-juridique.html ‖ Citation sur la page Louis : « En combinant la puissance de l'intelligence artificielle et l'expertise de nos avocats, nous réalisons en quelques heures ce qui prenait autrefois des jours » (en ligne nov. 2026) — https://www.saintlouisavocats.com/startup ‖ Présenté sur legaia.ai comme « Avocat & Fondateur de Legaia » : « les avocats peuvent proposer la même offre que les cabinets IA-first sans quitter leur cabinet » (en ligne nov. 2026) — https://legaia.ai/ ‖ Legaia certifié SOC 2 Type II, modèle déployé « sans que vos données atteignent les serveurs des fournisseurs de LLM » (janv. 2026) — https://legaia.ai/journal/comment-legaia-securise-les-donnees-des-avocats",
+  "accroche": "Votre prix JINOV et Legaia montrent que vous avez déjà résolu chez vous l'équation IA + secret professionnel. Seriez-vous ouvert à comparer nos approches — pseudonymisation locale avant ChatGPT/Claude — voire à explorer une complémentarité ?",
+  "qualif_commentaire": "À RETIRER : fondateur et dirigeant de Legaia, éditeur d'IA juridique pour cabinets positionné sur la confidentialité (concurrent direct, règle 7 « legaltechs/éditeurs ») — au mieux contact partenariat, pas client.",
+  "score_revu": "C"
  },
  {
   "cible": 1,
@@ -41,7 +48,14 @@
   "perso_angle": "Fondateur (association avec Jean Appietto dès 1980) d'un cabinet primé JINOV 2026 pour sa solution IA ; activité historique auprès des administrateurs/mandataires judiciaires (data rooms, dossiers sensibles) — https://www.saintlouisavocats.com/",
   "score_priorite": "A",
   "statut_verification": "déduit",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — cabinet primé JINOV 2026 pour sa solution IA et doté d'une IA maison (studio Louis) développée par son associé Jean Petreschi (fondateur de Legaia)",
+  "outils_ia_cites": "IA maison du studio Louis, Legaia (Gaia)",
+  "douleur_confidentialite": "Dossiers d'entreprises en difficulté et mandataires judiciaires (fiche officielle) très sensibles — mais le cabinet affiche déjà « Hébergement souverain (UE) – Secret professionnel » pour son IA.",
+  "perso_faits": "Fiche officielle : expertise en acquisitions-fusions-restructurations et entreprises en difficultés ; conseil de mandataires judiciaires ; Secrétaire de la Conférence (promotion 1977) (en ligne nov. 2026) — https://www.saintlouisavocats.com/profiles/jean-paul-petreschi ‖ Cabinet primé « Meilleure solution IA dans un cabinet d'avocats » à JINOV (févr. 2026) — https://www.lemondedudroit.fr/mag/378-intelligence-artificielle/103080-jinov-une-premiere-edition-qui-confirme-lelan-de-linnovation-juridique.html ‖ Studio Louis : « Notre IA réalise 80 % du travail », « Hébergement souverain (UE) » (en ligne nov. 2026) — https://www.saintlouisavocats.com/startup",
+  "accroche": "Votre cabinet a été primé à JINOV pour son IA, tout en traitant des dossiers de restructuration parmi les plus confidentiels. Sur les usages hors studio Louis, vos associés utilisent-ils ChatGPT ou Claude avec la même garantie de non-sortie des données ?",
+  "qualif_commentaire": "À RETIRER : cabinet déjà outillé par l'IA souveraine de son associé Jean Petreschi, fondateur de l'éditeur concurrent Legaia ; décideur confirmé (associé fondateur) mais très faible probabilité d'achat. E-mail toujours déduit.",
+  "score_revu": "C"
  },
  {
   "cible": 1,
@@ -63,7 +77,14 @@
   "perso_angle": "Co-fondateur et ancien vice-président du CESIN, vice-président de la FNTC : un discours « confiance numérique / souveraineté » qui recoupe exactement la promesse d'Hexagone (aucune donnée client ne quitte le cabinet).",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — publie sur l'IA (consultation du CSE, économie des données et IA, juillet 2025) et propose une offre charte IA/AIPD ; aucun outil IA utilisé cité",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Cabinet de la « confiance numérique » (signature électronique, archivage, données) dont le site se dit « Garanti sans traçage » : envoyer des données clients à un LLM américain contredirait son positionnement (déduit du métier).",
+  "perso_faits": "Article signé « Un système d'IA doit faire l'objet d'une consultation du CSE », commentant TJ Nanterre 14 févr. 2025, chronique parue dans L'Usine Digitale le 19 juin 2025 (juil. 2025) — https://www.caprioli-avocats.com/fr/informations/un-systeme-dia-doit-faire-lobjet-dune-consultation-du-cse--innovation-21-339-0.html ‖ Article « Économie des données et Intelligence artificielle : un ensemble contractuel complexe » (juil. 2025) — https://www.caprioli-avocats.com/fr/informations/economie-des-donnees-et-intelligence-artificielle--un-ensemble-contractuel-complexe---innovation-21-336-0.html ‖ Le site du cabinet affiche « Garanti sans traçage » / « Aucun Cookie ou traçage n'est effectué » (en ligne nov. 2026) — https://www.caprioli-avocats.com/fr/informations/un-systeme-dia-doit-faire-lobjet-dune-consultation-du-cse--innovation-21-339-0.html",
+  "accroche": "Votre chronique de juillet 2025 sur la consultation du CSE rappelle que déployer une IA engage des obligations. Pour un cabinet « garanti sans traçage », comment conciliez-vous l'usage de ChatGPT ou Claude avec la non-sortie des données clients ?",
+  "qualif_commentaire": "Décideur confirmé (fondateur, ~15 personnes) ; dernières publications IA datées de juil. 2025, rien de plus récent sur le site (© 2025) ; profil prescripteur « confiance numérique » intéressant, e-mail nominatif non publié.",
+  "score_revu": "B"
  },
  {
   "cible": 1,
@@ -85,7 +106,14 @@
   "perso_angle": "Lead Auditor ISO 27001 et rédacteur du chapitre « Contrats informatiques » du Code du numérique (LexisNexis) : interlocuteur naturel pour évaluer l'architecture de pseudonymisation locale d'Hexagone.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — pôle du cabinet qui conseille sur les projets Data/IA (charte éthique, AIPD) ; aucune publication IA nominative trouvée",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Contrats informatiques et audits ISO 27001 : documents clients techniques et sensibles qu'on ne peut pas coller dans ChatGPT (déduit du métier).",
+  "perso_faits": "Responsable du pôle Gouvernance contractuelle, informatique et numérique ; Lead Auditor ISO 27001 (fiche équipe, en ligne nov. 2026) — https://www.caprioli-avocats.com/fr/cabinet-caprioli/equipe-avocats-13-0-0.html ‖ Le cabinet publie sur l'IA : consultation du CSE avant un système d'IA (juil. 2025) — https://www.caprioli-avocats.com/fr/informations/un-systeme-dia-doit-faire-lobjet-dune-consultation-du-cse--innovation-21-339-0.html",
+  "accroche": "En tant que Lead Auditor ISO 27001, vous savez ce que vaut une promesse de confidentialité d'un fournisseur de LLM. Comment votre pôle encadre-t-il aujourd'hui l'usage de ChatGPT ou Claude sur des contrats informatiques clients ?",
+  "qualif_commentaire": "Décideur non confirmé : présenté comme « Avocat, docteur en droit », responsable de pôle, pas associé ; aucune trace nominative IA (WebSearch sans résultat) — contact secondaire derrière Éric Caprioli.",
+  "score_revu": "C"
  },
  {
   "cible": 1,
@@ -107,7 +135,14 @@
   "perso_angle": "Membre du Conseil national du numérique (CNNum), enseignant au Master Data Science ESSEC/CentraleSupélec et auteur de « L'Empire des données » ; a témoigné dans la mini-série « Je le jure – spécial IA générative ».",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — conseille sur l'IA (AI Act, foundation models, agents) et a participé au Columbia Convening sur l'IA ouverte ; aucun outil IA interne cité",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Cabinet data/cyber (contrôles CNIL, pentest, OSINT, incidents) qui a publié un livre blanc « Le Cloud de Confiance – un enjeu d'autonomie stratégique » : la souveraineté des données est son discours (déduit du métier + publication).",
+  "perso_faits": "Entropy a reçu le Trophée d'Or « Données personnelles & Cybersécurité » au Sommet du Droit 2026 (févr. 2026) — https://www.entropy.law/medias ‖ Co-signataire du rapport Mozilla/Columbia « Towards a Framework for Openness in Foundation Models » (2024) — https://www.entropy.law/publications ‖ Citation sur le site : « Il n'y a pas de bonne, ou de mauvaise technologie… Ce qui compte, c'est l'usage qu'on en fait » (épisode « Je le jure – spécial IA générative ») — https://www.entropy.law/ ‖ Membre du CNNum, enseignant au Master Data Science ESSEC/CentraleSupélec, auteur de « L'Empire des données » (fiche équipe, en ligne nov. 2026) — https://www.entropy.law/equipe",
+  "accroche": "« Ce qui compte, c'est l'usage qu'on en fait » : votre phrase s'applique aussi aux LLM au cabinet. Après le Trophée d'Or données & cyber 2026, comment vos équipes utilisent-elles ChatGPT ou Claude sans exposer les dossiers clients ?",
+  "qualif_commentaire": "Décideur confirmé (associé fondateur, ~6 avocats) ; signal IA nominatif fort mais surtout 2024 ; très bon prescripteur (clients IA/cyber), budget cabinet modeste ; présence au CNNum à revérifier (non datée).",
+  "score_revu": "A"
  },
  {
   "cible": 1,
@@ -129,7 +164,14 @@
   "perso_angle": "« Explorateur du cypherspace » selon sa fiche, enseignant à Paris-Panthéon-Assas : profil cyber/crypto sensible à l'argument « on-premise / air-gapped ».",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — pratique IA/data/cyber du cabinet, publications réglementaires (Digital Omnibus, nov. 2025) ; aucun outil IA cité",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Dossiers cyber (incidents, OSINT, pentest, assurance cyber) : les données traitées sont par nature confidentielles et sensibles (déduit du métier).",
+  "perso_faits": "Interrogé par l'Opinion sur les angles morts de l'assurance cyber après la cyberattaque des systèmes frigorifiques de supermarchés (nov. 2026) — https://www.entropy.law/medias ‖ Article « Digital Omnibus : enfin un ménage dans la jungle des textes européens du numérique ? » (nov. 2025) — https://www.entropy.law/medias ‖ Fiche : « Explorateur du cypherspace », DPO certifié (2020), enseignant à Paris-Panthéon-Assas (en ligne nov. 2026) — https://entropy.law/en/equipe-en/jocelyn-pitet",
+  "accroche": "Votre analyse dans l'Opinion sur l'assurance cyber rappelle combien une fuite coûte cher. Côté cabinet, utilisez-vous ChatGPT ou Claude sur vos dossiers d'incident, et comment garantissez-vous que rien ne quitte votre environnement ?",
+  "qualif_commentaire": "Décideur confirmé (associé co-fondateur d'Entropy) ; actualité très fraîche (8 nov. 2026) ; signal IA personnel moins fort que Basdevant — à contacter en second.",
+  "score_revu": "B"
  },
  {
   "cible": 1,
@@ -151,7 +193,14 @@
   "perso_angle": "Le cabinet accompagne « les équipes IT, les directions juridiques et les porteurs d'innovation digitale » : Hexagone peut être présenté comme cas d'usage concret de l'IA conforme pour leurs propres dossiers.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — intervient publiquement sur l'IA (Lamy Liaisons, Institut Louis Bachelier, Cercle IA Finance Qant, févr. 2026) ; aucun outil IA interne nommé",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Il l'écrit lui-même : « l'avocat doit respecter les principes déontologiques de sa profession dans son utilisation des outils d'IA à commencer par le secret professionnel » (Lamy Liaisons, févr. 2026) ; a animé une table ronde sur le « Shadow AI ».",
+  "perso_faits": "Interview Lamy Liaisons : « l'avocat doit respecter les principes déontologiques de sa profession dans son utilisation des outils d'IA à commencer par le secret professionnel. Il faut donc être prudent » (févr. 2026) — https://www.lamy-liaisons.fr/eclaireurs-du-droit/ia-nouvelles-technologies-et-exercice-du-droit-regard-de-maitre-gilles-rouvier-sur-la-transformation-de-la-pratique-juridique/ ‖ Table ronde à l'Institut Louis Bachelier sur la cybersécurité face à l'IA : « Shadow AI », vulnérabilités humaines, gouvernance (févr. 2026) — https://lawways.com/actualites/ ‖ Table ronde gouvernance de l'IA au Cercle IA Finance Qant avec Inetum et Orange (févr. 2026) — https://lawways.com/actualites/ ‖ Nommé TopLegalVoices 2025 ; équipe Digital classée Band 4 TMT Chambers 2026 (déc. 2025 / févr. 2026) — https://lawways.com/actualites/",
+  "accroche": "Dans Lamy Liaisons, vous rappeliez que l'usage de l'IA par l'avocat commence par le secret professionnel, et vous avez débattu du « Shadow AI » à l'Institut Louis Bachelier. Comment évitez-vous ce Shadow AI chez Lawways, quand vos avocats veulent ChatGPT ou Claude ?",
+  "qualif_commentaire": "Décideur confirmé (associé fondateur et Managing Partner, ~7 avocats) ; douleur confidentialité exprimée publiquement en 2026 ; cabinet à double casquette tech + M&A, bon prescripteur.",
+  "score_revu": "A"
  },
  {
   "cible": 1,
@@ -173,7 +222,14 @@
   "perso_angle": "",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — via le cabinet (offre IA, événements IA en 2026) ; aucune prise de parole IA personnelle trouvée",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "M&A, LBO, capital-risque pour fonds d'investissement : data rooms et informations sous NDA, typiquement interdites dans un LLM public (déduit du métier).",
+  "perso_faits": "Fiche : 23 ans de M&A/restructuring, passée par Gide Loyrette Nouel, Paul Hastings et Société Générale AM (Amundi PEF), crée Lawways Corporate en sept. 2009 (en ligne nov. 2026) — https://lawways.com/equipe/hortense-rouvier/ ‖ Équipe Corporate M&A & PE classée « forte notoriété » Décideurs 2025 pour les opérations jusqu'à 75 M€ (févr. 2026) — https://lawways.com/actualites/ ‖ Lawways présent au Business Connect IA du Village by CA Paris (févr. 2026) — https://lawways.com/actualites/",
+  "accroche": "Sur des opérations de LBO ou de capital-risque, une data room ne se colle pas dans ChatGPT. Votre équipe Corporate, reconnue par Décideurs 2025, a-t-elle trouvé un moyen d'utiliser l'IA sur ces documents sans exposer les clients ?",
+  "qualif_commentaire": "Décideur confirmé (associée fondatrice) ; pas de signal IA personnel — passer par Gilles Rouvier en priorité, Hortense en copie pour le cas d'usage M&A.",
+  "score_revu": "B"
  },
  {
   "cible": 1,
@@ -195,7 +251,14 @@
   "perso_angle": "Sur Judith le cabinet demande aux utilisateurs : « n'y mettez ni nom ni information sensible » — c'est exactement le problème que la pseudonymisation locale d'Hexagone résout.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — a lancé « Judith », IA de recherche juridique gratuite développée et relue par le cabinet (754 736 décisions) ; publie sur l'IA (juil. 2026)",
+  "outils_ia_cites": "Judith (IA maison)",
+  "douleur_confidentialite": "Prouvée sur Judith : « N'y mettez ni nom, ni adresse, ni date de naissance, ni pièce, et rien de sensible » — le cabinet doit interdire les données nominatives dans sa propre IA ; pratique pénale et droit du travail.",
+  "perso_faits": "Judith, IA juridique maison : « Votre question est enregistrée… N'y mettez ni nom ni information sensible » ; « Une IA qui cherche, pas une IA qui répond » (en ligne nov. 2026) — https://kohenavocats.com/ia-juridique/ ‖ Article signé « Repenser le système fiscal à l'ère de l'intelligence artificielle » (juil. 2026) — https://kohenavocats.com/repenser-systeme-fiscal-intelligence-artificielle-automatisation-2026/ ‖ Page équipe : « Une pratique exigeante, augmentée par l'intelligence artificielle », le cabinet recrute (en ligne nov. 2026) — https://kohenavocats.com/equipe/",
+  "accroche": "Sur Judith, vous demandez aux utilisateurs de n'entrer « ni nom ni information sensible » : c'est exactement la limite de l'IA sur de vrais dossiers. Et si vos avocats pouvaient utiliser ChatGPT ou Claude sur des pièces nominatives, pseudonymisées avant tout envoi ?",
+  "qualif_commentaire": "Décideur confirmé (associé gérant, directeur de la publication) ; cabinet de 8 personnes en croissance qui construit lui-même son IA ; Judith est grand public (pas un éditeur concurrent).",
+  "score_revu": "A"
  },
  {
   "cible": 1,
@@ -217,7 +280,14 @@
   "perso_angle": "",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — cabinet qui a construit Judith ; Reda Kohen porte une offre « avocat intelligence artificielle » (contrats d'outils IA, AI Act, nov. 2026)",
+  "outils_ia_cites": "Judith (IA maison)",
+  "douleur_confidentialite": "Conseille les PME qui déploient des outils IA (contrats fournisseurs, AI Act, CSE) et son cabinet interdit les données nominatives dans Judith (« ni nom ni information sensible »).",
+  "perso_faits": "Page « Avocat intelligence artificielle Paris » : Reda Kohen intervient pour les PME et ETI qui achètent, intègrent ou déploient des outils d'IA (contrat fournisseur, AI Act, CSE) (nov. 2026) — https://kohenavocats.fr/avocat-intelligence-artificielle-paris/ ‖ IA juridique maison Judith : « N'y mettez ni nom ni information sensible » (en ligne nov. 2026) — https://kohenavocats.com/ia-juridique/",
+  "accroche": "Vous conseillez les PME sur les contrats d'outils d'IA et l'AI Act : vous connaissez les clauses sur la réutilisation des données. Au cabinet, comment utilisez-vous ChatGPT ou Claude sur des dossiers nominatifs sans les exposer ?",
+  "qualif_commentaire": "Décideur confirmé (associé) ; nouvelle offre IA nominative publiée nov. 2026 ; même cabinet que Hassan (cibler Hassan en premier). E-mail nominatif non publié.",
+  "score_revu": "A"
  },
  {
   "cible": 1,
@@ -239,7 +309,14 @@
   "perso_angle": "Société à mission, signataire d'une charte IA générative axée sur la confidentialité : Hexagone permet d'appliquer ce principe de confidentialité techniquement, pas seulement contractuellement.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — licence Doctrine pour chaque collaborateur depuis 10 ans, Flow Litigate en contentieux (témoignage 2025-26) ; charte Predictice IA générative (2024)",
+  "outils_ia_cites": "Doctrine, Flow Litigate, Predictice",
+  "douleur_confidentialite": "Clients exclusivement têtes de réseaux et industriels (données réseaux, conditions commerciales, contentieux de 200+ pièces) : informations commerciales sensibles (déduit du métier).",
+  "perso_faits": "Doctrine : « Fondé il y a 20 ans… 14 avocats et 7 associés, tous enseignants », société à mission, licence Doctrine pour chaque collaborateur (témoignage Doctrine en ligne nov. 2026, date non affichée) — https://www.doctrine.fr/avis/guillaume-gouachon ‖ Cabinet « Trophées d'argent 2026 » en droit de la distribution (en ligne nov. 2026) — https://www.gouache.fr/ ‖ Signataire en 2024 de la charte Predictice pour une utilisation responsable de l'IA générative (confidentialité) — https://www.lemondedudroit.fr/mag/378-intelligence-artificielle/dix-cabinets-d-avocats-adherent-a-la-charte-de-predictice-pour-une-utilisation-responsable-de-l-ia-generative.html",
+  "accroche": "Gouache Avocats fête ses 20 ans avec des Trophées d'argent 2026 et une licence d'IA juridique pour chaque collaborateur. Au-delà de Doctrine, vos avocats peuvent-ils utiliser ChatGPT ou Claude sur les données de vos têtes de réseaux sans qu'elles quittent le cabinet ?",
+  "qualif_commentaire": "Décideur confirmé (Managing Partner, 14 avocats/7 associés) ; signal frais = usage Doctrine (2025-26) mais aucun nouveau signal IA nominatif 2025-26 pour lui (WebSearch vide) ; charte Predictice 2024 seulement.",
+  "score_revu": "B"
  },
  {
   "cible": 1,
@@ -261,7 +338,14 @@
   "perso_angle": "Témoignage Doctrine 2026 : « Doctrine est passé d'une base documentaire très poussée à un outil métier qui nous sert au quotidien, notamment dans la gestion des contentieux » (10 ans d'usage).",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — utilise Doctrine depuis 10 ans et Flow Litigate sur des contentieux de 200+ pièces (témoignage vidéo Doctrine)",
+  "outils_ia_cites": "Doctrine, Flow Litigate",
+  "douleur_confidentialite": "Contentieux à fort enjeu (« plus de 200 pièces » dès l'assignation) pour des réseaux de distribution : pièces commerciales confidentielles (déduit du métier).",
+  "perso_faits": "« L'outil Flow Litigate, c'est un vrai gain de productivité. Sur des gros dossiers où nous avons… plus de 200 pièces… avant, on y passait une journée entière » (témoignage Doctrine en ligne nov. 2026, date non affichée) — https://www.doctrine.fr/avis/guillaume-gouachon ‖ « Doctrine est passé d'une base documentaire très poussée à un outil métier qui nous sert au quotidien » (témoignage Doctrine en ligne nov. 2026, date non affichée) — https://www.doctrine.fr/avis/guillaume-gouachon ‖ Cabinet « Trophées d'argent 2026 » en droit de la distribution — https://www.gouache.fr/",
+  "accroche": "Vous racontiez traiter en peu de temps des dossiers de plus de 200 pièces grâce à l'IA juridique. Pour les tâches hors Doctrine — synthèses, courriers, notes clients — vos avocats peuvent-ils utiliser ChatGPT ou Claude sans exposer ces pièces ?",
+  "qualif_commentaire": "Associé confirmé (pas Managing Partner) ; signal IA nominatif solide via Doctrine mais date du témoignage non affichée ; risque : déjà bien équipé en IA spécialisée.",
+  "score_revu": "B"
  },
  {
   "cible": 1,
@@ -283,7 +367,14 @@
   "perso_angle": "Sa citation : « On combine la base de données de Doctrine, nos propres contenus et l'intelligence artificielle d'Assistant » — Hexagone lui permettrait d'envoyer aussi ses pièces clients (assurés, fraude) à ChatGPT/Claude sans exposer les données.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — bêta-testeur et utilisateur intensif d'Assistant (Doctrine) : import des pièces, plaidoiries, relecture des conclusions ; IA et justice prédictive revendiquées depuis 2017",
+  "outils_ia_cites": "Doctrine Assistant",
+  "douleur_confidentialite": "Missionné par « plus de 70 compagnies d'assurances » sur des dossiers de fraude qu'il qualifie de « très stratégiques et sensibles » (fraude santé, corporelle) : données de santé et d'assurés.",
+  "perso_faits": "« On combine la base de données de Doctrine, nos propres contenus et l'intelligence artificielle d'Assistant » ; il importe une trentaine de pièces avant une expertise judiciaire (témoignage Doctrine en ligne nov. 2026, date non affichée) — https://www.doctrine.fr/avis/emeric-desnoix ‖ Fraude à l'assurance : « des matières très stratégiques et sensibles, sur lesquelles je suis régulièrement missionné par plus de 70 compagnies d'assurances » ; formateur ALFA, Coalition Against Insurance Fraud, IASIU Europe — https://www.doctrine.fr/avis/emeric-desnoix ‖ Site : process intégrant « depuis 2017 » dématérialisation, GED, justice prédictive et intelligence artificielle (en ligne nov. 2026) — https://avocat.cabinet-desnoix.com/",
+  "accroche": "Vous importez déjà des pièces de dossiers de fraude dans une IA, pour plus de 70 assureurs et sur des données de santé. Hors de Doctrine, vos équipes peuvent-elles utiliser ChatGPT ou Claude sur ces pièces sans qu'aucun nom d'assuré ne sorte du cabinet ?",
+  "qualif_commentaire": "Décideur confirmé (associé fondateur, ~20 personnes, Tours/Blois/Aix) ; early adopter déclaré ; douleur santé/fraude claire ; risque : satisfait de Doctrine — positionner Hexagone pour ChatGPT/Claude en complément.",
+  "score_revu": "A"
  },
  {
   "cible": 1,
@@ -305,7 +396,14 @@
   "perso_angle": "Cabinet de 3 associés issus d'un grand cabinet, philosophie « travailler sérieusement sans se prendre au sérieux » ; site encore en construction (aucune adresse générique publiée) → approche LinkedIn.",
   "score_priorite": "B",
   "statut_verification": "à vérifier",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — a souscrit toute la gamme IA Doctrine (Assistant, Flow Counsel, Flow Litigate, Le Fiscal by Doctrine)",
+  "outils_ia_cites": "Doctrine Assistant, Flow Counsel, Flow Litigate, Le Fiscal by Doctrine",
+  "douleur_confidentialite": "Dit lui-même : « On est très frileux sur les IA généralistes… On ne peut pas librement mettre des éléments factuels d'un dossier (des noms, des données d'entreprise, des éléments de stratégie…) sur un outil dont les serveurs sont basés à l'étranger » ; clientèle médicale et vétérinaire.",
+  "perso_faits": "« Dans notre métier, le secret professionnel, c'est notre valeur phare… je ne connais pas d'IA généraliste qui nous permette de glisser librement des données client » (témoignage Doctrine en ligne nov. 2026, date non affichée) — https://www.doctrine.fr/avis/clement-perrot-1748 ‖ Cabinet lancé en 2024 à Rouen par 3 associés venus d'un grand cabinet ; devise « travailler sérieusement sans se prendre au sérieux » — https://www.doctrine.fr/avis/clement-perrot-1748 ‖ Spécialité : dossiers complexes (« moutons à cinq pattes ») et professions libérales médicales et vétérinaires — https://www.doctrine.fr/avis/clement-perrot-1748",
+  "accroche": "Vous disiez ne connaître « aucune IA généraliste » permettant de glisser des données client sans garantie. C'est précisément le verrou que nous levons : ChatGPT ou Claude, avec noms et données d'entreprise pseudonymisés avant de quitter le cabinet.",
+  "qualif_commentaire": "Décideur confirmé (associé fondateur, 3 associés) ; douleur confidentialité exprimée mot pour mot = match parfait ; risque : a choisi un outil unique « canal fermé » et ne veut pas empiler (« si un outil peut en remplacer un autre… on retire l'ancien »). Pas de site ni e-mail : LinkedIn.",
+  "score_revu": "A"
  },
  {
   "cible": 1,
@@ -327,7 +425,14 @@
   "perso_angle": "Sa citation : « Utiliser Doctrine, c'est plus que simplement utiliser un moteur de recherche… nous fait gagner un temps considérable pour nous concentrer sur la stratégie » ; invité du podcast « Lundi au soleil » sur le futur du travail.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — utilise Doctrine comme portail tout-en-un (Flow pour le contentieux, Jobexit pour les ruptures)",
+  "outils_ia_cites": "Doctrine, Flow, Jobexit",
+  "douleur_confidentialite": "Droit social employeur (ruptures, restructurations, contentieux prud'homal) : données personnelles de salariés, dossiers disciplinaires et médicaux (déduit du métier).",
+  "perso_faits": "« Utiliser Doctrine, c'est plus que simplement utiliser un moteur de recherche… nous fait gagner un temps considérable pour nous concentrer sur la stratégie » (témoignage Doctrine en ligne nov. 2026, date non affichée) — https://www.doctrine.fr/avis/aerige-droit-social ‖ Doctrine présente ærige comme « le cabinet qui capitalise sur l'IA juridique pour tous ses dossiers en droit social » — https://www.doctrine.fr/avis/aerige-droit-social ‖ Associé, entré chez ærige en 2013, diplômé du DPRT (Paris II Assas) (page équipes, en ligne nov. 2026) — https://aerige-avocats.com/les-equipes/",
+  "accroche": "Vous expliquiez que l'IA juridique vous libère du temps pour la stratégie. Pour les tâches hors Doctrine, vos avocats peuvent-ils utiliser ChatGPT ou Claude sur des dossiers de salariés sans que leurs données ne quittent ærige ?",
+  "qualif_commentaire": "Associé confirmé (cabinet ~50 avocats/13 associés, budget réel) ; signal IA nominatif via Doctrine, date non affichée ; aucune prise de parole IA 2026 trouvée.",
+  "score_revu": "B"
  },
  {
   "cible": 1,
@@ -349,7 +454,14 @@
   "perso_angle": "Ancien de la direction juridique d'Atos (contrats technologiques complexes CAC40) et co-gérant : décideur et expert IT, il peut à la fois acheter Hexagone pour le cabinet et le recommander à ses clients.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — son département affiche une pratique « Données, cybersécurité et intelligence artificielle : AI Act, gouvernance IA » ; charte Predictice IA générative (2024) ; aucun outil IA cité",
+  "outils_ia_cites": "Predictice",
+  "douleur_confidentialite": "Contentieux d'échecs de projets IT et contrats CAC40 : documents techniques et commerciaux très confidentiels (déduit du métier).",
+  "perso_faits": "Département Technologies, Data & PI : « Données, cybersécurité et intelligence artificielle : conformité RGPD, DPO externalisé, Data Act, AI Act, gouvernance IA » ; Trophée Équipe montante Données & cybersécurité, Sommet du Droit 2026 (en ligne nov. 2026) — https://squadra-avocats.com/pratiques/technologies-data-pi/ ‖ Squadra Avocats a conseillé Mistral AI dans l'acquisition d'Emmi AI (août 2026, équipe Corporate) — https://squadra-avocats.com/actualites/mistral-ai-emmi-ai/ ‖ Ex-direction juridique d'Atos (contrats technologiques complexes CAC40/SBF120) — https://squadra-avocats.com/equipe/jean-baptiste-belin/",
+  "accroche": "Votre département conseille sur l'AI Act et la gouvernance IA, et Squadra vient d'accompagner Mistral AI. En interne, comment vos avocats utilisent-ils ChatGPT ou Claude sur des dossiers d'échec de projet IT sans exposer les pièces clients ?",
+  "qualif_commentaire": "Décideur confirmé (associé co-gérant) ; signal Predictice 2024 remplacé par signaux cabinet 2026 (pratique AI Act, deal Mistral AI, Sommet du Droit 2026) mais aucune prise de parole IA personnelle trouvée.",
+  "score_revu": "B"
  },
  {
   "cible": 1,
@@ -371,7 +483,14 @@
   "perso_angle": "Une « part importante de son activité est dédiée au droit de la donnée et sa valorisation (données personnelles, e-privacy, open data) » : angle pseudonymisation RGPD direct.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — pratique AI Act/gouvernance IA du département ; aucune publication IA personnelle trouvée",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Activité centrée sur le droit de la donnée et la conformité RGPD : il sait que transmettre des données personnelles à un LLM hors UE pose problème (déduit du métier).",
+  "perso_faits": "Fiche : « Une part importante de son activité est dédiée au droit de la donnée et sa valorisation (données personnelles, e-privacy, open data…) » ; ex-direction juridique d'une ESN cotée (en ligne nov. 2026) — https://squadra-avocats.com/equipe/alexandre-tessonneau/ ‖ Département classé : Trophée Équipe montante Données & cybersécurité, Sommet du Droit 2026 — https://squadra-avocats.com/pratiques/technologies-data-pi/ ‖ Squadra Avocats conseil de Mistral AI pour l'acquisition d'Emmi AI (août 2026) — https://squadra-avocats.com/actualites/mistral-ai-emmi-ai/",
+  "accroche": "Vous accompagnez vos clients sur la valorisation et la conformité de leurs données. Appliquée au cabinet, la question devient : peut-on utiliser ChatGPT ou Claude sans que les données personnelles des dossiers quittent Squadra ?",
+  "qualif_commentaire": "Associé confirmé ; pas de signal IA nominatif ; à contacter en second derrière Jean-Baptiste Belin (co-gérant).",
+  "score_revu": "C"
  },
  {
   "cible": 1,
@@ -393,7 +512,14 @@
   "perso_angle": "Cabinet de niche droit social public/privé : dossiers RH très chargés en données personnelles d'agents et de salariés, cas d'usage idéal pour la pseudonymisation avant ChatGPT/Claude.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — seule trace : signataire de la charte Predictice pour une IA générative responsable (2024) ; rien de nouveau en 2025-26 (site et WebSearch)",
+  "outils_ia_cites": "Predictice",
+  "douleur_confidentialite": "Droit social privé et fonction publique, enquêtes internes (matinée dédiée le 4 juin 2026) : données RH, disciplinaires et d'agents publics très sensibles.",
+  "perso_faits": "Edgar Avocats organise une « Matinée exceptionnelle » sur les enquêtes internes (juin 2026) — https://www.edgar-avocats.com/actualites ‖ Webinaire mensuel d'actualité sociale gratuit, dernier le 20 novembre 2026 — https://www.edgar-avocats.com/actualites ‖ Ancien associé fondateur de BRL Avocats (2002-2020), restructurations — https://www.edgar-avocats.com/notre-equipe/guillaume-bredon",
+  "accroche": "Vos matinées sur les enquêtes internes montrent la sensibilité des dossiers que vous traitez. Vos avocats utilisent-ils l'IA générative sur ces dossiers RH, et comment garantissez-vous qu'aucun nom de salarié ne sort du cabinet ?",
+  "qualif_commentaire": "Décideur confirmé (associé fondateur) mais aucun signal IA 2025-26 trouvé : la charte Predictice 2024 ne suffit plus ; douleur RH réelle — à garder en vague 2.",
+  "score_revu": "C"
  },
  {
   "cible": 1,
@@ -415,7 +541,14 @@
   "perso_angle": "Ancienne aide à la décision au Conseil d'État et fondatrice de son propre cabinet (2019-2020) : clientèle d'administrations publiques, très exposée aux exigences de souveraineté des données.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — seule trace : charte Predictice IA générative signée par le cabinet (2024)",
+  "outils_ia_cites": "Predictice",
+  "douleur_confidentialite": "Clientèle d'administrations publiques (fonction publique) : données d'agents et exigences de souveraineté (déduit du métier).",
+  "perso_faits": "Actualité trimestrielle « Fonction publique » animée par le cabinet (sept. 2026) — https://www.edgar-avocats.com/actualites ‖ Ancienne aide à la décision au Conseil d'État, avocate associée en droit de la fonction publique — https://www.edgar-avocats.com/notre-equipe/angelique-eyrignoux",
+  "accroche": "Pour une clientèle d'administrations, la question de l'IA se pose en termes de souveraineté autant que d'efficacité. Utilisez-vous ChatGPT ou Claude sur vos dossiers d'agents publics, et sous quelles garanties ?",
+  "qualif_commentaire": "Associée confirmée ; aucun signal IA 2025-26 ; contact secondaire.",
+  "score_revu": "C"
  },
  {
   "cible": 1,
@@ -437,7 +570,14 @@
   "perso_angle": "Sa fiche : « très impliqué sur les questions d'innovation et de transformation de la profession d'avocat » ; enseigne la protection des données personnelles (Gaming Campus, IEE Paris 8).",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — Ambassadeur Numérique du CNB et membre de l'Incubateur du barreau de Paris ; aucune prise de parole IA datée 2025-26 trouvée",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Clients e-santé, éditeurs de jeux vidéo et plateformes de streaming : données de santé et données utilisateurs (déduit du métier).",
+  "perso_faits": "Fiche : Ambassadeur Numérique du CNB, membre de l'Incubateur du barreau de Paris et de France Esports ; enseigne à Gaming Campus et à l'IEE Paris 8 (en ligne nov. 2026) — https://jasper-avocats.com/lequipe/associe-e/mathieu-bui ‖ Accompagne des acteurs de l'e-santé, du jeu vidéo et du streaming ; a créé sa structure en 2022 avant jasper (en ligne nov. 2026) — https://jasper-avocats.com/lequipe/associe-e/mathieu-bui",
+  "accroche": "En tant qu'Ambassadeur Numérique du CNB, vous voyez vos confrères buter sur la même question : utiliser ChatGPT ou Claude sans violer le secret. Comment l'abordez-vous chez jasper, notamment sur vos dossiers e-santé ?",
+  "qualif_commentaire": "Associé confirmé ; signal charte Predictice 2024 non renouvelé et aucune actualité IA 2025-26 (WebSearch) ; garde un rôle « ambassadeur numérique » utile comme relais.",
+  "score_revu": "B"
  },
  {
   "cible": 1,
@@ -459,7 +599,14 @@
   "perso_angle": "Devise de sa fiche : « Mon moteur ? La confiance du client. » — accroche naturelle pour une IA qui ne fait jamais sortir les données client du cabinet.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — conseille sur les actifs « intelligence artificielle » ; cabinet signataire charte Predictice (2024) ; aucune actualité IA 2025-26",
+  "outils_ia_cites": "Predictice",
+  "douleur_confidentialite": "Portefeuilles de PI et secrets d'affaires clients (déduit du métier).",
+  "perso_faits": "Fiche : « Mon moteur ? La confiance du client. » ; co-fondateur de jasper avocats en 2019, ex-Eversheds et associé Vatier — https://jasper-avocats.com/lequipe/associe-e/pascal-le-dai ‖ Cabinet signataire de la charte Predictice pour une IA générative responsable (2024) — https://www.lemondedudroit.fr/mag/378-intelligence-artificielle/dix-cabinets-d-avocats-adherent-a-la-charte-de-predictice-pour-une-utilisation-responsable-de-l-ia-generative.html",
+  "accroche": "« La confiance du client » est votre moteur : c'est aussi la condition pour utiliser l'IA générative au cabinet. Vos équipes IP/IT peuvent-elles aujourd'hui soumettre un dossier à ChatGPT ou Claude sans que le client soit identifiable ?",
+  "qualif_commentaire": "Associé fondateur confirmé ; aucun signal IA 2025-26 trouvé — contact secondaire derrière Mathieu Bui.",
+  "score_revu": "C"
  },
  {
   "cible": 1,
@@ -481,7 +628,14 @@
   "perso_angle": "Pionnier du « droit des robots » (Association du Droit des Robots) ; conférence réseau Lexing du 3 novembre 2026 « Les Révolutions de la Robotique et de l'IA » (13 avocats, 12 pays). NB : le groupe a aussi une activité Lexing Technologies (SaaS) — à traiter en prescripteur autant qu'en client.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — le cabinet déclare utiliser des « systèmes d'intelligence artificielle » (non nommés) sous ISO 9001 ; auteur d'un ouvrage sur ChatGPT ; groupe doté d'une activité Lexing Technologies",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Le cabinet l'écrit : activités « réalisées dans un cadre garantissant la confidentialité des échanges », y compris avec ses systèmes d'IA ; pôle Droit de l'IA et clientèle grands comptes.",
+  "perso_faits": "Lexing élu « Law Firm of the Year » Technology Law – Best Law Firms 2027 (oct. 2026) — https://www.lexing.law/avocats/best-law-firms-2027-lexing-avocats-elu-law-firm-of-the-year-en-technology-law/2026/10/15/ ‖ Conférence du réseau Lexing « Les Révolutions de la Robotique et de l'IA », 13 avocats de 12 pays (nov. 2026) — https://www.lexing.law/ ‖ Page cabinet : « les systèmes d'intelligence artificielle utilisés par le cabinet permettent de maintenir un haut niveau d'exigence, sans dégradation de notre système qualité ISO 9001 » (2026) — https://www.lexing.law/avocats-entreprise-physique-virtuelle-et-etendue/ ‖ Auteur de « ChatGPT dans le monde du droit (la cobotique juridique) » (Bruylant, 2024) ; voit l'IA comme un partenaire de travail — https://www.justifit.fr/b/maitrise/outils-digitaux/ia-revolution-pratique-avocat-cobotique/",
+  "accroche": "Votre conférence du 3 novembre sur les révolutions de l'IA et le titre Law Firm of the Year 2027 confirment l'avance de Lexing. Comment vos avocats combinent-ils ChatGPT ou Claude avec votre exigence ISO 9001 de confidentialité ?",
+  "qualif_commentaire": "Décideur confirmé (fondateur) mais grosse structure déjà outillée et éditrice (Lexing Technologies) : traiter en prescripteur/partenaire plus qu'en client ; risque de cycle long.",
+  "score_revu": "B"
  },
  {
   "cible": 1,
@@ -503,7 +657,14 @@
   "perso_angle": "Conférence Lexing du 13 janvier 2027 « IA et RGPD appliqués aux RH : sécuriser les usages » — sujet exactement adressé par la pseudonymisation locale.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — dirige le pôle Droit de l'IA ; cabinet déclarant utiliser des systèmes d'IA ; Task Force IA de l'UIA (oct. 2026)",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Ancien président de la Commission Vie privée de l'UIA ; le cabinet revendique un cadre « garantissant la confidentialité » pour ses systèmes d'IA.",
+  "perso_faits": "Intervenant au 70e Congrès de l'UIA à Marrakech (Task Force IA), directeur adjoint de la stratégie digitale de l'UIA, ancien président de sa Commission Vie privée (oct. 2026) — https://www.lexing.law/avocats/70eme-congres-de-luia-jeremy/2026/10/23/ ‖ « Best Lawyer » en droit des technologies depuis 2020 — https://www.lexing.law/avocats/70eme-congres-de-luia-jeremy/2026/10/23/ ‖ Lexing élu Law Firm of the Year Technology Law – Best Law Firms 2027 (oct. 2026) — https://www.lexing.law/avocats/best-law-firms-2027-lexing-avocats-elu-law-firm-of-the-year-en-technology-law/2026/10/15/",
+  "accroche": "Entre la Task Force IA de l'UIA à Marrakech et votre passé à la Commission Vie privée, vous êtes au croisement exact de l'IA et du secret. Comment votre pôle encadre-t-il l'usage de ChatGPT ou Claude sur les dossiers clients ?",
+  "qualif_commentaire": "Directeur du pôle IA confirmé (décideur sur l'outillage IA probable) ; Corrigé : la conférence du 13 janv. 2027 « IA et RGPD appliqués aux RH » est animée par Virginie Bensoussan-Brulé et Alexandra Guermonprez, pas par lui (https://www.lexing.law/avocats/le-13-janvier-2027-ia-et-rgpd-appliques-aux-rh/2026/11/09/).",
+  "score_revu": "A"
  },
  {
   "cible": 1,
@@ -525,7 +686,14 @@
   "perso_angle": "Le cabinet affirme que « l'adoption massive de l'intelligence artificielle… révolutionne la prestation de services juridiques » et emploie un « Expert Legal Tech » : profil early-adopter qui construit ses propres agents.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — construit ses propres agents IA (génération de contrats de travail Syntec) présentés au CNB/Legal Data Space (déc. 2025) ; « Expert Legal Tech » dans l'équipe",
+  "outils_ia_cites": "Agents IA maison (contrat de travail Syntec, Métamarque), Legal Data Space",
+  "douleur_confidentialite": "Son agent génère des contrats de travail et pourrait « détecter des besoins juridiques à partir des interactions avec l'utilisateur » : données salariés et clients transitant par l'IA ; Smart Diagnostics RGPD/Capital humain.",
+  "perso_faits": "A présenté au CNB un agent de génération de contrats de travail Syntec, « levier de prospection en détectant des besoins juridiques à partir des interactions avec l'utilisateur » (déc. 2025) — https://www.lemondedudroit.fr/mag/378-intelligence-artificielle/102283-agents-ia-souverains-la-profession-avocat-nouvelle-ere.html ‖ Son associé Franz Vasseur y a présenté l'agent « Métamarque » (analyse d'antériorités de marques) — https://www.lemondedudroit.fr/mag/378-intelligence-artificielle/102283-agents-ia-souverains-la-profession-avocat-nouvelle-ere.html ‖ Le cabinet propose des « Smart Diagnostics » en ligne (capital humain, gouvernance, RGPD, contrat de travail) avec rapport immédiat — https://constellation-avocats.fr/smart-diag-2024/",
+  "accroche": "Votre agent Syntec présenté au CNB en décembre 2025 montre que vous construisez vos propres outils. Quand ces agents ou vos avocats sollicitent ChatGPT ou Claude, les noms des salariés et des clients sont-ils pseudonymisés avant de quitter le cabinet ?",
+  "qualif_commentaire": "Décideur confirmé (avocat fondateur, ~15 personnes) ; builder IA = acheteur averti ; risque : le CNB a lancé en oct. 2026 la plateforme souveraine AVOCAT+ (Legal Data Space) qui pourrait suffire au cabinet (https://cnb.avocat.fr/actualite/avocat-votre-exercice-augmente-en-toute-souverainete).",
+  "score_revu": "A"
  },
  {
   "cible": 1,
@@ -547,7 +715,14 @@
   "perso_angle": "",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — via le cabinet (agents IA maison présentés au CNB, déc. 2025) ; pas de prise de parole IA personnelle trouvée",
+  "outils_ia_cites": "Agents IA maison (Constellation), Legal Data Space",
+  "douleur_confidentialite": "Médiations (confidentialité légale des échanges) et droit public/social : contenus qui ne doivent jamais sortir du cabinet (déduit du métier).",
+  "perso_faits": "Page équipe : avocate fondatrice et médiatrice — droit public, droit social, IP/IT, médiations (en ligne nov. 2026) — https://constellation-avocats.fr/team/ ‖ Le cabinet a présenté ses agents IA (contrat Syntec, Métamarque) au CNB (déc. 2025) — https://www.lemondedudroit.fr/mag/378-intelligence-artificielle/102283-agents-ia-souverains-la-profession-avocat-nouvelle-ere.html",
+  "accroche": "En médiation, la confidentialité des échanges est une obligation légale. Si vous utilisez ChatGPT ou Claude pour préparer une médiation ou synthétiser des échanges, comment garantissez-vous que rien d'identifiant ne quitte le cabinet ?",
+  "qualif_commentaire": "Décideure confirmée (avocate fondatrice) ; signal cabinet fort, pas de signal personnel ; à contacter avec Alexis Moisand.",
+  "score_revu": "B"
  },
  {
   "cible": 1,
@@ -560,7 +735,7 @@
   "nom": "Berder",
   "poste": "Avocat associé, spécialiste en droit fiscal et droit des sociétés",
   "linkedin_url": "",
-  "email": "",
+  "email": "berder@akthemis.fr",
   "email_generique": "avocats@akthemis.fr",
   "format_email_suppose": "",
   "signal": "Témoignage Doctrine 2026 : il expérimente depuis plusieurs années « ChatGPT, Claude, Notebook LLM » et utilise Flow Counsel pour l'analyse de contrats.",
@@ -569,7 +744,14 @@
   "perso_angle": "Sa citation : « J'ai été impressionné par les capacités des IA généralistes. Puis j'ai découvert leurs limites » — Hexagone lui permet de continuer à utiliser ChatGPT/Claude sur ses vrais dossiers sans exposer les données clients.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — expérimente ChatGPT, Claude, NotebookLM « depuis plusieurs années » et passe « systématiquement » ses contrats dans Flow Counsel (Doctrine)",
+  "outils_ia_cites": "ChatGPT, Claude, NotebookLM, Doctrine Flow Counsel",
+  "douleur_confidentialite": "Utilise déjà les IA généralistes pour « assister la réflexion » mais réserve l'analyse contractuelle à un environnement spécialisé ; fiscal, douanier, sociétés : données patrimoniales de dirigeants (déduit pour la partie données).",
+  "perso_faits": "« J'ai été impressionné par les capacités des IA généralistes. Puis j'ai découvert leurs limites » (ChatGPT, Claude, NotebookLM) (témoignage Doctrine en ligne nov. 2026, date non affichée) — https://www.doctrine.fr/avis/stephane-berder-akthemis ‖ « En cinq minutes, je balaie 95 % de ce que je verrais en quatre heures » ; « Je ne délègue pas mon analyse. Je l'enrichis. » — https://www.doctrine.fr/avis/stephane-berder-akthemis ‖ Spécialiste en droit fiscal et douanier et en droit des sociétés, cabinet Akthemis à Nevers (en ligne nov. 2026) — https://akthemis.fr/avocat-nevers/",
+  "accroche": "Vous utilisez ChatGPT et Claude pour « assister la réflexion », tout en réservant l'analyse des contrats à un outil spécialisé. Et si vous pouviez donner à ces IA généralistes vos vrais dossiers, noms et montants pseudonymisés avant envoi ?",
+  "qualif_commentaire": "Décideur confirmé (associé, 3 associés) ; utilisateur déclaré de ChatGPT/Claude = cible idéale ; Corrigé : e-mail nominatif publié sur la page Nevers → berder@akthemis.fr.",
+  "score_revu": "A"
  },
  {
   "cible": 1,
@@ -583,7 +765,7 @@
   "poste": "Avocat associé (bureau de Chalon-sur-Saône)",
   "linkedin_url": "",
   "email": "",
-  "email_generique": "avocats@akthemis.fr",
+  "email_generique": "contact@ajf-avocat.fr (bureau de Chalon) ; avocats@akthemis.fr",
   "format_email_suppose": "",
   "signal": "Son associé Stéphane Berder utilise ChatGPT, Claude et NotebookLM et Flow Counsel (témoignage Doctrine 2026).",
   "source_signal": "https://www.doctrine.fr/avis/stephane-berder-akthemis",
@@ -591,7 +773,14 @@
   "perso_angle": "",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — via le cabinet (son associé utilise ChatGPT, Claude, NotebookLM et Flow Counsel) ; aucune trace personnelle",
+  "outils_ia_cites": "ChatGPT, Claude, NotebookLM, Doctrine Flow Counsel (cabinet)",
+  "douleur_confidentialite": "Droit des sociétés, fiscal et commercial de PME et dirigeants : données patrimoniales et cessions (déduit du métier).",
+  "perso_faits": "Avocat associé reçu à Chalon-sur-Saône (77, Grande Rue Saint-Cosme) : sociétés, fiscal, commercial ; contact affiché contact@ajf-avocat.fr (en ligne nov. 2026) — https://akthemis.fr/avocat-chalon-sur-saone/ ‖ Son associé Stéphane Berder expérimente ChatGPT, Claude, NotebookLM et Flow Counsel (témoignage Doctrine en ligne nov. 2026, date non affichée) — https://www.doctrine.fr/avis/stephane-berder-akthemis",
+  "accroche": "Votre associé Stéphane Berder utilise déjà ChatGPT et Claude au quotidien. À Chalon, sur les cessions et la fiscalité des dirigeants, l'enjeu est de pouvoir le faire sans que le nom du client ni ses chiffres ne sortent du cabinet.",
+  "qualif_commentaire": "Associé confirmé ; Corrigé : l'adresse générique affichée pour le bureau de Chalon est contact@ajf-avocat.fr (structure AJF à vérifier), pas avocats@akthemis.fr ; contact secondaire derrière Berder.",
+  "score_revu": "C"
  },
  {
   "cible": 1,
@@ -613,6 +802,13 @@
   "perso_angle": "",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "2 — via le cabinet (Doctrine Flow, Jobexit sur tous les dossiers de droit social)",
+  "outils_ia_cites": "Doctrine, Flow, Jobexit (cabinet)",
+  "douleur_confidentialite": "Restructurations et contentieux sociaux : données de salariés, PSE, dossiers disciplinaires (déduit du métier).",
+  "perso_faits": "Doctrine présente ærige (fondé en 2001) comme « le cabinet qui capitalise sur l'IA juridique pour tous ses dossiers en droit social » (témoignage Doctrine en ligne nov. 2026, date non affichée) — https://www.doctrine.fr/avis/aerige-droit-social ‖ Associé, entré chez ærige en 2013, passé par Indiana University (SPEA) (page équipes, en ligne nov. 2026) — https://aerige-avocats.com/les-equipes/",
+  "accroche": "ærige capitalise déjà sur l'IA juridique pour tous ses dossiers sociaux. Pour vos restructurations, vos équipes peuvent-elles aussi utiliser ChatGPT ou Claude sans que les données des salariés concernés ne quittent le cabinet ?",
+  "qualif_commentaire": "Associé confirmé, présenté comme responsable de l'équipe par Legal 500 (cabinet ~50 avocats) ; pas de signal IA personnel — angle cabinet.",
+  "score_revu": "B"
  }
 ]
