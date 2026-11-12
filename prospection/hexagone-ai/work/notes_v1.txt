@@ -1,3 +1,10 @@
+V2 (passe qualification + personnalisation, 2026-11-12) :
+• Chaque contact a 7 champs de plus : score_revu (remplace le score V1, gardé en score_v1), maturite_ia (0 aucune trace / 1 parle d'IA / 2 utilise un outil nommé / 3 construit ou vend une IA), outils_ia_cites, douleur_confidentialite, perso_faits (2-4 faits datés, chacun avec son URL), accroche (≤ 45 mots, bâtie uniquement sur ces faits), qualif_commentaire.
+• Contrôle : sur 40 citations « » tirées au hasard parmi 311, 38 sont présentes sur la page citée ; les 2 autres sont sur des pages en JavaScript que je n'ai pas pu relire.
+• 4 contacts retirés (onglet « Retirés V2 ») : Jean et Jean-Paul Petreschi (Saint-Louis Avocats : Jean a fondé Legaia, éditeur d'IA juridique concurrent), Gilles Bösiger (président de l'Ordre des EC Paris IdF), Antoine Thiébaut (Kacertis, aucun signal IA).
+• Onglet « Accroches » : prêt à copier. Le CSV Lemlist contient accroche, douleur_confidentialite, maturite_ia et perso_faits comme variables.
+• À vérifier avant envoi : Grégoire Proust (Impulsa : BODACC 2026, n'est plus DG d'Impulsa Conseil), Jonathan Marsh (TotalEnergies : poste non confirmé en 2025-26), Christophe Péron (ASI : source 2023), Marc Chezot (ADITEC : statut de décideur non confirmé), Guillaume Luscan (Wesype : homonyme possible), John Harrison (Airbus : adresse non confirmée, non utilisée).
+
 MÉTHODE V1 (2026-11-12) :
 • Sites officiels réellement ouverts (WebFetch + curl) : pages équipe / fiches associés, mentions légales, pages contact, communiqués. ~130 recherches web au total, utilisées surtout pour trouver les sites et quelques URL LinkedIn.
 • Aucune personne, e-mail ou URL LinkedIn inventé. Contrôle croisé : les 30 e-mails nominatifs publiés ont été retrouvés sur la page source citée ; 67 des 72 URL LinkedIn sont liées depuis le site officiel (5 viennent de résultats de recherche : Haas, Mathias, Petreschi, Dalloz-Bourguignon, Huet).

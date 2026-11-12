@@ -29,6 +29,12 @@
   "dns_dmarc": "oui (p=reject)",
   "dns_verdict": "OK"
  },
+ "ajf-avocat.fr": {
+  "dns_mx": "0 ajfavocat-fr0i.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "non",
+  "dns_verdict": "OK (MX) - DMARC absent"
+ },
  "akthemis.fr": {
   "dns_mx": "1 mx1.ovh.net. | 100 mxb.ovh.net. | 5 mx2.ovh.net. [OVH]",
   "dns_spf": "oui",
@@ -179,11 +185,11 @@
   "dns_dmarc": "oui (p=none)",
   "dns_verdict": "OK"
  },
- "covea.com": {
-  "dns_mx": "aucun",
+ "covea.fr": {
+  "dns_mx": "10 ha43.lbnet.assurdha.fr.",
   "dns_spf": "oui",
   "dns_dmarc": "oui (p=reject)",
-  "dns_verdict": "PAS DE MX - ne pas envoyer"
+  "dns_verdict": "OK"
  },
  "credit-agricole.fr": {
   "dns_mx": "10 mercure.credit-agricole.fr.",
@@ -353,12 +359,6 @@
   "dns_dmarc": "oui (p=quarantine)",
   "dns_verdict": "OK"
  },
- "kacertis.com": {
-  "dns_mx": "0 kacertis-com.mail.protection.outlook.com. [Microsoft 365]",
-  "dns_spf": "oui",
-  "dns_dmarc": "oui (p=none)",
-  "dns_verdict": "OK"
- },
  "kalliope-law.com": {
   "dns_mx": "1 kalliopelaw-com02b.mail.protection.outlook.com. [Microsoft 365]",
   "dns_spf": "oui",
@@ -433,12 +433,6 @@
  },
  "ralyconseils.com": {
   "dns_mx": "10 ralyconseils-com.mail.protection.outlook.com. [Microsoft 365]",
-  "dns_spf": "oui",
-  "dns_dmarc": "oui (p=none)",
-  "dns_verdict": "OK"
- },
- "saintlouisavocats.com": {
-  "dns_mx": "0 saintlouisavocats-com.mail.protection.outlook.com. [Microsoft 365]",
   "dns_spf": "oui",
   "dns_dmarc": "oui (p=none)",
   "dns_verdict": "OK"

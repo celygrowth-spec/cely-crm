@@ -30,7 +30,7 @@ NE PAS confondre avec « Hexagone » Strasbourg (Uniphore).
    trouver mieux. Max 2 contacts par cabinet (sauf cible 3 : max 4).
 7. Exclusions : Centrius, Cyplom, Ramure, Parallel Avocats, IntentIA (Hugo Salard) et cabinets qu'il forme ;
    concurrents (Anonym-IA, Lexanon, LexTandem, Sosie, Nonimo, Anoni, LaGomme, AnonymFiles, Docult, JurIAdoc,
-   Jimini, Ordalie, Doctrine) ; institutions (CNB, barreaux, Ordre des EC, CROEC) ; legaltechs/éditeurs.
+   Jimini, Ordalie, Doctrine, Legaia — et les cabinets dont un associé dirige un de ces éditeurs, ex. Saint-Louis Avocats) ; institutions (CNB, barreaux, Ordre des EC, CROEC) ; legaltechs/éditeurs.
    Note : un cabinet CLIENT de Jimini/Ordalie/Doctrine est OK (c'est un signal), ce sont les éditeurs qui sont exclus.
 8. Les faits datés (poste actuel) : vérifie qu'ils sont à jour (2025-2026 de préférence). Si l'info date
    d'avant 2025 et rien de récent ne la confirme → statut "à vérifier".

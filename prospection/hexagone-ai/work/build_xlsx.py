@@ -63,6 +63,9 @@ sheet(wb.create_sheet("Tous"), rows, HEAD)
 for k in [1,2,3,4]:
     sheet(wb.create_sheet(f"Cible {k}"), [r for r in rows if int(r["cible"])==k], HEAD)
 sheet(wb.create_sheet("Accroches"), [r for r in rows if r.get("accroche")], ["cible","score_priorite","entreprise","prenom","nom","poste","email_a_utiliser","maturite_ia","douleur_confidentialite","accroche","perso_faits","linkedin_url"])
+if os.path.exists(L+"retires_v2.json"):
+    R = json.load(open(L+"retires_v2.json"))
+    sheet(wb.create_sheet("Retirés V2"), R, ["_fichier","cible","entreprise","prenom","nom","poste","qualif_commentaire","source_contact"])
 # Cible 3 firm list
 md = open(L+"c3_cabinets.md").read().split("\n")
 def table(start, stop):
