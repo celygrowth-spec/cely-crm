@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { CalendarDays, CheckSquare, FolderKanban, Columns3, LayoutGrid, LogOut, Mail, PhoneCall, Plus, Search, Settings, Timer, Trophy, Users, Wallet, X } from "lucide-react";
+import { CalendarDays, CheckSquare, FolderKanban, Columns3, LayoutGrid, Library, LogOut, Mail, PhoneCall, Plus, Search, Settings, Timer, Trophy, Users, Wallet, X } from "lucide-react";
 import type { LeadSource, List, PipelineWithStages } from "@/lib/crm/types";
 import { signOutAction } from "@/app/actions";
 import { QueryProvider, apiGet, useFlushRouterOnNavigate } from "@/lib/client/query";
@@ -73,6 +73,7 @@ const NAV = [
   { href: "/temps", label: "Temps", icon: Timer },
   { href: "/mail", label: "Mail", icon: Mail },
   { href: "/appels", label: "Appels", icon: PhoneCall },
+  { href: "/bibliotheque", label: "Bibliothèque", icon: Library },
   { href: "/parametres", label: "Paramètres", icon: Settings },
 ];
 

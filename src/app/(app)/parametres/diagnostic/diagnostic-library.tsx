@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Download, Loader2, Trash2, Upload } from "lucide-react";
@@ -85,7 +86,7 @@ function Files({ files }: { files: LibraryFile[] }) {
   return (
     <Card className="p-4">
       <h2 className="font-display text-base font-bold">Fichiers</h2>
-      <p className="mb-3 text-sm text-muted">Vos diagnostics d&apos;exemple, le brandbook, le modèle de design. PDF, PowerPoint, Word, Excel, HTML, texte ou images · 25 Mo maximum.</p>
+      <p className="mb-3 text-sm text-muted">Vos diagnostics d&apos;exemple, le brandbook, le modèle de design. PDF, PowerPoint, Word, Excel, HTML, texte ou images · 25 Mo maximum. Ils sont rangés dans le dossier <Link className="font-semibold text-violet-strong" href="/bibliotheque?dossier=diagnostic">Bibliothèque › Bibliothèque diagnostic</Link>, où vous pouvez aussi créer des sous-dossiers, renommer et déplacer.</p>
       <div className="flex flex-wrap items-center gap-2">
         <Select className="w-auto" value={category} onChange={(e) => setCategory(e.target.value as LibraryCategory)} aria-label="Catégorie des fichiers à ajouter">
           {Object.entries(LIBRARY_CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
