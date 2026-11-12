@@ -4,6 +4,7 @@
 import { Pencil, Square, X } from "lucide-react";
 import { Badge, Button, Card, EmptyState, cn } from "@/components/ui";
 import { KindBadge } from "@/components/finance/revenue-forms";
+import { TrashButton } from "@/components/trash/trash-button";
 import { addMonths } from "@/lib/finance/dates";
 import { eur } from "@/lib/finance/money";
 import {
@@ -175,6 +176,7 @@ export function RevenuePanel({ mission: m, data, onClose, onEdit, onStop, onSett
           <Button onClick={onEdit}><Pencil size={13} /> Modifier{monthly ? " pour la suite" : ""}</Button>
           {monthly && !ended && <Button onClick={onStop}><Square size={13} /> Arrêter</Button>}
           <Button variant="ghost" onClick={() => onInvoice(monthly ? nextOpenDue(m, data.invoices, data.today) : oneOff)}>Saisir une facture détaillée</Button>
+          <TrashButton kind="finance_mission" id={m.id} size="md" variant="danger" onDone={onClose}>Supprimer</TrashButton>
         </div>
 
         {monthly ? (
