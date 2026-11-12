@@ -20,7 +20,7 @@ select trash_private.hide('finance_payments', array['id:finance_payments', 'invo
 -- ---------------------------------------------------------------------------
 create or replace function trash_private.eur(p numeric)
 returns text language sql immutable set search_path = '' as $$
-  select replace(to_char(coalesce(p, 0), 'FM999999990.00'), '.', ',') || ' €';
+  select replace(replace(to_char(coalesce(p, 0), 'FM999,999,990.00'), ',', ' '), '.', ',') || ' €';
 $$;
 
 create or replace function trash_private.fr_date(p date)

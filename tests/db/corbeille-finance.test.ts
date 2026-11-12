@@ -53,7 +53,7 @@ describe("Facture réglée", () => {
     const preview = await db.rpc<{ label: string; warnings: string[]; summary: Record<string, number> }>("trash_preview", { p_kind: "finance_invoice", p_id: inv });
     expect(preview.label).toContain("F-2026-001");
     expect(preview.summary).toEqual({ finance_payments: 2 });
-    expect(preview.warnings.join(" ")).toMatch(/réglée.*1200,00 €/);
+    expect(preview.warnings.join(" ")).toMatch(/réglée.*1 200,00 €/);
     expect(preview.warnings.join(" ")).toMatch(/reste réservé/);
 
     const t = await put("finance_invoice", inv);
@@ -91,7 +91,7 @@ describe("Facture réglée", () => {
     const before = await financeState();
     expect(before.invoices.find((i) => i.id === inv)).toMatchObject({ status: "partielle", paid_net: "400.00", balance: "800.00" });
     const preview = await db.rpc<{ warnings: string[] }>("trash_preview", { p_kind: "finance_invoice", p_id: inv });
-    expect(preview.warnings.join(" ")).toMatch(/Règlement partiel : 400,00 € encaissés sur 1200,00 €/);
+    expect(preview.warnings.join(" ")).toMatch(/Règlement partiel : 400,00 € encaissés sur 1 200,00 €/);
     const t = await put("finance_invoice", inv);
     expect((await financeState()).invoices).toEqual([]);
     await restore(t.trash_id);

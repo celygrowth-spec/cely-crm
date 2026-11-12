@@ -77,14 +77,14 @@ export function TrashButton({ kind, id, children, size = "sm", variant = "ghost"
         <Trash2 size={size === "sm" ? 13 : 15} aria-hidden />
         {children}
       </Button>
-      <Modal open={open} onClose={() => !busy && setOpen(false)} title={`Supprimer ${KIND_LABEL[kind].toLowerCase()}`}>
+      <Modal open={open} onClose={() => !busy && setOpen(false)} title={`Supprimer · ${KIND_LABEL[kind]}`}>
         {!preview && !error && <div className="flex items-center gap-2 text-sm text-muted"><Spinner /> Préparation…</div>}
         {error && !preview && <p className="text-sm text-danger" role="alert">{error}</p>}
         {preview && (
           <div className="space-y-3 text-sm" data-trash-confirm>
             <p>
               <strong>« {preview.label} »</strong>
-              {preview.context ? <span className="text-muted"> · {preview.context}</span> : null} sera mis à la corbeille
+              {preview.context ? <span className="text-muted"> · {preview.context}</span> : null} partira à la corbeille
               {parts.length ? <> avec :</> : <>.</>}
             </p>
             {parts.length > 0 && (
@@ -98,7 +98,7 @@ export function TrashButton({ kind, id, children, size = "sm", variant = "ghost"
               </ul>
             )}
             <p className="text-muted">
-              Il disparaît de tout le CRM et du portail client. Vous pouvez le restaurer pendant 30 jours depuis la{" "}
+              Tout disparaît du CRM et du portail client. Vous pouvez le restaurer pendant 30 jours depuis la{" "}
               <Link href="/corbeille" className="underline">Corbeille</Link>. Aucun mail n&apos;est envoyé, l&apos;agenda n&apos;est pas modifié.
             </p>
             {error && <p className="text-danger" role="alert">{error}</p>}

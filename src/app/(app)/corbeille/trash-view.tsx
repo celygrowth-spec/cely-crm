@@ -80,7 +80,7 @@ export function TrashView({ items, filesPending }: { items: TrashItem[]; filesPe
               return (
                 <tr key={i.id} className="border-b border-line last:border-0" data-trash-row={i.id}>
                   <td className="px-4 py-3 whitespace-nowrap"><Badge>{KIND_LABEL[i.kind] ?? i.kind}</Badge></td>
-                  <td className="px-4 py-3">
+                  <td className="min-w-48 px-4 py-3">
                     <div className="font-semibold">{i.label}</div>
                     {i.context && <div className="text-xs text-muted">{i.context}</div>}
                     {parts.length > 0 && <div className="text-xs text-muted">Avec : {parts.join(", ")}</div>}
@@ -90,7 +90,7 @@ export function TrashView({ items, filesPending }: { items: TrashItem[]; filesPe
                   <td className="px-4 py-3 whitespace-nowrap">{formatDate(i.deleted_at)}</td>
                   <td className="px-4 py-3 whitespace-nowrap" data-days-left={left}>{left === 0 ? "Purge au prochain passage" : `${left} jour${left > 1 ? "s" : ""}`}</td>
                   <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex flex-col items-end gap-1.5 xl:flex-row xl:justify-end">
                       <Button size="sm" onClick={() => restore(i)} disabled={busy === i.id} data-trash-restore>
                         {busy === i.id ? <Spinner /> : <RotateCcw size={13} aria-hidden />} Restaurer
                       </Button>

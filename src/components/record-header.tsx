@@ -238,7 +238,7 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
           <DraftsAccess ctx={ctx} />
           <TrashButton kind="company" id={c.id} size="sm" variant="secondary" className="max-md:h-8 max-md:w-9 max-md:px-0"
             sync={[["companies"], ["company", c.id], ["pipeline-cards"], ["company-timeline"]]}
-            onDone={() => { if (page) router.push("/prospection"); else onClose?.(); }} />
+            onDone={() => { if (page) router.push("/prospection/base"); else onClose?.(); }} />
           <Popover label="Actions" align="right"
             triggerClass="inline-flex h-8 items-center gap-1 rounded-lg border border-line bg-white px-2.5 text-xs font-semibold hover:bg-surface"
             trigger={<><MoreHorizontal size={14} /> <span className="max-md:hidden">Actions</span><ChevronDown size={12} className="text-muted max-md:hidden" /></>}>

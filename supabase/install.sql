@@ -15955,7 +15955,7 @@ select trash_private.hide('finance_payments', array['id:finance_payments', 'invo
 -- ---------------------------------------------------------------------------
 create or replace function trash_private.eur(p numeric)
 returns text language sql immutable set search_path = '' as $$
-  select replace(to_char(coalesce(p, 0), 'FM999999990.00'), '.', ',') || ' €';
+  select replace(replace(to_char(coalesce(p, 0), 'FM999,999,990.00'), ',', ' '), '.', ',') || ' €';
 $$;
 
 create or replace function trash_private.fr_date(p date)
@@ -16780,11 +16780,11 @@ returns jsonb language sql stable set search_path = '' as $$
     'context', coalesce(c.domain_norm, c.website),
     'parents', '[]'::jsonb,
     'warnings', to_jsonb(array_remove(array[
-      (select case when count(*) > 0 then count(*) || ' projet' || case when count(*) > 1 then 's' else '' end
-                   || ' partent avec elle : leurs contacts n''y ont plus accès au portail (rouvert à la restauration).' end
+      (select case when count(*) = 1 then 'Son projet part avec elle : ses contacts n''y ont plus accès au portail (rouvert à la restauration).'
+                   when count(*) > 1 then count(*) || ' projets partent avec elle : leurs contacts n''y ont plus accès au portail (rouvert à la restauration).' end
          from public.projects p where p.company_id = c.id),
-      (select case when count(*) > 0 then count(*) || ' facture' || case when count(*) > 1 then 's' else '' end
-                   || ' sortent des totaux de Finance (' || trash_private.eur(coalesce(sum(o.paid_net), 0)) || ' encaissés) ; leurs numéros restent réservés.' end
+      (select case when count(*) = 1 then 'Sa facture sort des totaux de Finance (' || trash_private.eur(coalesce(sum(o.paid_net), 0)) || ' encaissés) ; son numéro reste réservé.'
+                   when count(*) > 1 then count(*) || ' factures sortent des totaux de Finance (' || trash_private.eur(coalesce(sum(o.paid_net), 0)) || ' encaissés) ; leurs numéros restent réservés.' end
          from public.finance_invoice_overview o where o.company_id = c.id and o.kind = 'facture'),
       case when exists (select 1 from public.sales s where s.company_id = c.id) then 'Sa vente part avec elle (Ventes).' end,
       case when exists (select 1 from public.appt_bookings b where b.company_id = c.id)

@@ -72,8 +72,8 @@ describe("Entreprise", () => {
 
     const preview = await db.rpc<{ summary: Record<string, number>; warnings: string[] }>("trash_preview", { p_kind: "company", p_id: acme.id });
     expect(preview.summary).toMatchObject({ people: 2, projects: 1, finance_invoices: 1, finance_payments: 1, tasks: 1, project_tasks: 1, portal_accesses: 1 });
-    expect(preview.warnings.join(" ")).toMatch(/1 projet partent avec elle/);
-    expect(preview.warnings.join(" ")).toMatch(/1 facture sortent des totaux/);
+    expect(preview.warnings.join(" ")).toMatch(/Son projet part avec elle/);
+    expect(preview.warnings.join(" ")).toMatch(/Sa facture sort des totaux/);
     const t = await put("company", acme.id);
 
     expect(await visible(acme.id)).toEqual({ companies: 0, overview: 0, search: 0, people: 0, tasks: 0, todo: 0, interactions: 0, invoices: 0, projects: 0, files: 0, time: 0 });
