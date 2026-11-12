@@ -19,7 +19,14 @@
   "perso_angle": "Article du 11/11/2026 sur l'audit d'une cible qui utilise l'IA : rebondir sur la confidentialité des data rooms soumises à l'IA (pseudonymisation locale avant envoi au LLM) ; le cabinet rappelle les interdictions AI Act du 2/12/2026 sur sa page IA.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — publie très régulièrement sur l'IA (Village de la Justice, nov. 2026) et pilote l'offre AI Act du cabinet ; aucun outil interne nommé",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Prouvée par son article : la clause de réutilisation des données transmises à l'IA « conditionne la valeur des engagements de confidentialité » ; audits de data rooms en M&A tech.",
+  "perso_faits": "Article Village de la Justice « Due diligence technologique : auditer une cible qui utilise l'intelligence artificielle » : la clause de réutilisation des données « conditionne la valeur des engagements de confidentialité souscrits par la cible » (nov. 2026) — https://www.village-justice.com/articles/due-diligence-technologique-auditer-une-cible-qui-utilise-intelligence,59911.html ‖ Même article : « il n'existe pas de grille d'audit standardisée pour ces actifs » (nov. 2026) — https://www.village-justice.com/articles/due-diligence-technologique-auditer-une-cible-qui-utilise-intelligence,59911.html ‖ Page IA du cabinet qu'il pilote : audit AI Act au forfait de 8 000 à 20 000 € HT, nouvelles interdictions au 2 décembre 2026 (consultée nov. 2026) — https://hashtagavocats.com/avocats-intelligence-artificielle/ ‖ Enseigne à l'École de formation du barreau et en écoles de commerce — https://hashtagavocats.com/qui-sommes-nous/",
+  "accroche": "Le 11 novembre, vous écriviez que la clause de réutilisation des données « conditionne la valeur des engagements de confidentialité » d'une cible. La même logique vaut pour un cabinet qui soumet une data room à ChatGPT ou Claude : aucune donnée ne devrait sortir.",
+  "qualif_commentaire": "Associé cofondateur, gérant et directeur de la publication : décideur ; très actif sur l'IA, timing idéal (articles des 5 et 11 nov. 2026).",
+  "score_revu": "A"
  },
  {
   "cible": 1,
@@ -41,7 +48,14 @@
   "perso_angle": "Angle M&A / levées de fonds : traiter term sheets et pactes avec ChatGPT/Claude sans exposer l'identité des investisseurs et fondateurs.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "0 — aucune prise de parole IA personnelle ; cofondateur d'un cabinet qui vend une offre IA",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Fiscalité patrimoniale et internationale : régularisation de comptes à l'étranger, fausse expatriation, contrôles fiscaux : données fiscales parmi les plus sensibles (déduit du métier).",
+  "perso_faits": "Articles récents : « Régulariser un compte détenu à l'étranger : procédure, coût et risques » (oct. 2026), « Comment sont imposés les compléments de prix après la vente d'une entreprise ? » (nov. 2026) — https://hashtagavocats.com/author/harry_hallouche/ ‖ Dirige le pôle Corporate/Tax ; a exercé à Paris et Montréal ; enseigne le droit des sociétés et de l'entrepreneuriat (consulté nov. 2026) — https://hashtagavocats.com/qui-sommes-nous/",
+  "accroche": "Vous publiez sur la régularisation de comptes détenus à l'étranger : des dossiers où le nom du client est l'information la plus sensible. Les traiter avec ChatGPT ou Claude reste possible si ces noms ne quittent jamais le cabinet.",
+  "qualif_commentaire": "Associé cofondateur, décideur ; pas de signal IA personnel ; à contacter après Arnaud Touati.",
+  "score_revu": "B"
  },
  {
   "cible": 1,
@@ -63,7 +77,14 @@
   "perso_angle": "Spécialiste RGPD qui conseille des plateformes IA : parler minimisation / pseudonymisation des données clients avant envoi aux LLM, sujet qu'elle traite côté clients.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — conseille des projets IA (RGPD et AI Act) ; aucun outil interne nommé",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Protection des données : AIPD, études de faisabilité et programmes RGPD où « la donnée est au cœur de l'activité » ; elle connaît la minimisation et la pseudonymisation (déduit du métier).",
+  "perso_faits": "Bio : études de faisabilité sur des projets où la donnée est au cœur (big data, intelligence artificielle, e-santé) et rédaction d'AIPD (consultée nov. 2026) — https://www.algo-avocats.com/ ‖ Legal 500 : le cabinet a conseillé une société française sur le lancement de deux projets d'IA conformes au RGPD et à l'AI Act — https://www.legal500.com/firms/237209-algo-avocats/c-france/lawyers/2141446-sandra-tubert ‖ Référence cabinet : conformité RGPD d'une plateforme mondiale basée sur l'IA pour un groupe international de communication — https://www.algo-avocats.com/",
+  "accroche": "Vous rédigez des AIPD pour des projets où la donnée est au cœur de l'activité, IA comprise. Pour votre propre cabinet, la même analyse s'applique à ChatGPT ou Claude : pseudonymiser localement les données clients avant tout envoi au modèle.",
+  "qualif_commentaire": "Associée cofondatrice (2 associées), décideuse ; e-mail publié ; pas de prise de parole IA personnelle datée trouvée.",
+  "score_revu": "B"
  },
  {
   "cible": 1,
@@ -85,7 +106,14 @@
   "perso_angle": "Accompagne des éditeurs de solutions d'IA dans leur structuration contractuelle : Hexagone AI comme cas concret de « privacy by design » à proposer à ses clients et pour l'usage interne du cabinet.",
   "score_priorite": "B",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — accompagne des éditeurs de solutions d'IA ; aucun outil interne nommé",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Contrats IT complexes, R&D et co-développement : code, secrets d'affaires et données techniques de clients (déduit du métier).",
+  "perso_faits": "Bio : partenaire de grands projets informatiques basés sur des solutions d'IA et de blockchain, pour des éditeurs spécialisés en IA (consultée nov. 2026) — https://www.algo-avocats.com/ ‖ Référence cabinet : accompagnement pendant 15 mois d'un grand groupe hôtelier dans un partenariat de co-développement — https://www.algo-avocats.com/ ‖ Legal 500 : cofondatrice d'Algo Avocats, dirige le pôle IT et numérique — https://www.legal500.com/firms/237209-algo-avocats/c-france/lawyers/4286168-laura-ziegler",
+  "accroche": "Vous accompagnez des éditeurs spécialisés en IA sur des projets informatiques complexes. Côté cabinet, utiliser ChatGPT ou Claude pour relire les contrats IT de vos clients suppose que leurs données ne quittent pas vos murs.",
+  "qualif_commentaire": "Associée cofondatrice, décideuse ; e-mail publié ; pas de signal IA personnel daté ; à coupler avec Sandra Tubert.",
+  "score_revu": "B"
  },
  {
   "cible": 1,
@@ -107,6 +135,13 @@
   "perso_angle": "Auteur de « Quand le digital défie l'État de droit » (prix spécial du jury FIC) et cofondateur de Cloud Confidence (fusionnée dans Hexatrust) : angle souveraineté / on-premise / aucune donnée hors du cabinet.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — le cabinet publie et intervient sur l'IA (Doctolib/IA juil. 2026, keynote AFCDP juin 2026) ; aucun outil nommé",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Clients hébergeurs, cloud et défense (formation au ministère des Armées, nov. 2026) ; sensibilité souveraineté de longue date (cofondateur de Cloud Confidence) : aucune donnée hors du cabinet.",
+  "perso_faits": "Blog du cabinet sur le projet d'IA de Doctolib : « comment efface-t-on des données déjà ingérées par un modèle d'IA ? » (analyse publiée dans Libération) (juil. 2026) — https://www.iteanu.law/16-juillet-2026-donnees-de-sante-41-millions-dutilisateurs-ont-dit-oui-en-ne-disant-rien/ ‖ Formation en droit du numérique au ministère des Armées, dispensée par Alexandra et Olivier Iteanu les 26 et 27 nov. 2026 (annonce consultée nov. 2026) — https://www.iteanu.law/ ‖ Son dernier livre a reçu le prix spécial du jury du FIC ; article « effacement du juge et numérique » dans les Annales des Mines (juin 2025) — https://www.iteanu.law/",
+  "accroche": "Le blog de votre cabinet demandait en juillet : « comment efface-t-on des données déjà ingérées par un modèle d'IA ? » La réponse la plus sûre pour un avocat est de ne jamais en envoyer : pseudonymiser localement avant ChatGPT ou Claude.",
+  "qualif_commentaire": "Fondateur-gérant confirmé (mentions légales), structure d'environ 5 personnes ; l'auteur du billet Doctolib n'est pas nommé (à vérifier : Olivier ou Alexandra Iteanu) ; clients défense = besoin on-premise.",
+  "score_revu": "A"
  }
 ]

@@ -19,7 +19,14 @@
   "perso_angle": "Membre du Conseil de l'Ordre de Nantes : relais potentiel du guide CNB IA (mars 2026) auprès du barreau.",
   "score_priorite": "C",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "0 — aucune trace IA (page « Nouvelles technologies & IA » disparue) ; membre de la Commission NTIC du barreau de Nantes",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Private equity, M&A et rubrique « Entreprises à reprendre » : cessions confidentielles et informations sensibles de cibles (déduit du métier).",
+  "perso_faits": "Membre du Conseil de l'Ordre et de la Commission NTIC du barreau de Nantes ; formateur M&A au Mastère Finance d'Audencia depuis 2015 ; membre du CJD (fiche consultée nov. 2026) — https://www.kacertis-avocats.com/athiebaut/ ‖ Publication du cabinet : « Concurrence déloyale : que faire lorsqu'un ancien salarié rejoint un concurrent avec des informations sensibles ? » (mai 2026) — https://www.kacertis-avocats.com/",
+  "accroche": "Membre de la Commission NTIC du barreau de Nantes, vous voyez arriver l'IA dans les cabinets. Pour vos dossiers de private equity, la condition est simple : utiliser ChatGPT ou Claude sans que les données de vos clients ne quittent le cabinet.",
+  "qualif_commentaire": "À RETIRER : aucun signal IA vérifiable (page IA disparue, aucune publication) ; associé parmi 7, décideur non exclusif ; membre du Conseil de l'Ordre de Nantes (profil institutionnel).",
+  "score_revu": "C"
  },
  {
   "cible": 1,
@@ -41,7 +48,14 @@
   "perso_angle": "Tribunes IA récentes : Le Monde (6 août 2026) sur les résumés IA de Google, Le Figaro (24 juillet 2026) « reprendre ce que les plateformes et l'IA ont volé à nos entreprises ».",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — a fait construire en interne l'infrastructure logicielle du cabinet, ouverte aux « meilleurs modèles d'IA » (oct. 2026)",
+  "outils_ia_cites": "Doctrine",
+  "douleur_confidentialite": "Prouvée : « Si la couche d'intelligence appartient à l'éditeur, alors chaque acte que vous rédigez, chaque recherche, chaque échange enrichit une mémoire qui n'est pas la vôtre » ; exigence d'« aucun transfert vers des serveurs tiers » (oct. 2026).",
+  "perso_faits": "Interview « Nous avons arrêté d'attendre » : « Celui qui détient la mémoire du cabinet détient le cabinet » (oct. 2026) — https://bruzzodubucq.com/nous-avons-arrete-d-attendre-pourquoi-avoir-construit-notre-propre-infrastructure/ ‖ Même interview : travailler avec « les meilleurs modèles d'IA, sans en épouser une seule ad vitam aeternam » ; il propose de partager l'expérience avec les confrères (oct. 2026) — https://bruzzodubucq.com/nous-avons-arrete-d-attendre-pourquoi-avoir-construit-notre-propre-infrastructure/ ‖ Tribunes IA : Le Monde (6 août 2026), Le Figaro avec Bernard Carayon (24 juil. 2026), Le Monde « Les nouveaux modèles de l'IA violent le droit d'auteur » (8 mai 2026) — https://bruzzodubucq.com/collaborateur/cedric-dubucq/ ‖ Lauréat Choiseul 2026 « Les 40 qui font le futur du droit » ; invité du podcast Fleur d'Avocat #126 — https://bruzzodubucq.com/collaborateur/cedric-dubucq/",
+  "accroche": "Vous écrivez que « celui qui détient la mémoire du cabinet détient le cabinet ». Reste le moment où un prompt part vers le modèle : une pseudonymisation locale permet d'utiliser ChatGPT ou Claude sans qu'aucune donnée client ne quitte votre infrastructure.",
+  "qualif_commentaire": "Fondateur et co-directeur de la publication, décideur ; cabinet d'environ 40 personnes ; risque : infrastructure maison déjà « souveraine », donc positionner Hexagone comme brique branchable et remplaçable (leur propre doctrine) ; prescripteur potentiel auprès des confrères.",
+  "score_revu": "A"
  },
  {
   "cible": 1,
@@ -52,7 +66,7 @@
   "specialite_secteur": "Droit des affaires (corporate M&A, contentieux, restructuring, IP/IA)",
   "prenom": "David",
   "nom": "Ybert de Fontenelle",
-  "poste": "Avocat associé (depuis 2022), co-pilote le département Corporate / M&A ; co-directeur de la publication",
+  "poste": "Avocat associé (depuis 2022), co-pilote le département Corporate / M&A ; co-directeur de la publication ; directeur général du cabinet",
   "linkedin_url": "https://www.linkedin.com/in/david-ybert-de-fontenelle-7b697176/",
   "email": "dyf@bruzzodubucq.com",
   "email_generique": "cabinet@bruzzodubucq.com",
@@ -63,7 +77,14 @@
   "perso_angle": "Sa citation : « Le meilleur outil de signature électronique n'est pas … celui qui fait la meilleure IA. Un cabinet devrait pouvoir prendre le meilleur de chaque catégorie » : Hexagone AI = brique IA branchable sans sortie de données.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — co-pilote (avec Louis de Valbray) la construction en 18 mois de l'infrastructure interne ouverte aux modèles d'IA (oct. 2026)",
+  "outils_ia_cites": "Doctrine",
+  "douleur_confidentialite": "Prouvée : la mémoire IA doit être « dans une base qui appartient au cabinet, hébergée en France, cloisonnée dossier par dossier » ; « secret professionnel imposé jusque dans la base de données, aucun transfert vers des serveurs tiers » (oct. 2026).",
+  "perso_faits": "Interview « Nous avons arrêté d'attendre » : « Un cabinet devrait pouvoir prendre le meilleur de chaque catégorie et les faire travailler ensemble automatiquement » (oct. 2026) — https://bruzzodubucq.com/nous-avons-arrete-d-attendre-pourquoi-avoir-construit-notre-propre-infrastructure/ ‖ Même interview : la mémoire du dossier doit être « hébergée en France, cloisonnée dossier par dossier, exportable intégralement et contrôlable » (oct. 2026) — https://bruzzodubucq.com/nous-avons-arrete-d-attendre-pourquoi-avoir-construit-notre-propre-infrastructure/ ‖ Même interview : question à poser à tout éditeur : « Si je pars demain, qu'est-ce que je perds ? » (oct. 2026) — https://bruzzodubucq.com/nous-avons-arrete-d-attendre-pourquoi-avoir-construit-notre-propre-infrastructure/ ‖ Directeur général du cabinet ; chargé d'enseignement à la Faculté de droit d'Aix-en-Provence ; cofondateur de la Clinique du Droit des Affaires (consulté nov. 2026) — https://bruzzodubucq.com/collaborateur/david-ybert-de-fontenelle/",
+  "accroche": "Vous conseillez de prendre « le meilleur de chaque catégorie » et de garder la mémoire « cloisonnée dossier par dossier ». Une pseudonymisation locale branchée devant ChatGPT ou Claude suit cette logique : remplaçable, et aucune donnée client ne sort.",
+  "qualif_commentaire": "Corrigé : poste complété, il est aussi directeur général du cabinet et co-pilote la gestion de la structure (fiche) ; principal décideur outils/infrastructure ; même risque « solution maison » que Cédric Dubucq.",
+  "score_revu": "A"
  },
  {
   "cible": 1,
@@ -85,7 +106,14 @@
   "perso_angle": "Épisode 10 de sa série « Deepfake et preuve : ce que l'avocat doit vérifier avant de produire une pièce » ; ancien président du CNB, donc très sensible au guide CNB IA (mars 2026).",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — auteur de la série « IA et Avocats » (plus de 10 épisodes en 2026) ; aucun outil nommé",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Prouvée : épisode « Le secret professionnel à l'épreuve des serveurs » : « Toute requête quitte le cabinet, transite par des serveurs et y demeure selon des règles que l'avocat n'écrit pas » (oct. 2026).",
+  "perso_faits": "Épisode 6 de « IA et Avocats » : « Toute requête quitte le cabinet, transite par des serveurs et y demeure selon des règles que l'avocat n'écrit pas » (oct. 2026) — https://elige-avocats.com/le-secret-professionnel-a-lepreuve-des-serveurs/ ‖ Même épisode : « Deux voies seulement ferment le risque, et le guide les nomme : l'anonymisation préalable, ou l'installation d'un modèle ouvert sur les systèmes du cabinet » (oct. 2026) — https://elige-avocats.com/le-secret-professionnel-a-lepreuve-des-serveurs/ ‖ Même épisode : limite de la pseudonymisation, « un montant, le nom interne d'un projet » peuvent identifier un client (risque de réidentification par croisement) (oct. 2026) — https://elige-avocats.com/le-secret-professionnel-a-lepreuve-des-serveurs/ ‖ Président du CCBE en 2025, président du CNB 2009-2011, associé Elige Bordeaux depuis 2009 — https://elige-avocats.com/bordeaux/thierry-wickers/",
+  "accroche": "Le 8 octobre, vous écriviez que seule « l'anonymisation préalable » ou un modèle installé au cabinet ferme le risque, tout en pointant la réidentification par un montant ou un nom de projet. C'est précisément ce que nous traitons avant l'envoi à ChatGPT ou Claude.",
+  "qualif_commentaire": "Associé (pas gérant identifié) d'Elige Bordeaux, 13 avocats ; ex-président CNB et président CCBE 2025 : prescripteur majeur, interlocuteur exigeant qui connaît les limites de la pseudonymisation, à aborder sur le fond technique.",
+  "score_revu": "A"
  },
  {
   "cible": 1,
@@ -107,7 +135,14 @@
   "perso_angle": "Coauteur du Guide juridique de l'IA (ENI) et cabinet positionné « Digital Compliance Officer externalisé » / legal ops : cabinet neuf qui choisit ses outils.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "1 — coauteur des Guides juridiques de l'IA (ENI), cabinet dédié aux technologies de rupture dont l'IA ; aucun outil interne nommé",
+  "outils_ia_cites": "",
+  "douleur_confidentialite": "Cabinet positionné « Digital Compliance Officer externalisé » (e-santé, cybersécurité, données) : il gère les données et incidents de ses clients (déduit du métier).",
+  "perso_faits": "Lancement officiel de Nodal Avocats, « Digital Compliance Officer externalisé » dans une logique LegalOps, fondé fin 2025 avec trois associés (févr. 2026) — https://www.lemondedudroit.fr/vie-des-cabinets/102965-nodal-avocats-un-nouveau-cabinet-dedie-aux-technologies-de-rupture-et-a-la-propriete-intellectuelle.html ‖ Coauteur des Guides juridiques de l'intelligence artificielle, de la cybersécurité et de l'e-commerce (Éditions ENI) ; docteur en droit (thèse sur la régulation éthique de l'internet, Limoges) (fiche consultée nov. 2026) — https://www.nodal-avocats.com/avocats/stephane-astier ‖ Support de formation Bpifrance « IA & enjeux juridiques pour les entrepreneurs » présenté par Me Stéphane Astier (non daté) — https://bpifrance-creation.fr/sites/default/files/16h_IA%20et%20enjeux%20juridiques%20pour%20les%20entrepreneurs_0.pdf",
+  "accroche": "En lançant Nodal comme « Digital Compliance Officer externalisé » dans une logique LegalOps, vous choisissez vos outils dès le départ. Pour l'IA générative, l'enjeu est d'utiliser ChatGPT ou Claude sans que les données de vos clients quittent le cabinet.",
+  "qualif_commentaire": "Managing partner / associé exécutif confirmé, décideur d'un cabinet neuf de 4 associés en phase d'équipement ; profil LegalOps très réceptif.",
+  "score_revu": "A"
  },
  {
   "cible": 1,
@@ -129,6 +164,13 @@
   "perso_angle": "Citation : « Le droit social est un droit contextuel » : OBBOT fait sa première recherche, puis l'avocat intervient. Angle : traiter aussi les dossiers clients nominatifs avec un LLM sans exposer les données salariés. | Autre citation : Il insiste : « Aucune conversation n'est transmise sans une action expresse de l'utilisateur » — sensibilité forte à la confidentialité des données RH/salariés, cœur de la proposition Hexagone.",
   "score_priorite": "A",
   "statut_verification": "vérifié",
-  "date_recherche": "2026-11-12"
+  "date_recherche": "2026-11-12",
+  "maturite_ia": "3 — a lancé OBBOT, IA juridique propriétaire en droit social (sept. 2026)",
+  "outils_ia_cites": "OBBOT",
+  "douleur_confidentialite": "Prouvée : droit social côté employeurs (données de salariés, santé, disciplinaire) ; OBBOT est conçu pour qu'« aucune conversation n'est transmise sans une action expresse de l'utilisateur » (sept. 2026).",
+  "perso_faits": "Lancement d'OBBOT, à son initiative : « Le droit social est un droit contextuel » ; l'outil accélère la première recherche avant que l'avocat intervienne (sept. 2026) — https://www.lemondedudroit.fr/mag/378-intelligence-artificielle/105577-le-cabinet-obbo-avocats-lance-obbot-une-ia-juridique-en-droit-social.html ‖ Même article : « Aucune conversation n'est transmise sans une action expresse de l'utilisateur » ; réponses sourcées (Légifrance, KALI, Judilibre, BOSS, Urssaf) (sept. 2026) — https://www.lemondedudroit.fr/mag/378-intelligence-artificielle/105577-le-cabinet-obbo-avocats-lance-obbot-une-ia-juridique-en-droit-social.html ‖ A cofondé OBBO Avocats avec Mathilde Ordonez (le nom associe leurs patronymes) — https://www.lemondedudroit.fr/vie-des-cabinets/88867-lancement-cabinet-obbo-avocats.html",
+  "accroche": "Avec OBBOT, vous avez veillé à ce qu'aucune conversation ne soit transmise sans action expresse de l'utilisateur. Quand un dossier nominatif de salarié arrive au cabinet, la même exigence vaut pour vos usages de ChatGPT ou Claude.",
+  "qualif_commentaire": "Associé fondateur confirmé, décideur d'une petite structure (4 personnes avec opérations et technologie) ; OBBOT n'est pas un concurrent (assistant juridique, pas d'anonymisation) : piste de partenariat ou d'intégration en plus de l'usage interne.",
+  "score_revu": "A"
  }
 ]
