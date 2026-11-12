@@ -1,0 +1,14 @@
+MÉTHODE V1 (2026-11-12) :
+• Sites officiels réellement ouverts (WebFetch + curl) : pages équipe / fiches associés, mentions légales, pages contact, communiqués. ~130 recherches web au total, utilisées surtout pour trouver les sites et quelques URL LinkedIn.
+• Aucune personne, e-mail ou URL LinkedIn inventé. Contrôle croisé : les 30 e-mails nominatifs publiés ont été retrouvés sur la page source citée ; 67 des 72 URL LinkedIn sont liées depuis le site officiel (5 viennent de résultats de recherche : Haas, Mathias, Petreschi, Dalloz-Bourguignon, Huet).
+• Colonne email_a_utiliser : e-mail nominatif publié > adresse déduite d'un motif RÉELLEMENT observé sur le même domaine (l'adresse observée est citée dans format_email_suppose) > adresse générique publiée du cabinet. Jamais d'hypothèse non confirmée.
+• DNS (dns_mx / dns_spf / dns_dmarc / dns_verdict) vérifié via DNS-over-HTTPS (dns.google) sur le domaine de email_a_utiliser (ou du site s'il n'y a pas d'adresse). Colonne dns_domaine = domaine testé.
+• Le CSV Lemlist ne contient que les lignes avec une adresse sur un domaine qui a un MX.
+
+POINTS D'ATTENTION :
+• Pas de MX : impulsa-conseil.com (adresse générique d'Impulsa → ne pas envoyer ; le domaine du site impulsa.fr a un MX Microsoft 365, mais aucune adresse publiée dessus). covea.com, group.bnpparibas, sncf-connect-tech.fr : domaines de site sans MX, aucune adresse trouvée (le domaine mail réel de BNP est bnpparibas.com, non utilisé faute d'adresse observée).
+• Cible 4 : aucun e-mail nominatif publié par les grands groupes ; 13 adresses déduites d'un motif prenom.nom vu dans des communiqués, 14 contacts sans adresse (à approcher par LinkedIn ou recommandation).
+• Adresses génériques (73 lignes) : délivrabilité correcte, mais tri par un assistant → personnaliser l'objet au nom de l'associé visé.
+• Hors fourchette gardés pour signal fort : Hayot Expertise (solo, article pseudonymisation), Xtremum (8 pers.), Trevys (4 pers.), Lexing et ærige (~50 avocats), Cocerto (290 pers.).
+• À manier avec tact : Gilles Bösiger (Stengelin) préside l'Ordre des EC Paris IdF ; Thierry Wickers (Elige) ex-président CNB / CCBE. World of Numeric et aum conseil publient leurs propres outils d'anonymisation → prescripteurs plutôt que clients.
+• Covéa : nom publié « Elisabeth Le Cheualier » (possible coquille pour Le Chevalier) — à confirmer.
