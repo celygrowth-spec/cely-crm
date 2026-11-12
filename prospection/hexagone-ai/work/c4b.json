@@ -26,7 +26,8 @@
   "perso_faits": "EDHEC Vox : « The legal community is unanimous. AI is already disrupting the way we work. It frees up lawyers' time so they can focus on complex matters » (7 sept. 2026) — https://www.edhec.edu/en/research-and-faculty/edhec-vox/why-legal-teams-are-becoming-a-source-of-strategic-value ‖ Même article : « Lawyers are expected to offer and promote value creating solutions and weigh risks and opportunities themselves » (sept. 2026) — https://www.edhec.edu/en/research-and-faculty/edhec-vox/why-legal-teams-are-becoming-a-source-of-strategic-value ‖ EDF et Mistral signent un partenariat IA au service du nucléaire et de la souveraineté numérique (mai 2026) — https://www.edf.fr/groupe-edf/espaces-dedies/journalistes/tous-les-communiques-de-presse/edf-et-mistral-signent-un-accord-de-partenariat-pour-une-ia-au-service-du-nucleaire-et-de-la-souverainete-numerique ‖ Citée dans « Les 100 qui font le Droit 2026 » (juin 2026) — https://www.lemondedudroit.fr/les-100/les-100-2026.html",
   "accroche": "Dans EDHEC Vox, vous dites que l'IA libère déjà du temps aux juristes pour les dossiers complexes. Ce sont souvent les plus sensibles chez EDF : nous permettons de les traiter avec ChatGPT, Claude ou Mistral sans qu'aucune donnée ne sorte du groupe.",
   "qualif_commentaire": "Décideure confirmée (GC Groupe EDF, Les 100 2026) ; signal IA nominatif récent ; graphie e-mail (le-gac / legac) à confirmer.",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 4,
@@ -55,7 +56,8 @@
   "perso_faits": "Directrice juridique d'Enedis et secrétaire du conseil de surveillance (page gouvernance 2026) — https://www.enedis.fr/gouvernance ‖ Témoignage Doctrine : outil « adopté par tout le monde » à la DJ Enedis après expérimentation (non daté, témoignage d'un prédécesseur) — https://www.doctrine.fr/avis/enedis ‖ Parcours : droit de la concurrence chez Cleary Gottlieb puis EDF (head of competition, GC optimisation-trading) — https://womenat.com/user/pascale-granotier",
   "accroche": "Votre direction juridique utilise déjà Doctrine pour la recherche. Pour aller plus loin avec ChatGPT ou Claude sur des dossiers contenant des données de clients ou d'informations commercialement sensibles, nous pseudonymisons tout localement avant l'envoi.",
   "qualif_commentaire": "Décideure confirmée (site Enedis) ; Doctrine = éditeur exclu mais client = signal ; l'utilisation de Doctrine peut réduire le besoin perçu (positionner Hexagone sur l'usage LLM généraliste, pas la recherche).",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 4,
@@ -84,7 +86,8 @@
   "perso_faits": "Membre du club EDHEC Legal Changers, réseau de DJ pionniers de la transformation juridique (liste 2026) — https://alll.legal/club-legal-changers/",
   "accroche": "Membre du club Legal Changers, vous suivez la transformation technologique des directions juridiques. Pour une équipe internationale comme la vôtre, nous rendons ChatGPT ou Claude utilisables sans qu'aucune donnée client ne quitte TotalEnergies.",
   "qualif_commentaire": "Poste non confirmé par une source 2025-26 (recherche dédiée sans résultat) : à vérifier avant envoi ; signal faible.",
-  "score_revu": "C"
+  "score_revu": "C",
+  "relation_linkedin": ""
  },
  {
   "cible": 4,
@@ -113,7 +116,8 @@
   "perso_faits": "Membre du club EDHEC Legal Changers (liste 2026) — https://alll.legal/club-legal-changers/ ‖ Société Générale se préparerait à abandonner son IA générative interne au profit de Microsoft Copilot (janv. 2026, vu en résultat de recherche) — https://emag.directindustry.com/2026/01/16/societe-generale-generative-ai-make-or-buy-microsoft-copilot/",
   "accroche": "Société Générale bascule son IA générative interne vers Microsoft Copilot. Pour vos juristes, cela pose une question simple : comment garantir que secret bancaire et legal privilege restent dans la banque, quel que soit le LLM utilisé ?",
   "qualif_commentaire": "Décideur confirmé (GC Groupe depuis 2014, club Legal Changers 2026) ; info Copilot issue d'une source secondaire (Bloomberg via DirectIndustry, page non ouverte) : formuler au conditionnel.",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 4,
@@ -142,7 +146,8 @@
   "perso_faits": "Entrée au CA de l'AFJE : la fonction juridique doit être « la boussole stratégique qui aligne conformité, innovation et responsabilité » (avr. 2026) — https://www.lemondedudroit.fr/nominations/103699-cinq-nouveaux-administrateurs-au-conseil-dadministration-de-lafje.html ‖ Présidente de l'ANJB depuis 2021, réélue pour un 2e mandat (avr. 2026) — https://www.lemondedudroit.fr/nominations/103699-cinq-nouveaux-administrateurs-au-conseil-dadministration-de-lafje.html",
   "accroche": "Vous décrivez la fonction juridique comme « la boussole » qui aligne conformité et innovation. L'IA générative en est le test : permettre aux juristes de BPCE d'utiliser ChatGPT ou Claude sans qu'aucune donnée bancaire ne quitte le groupe.",
   "qualif_commentaire": "Décideure confirmée (DJ groupe BPCE) + présidente ANJB (prescriptrice juristes de banque) ; pas de signal IA personnel.",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 4,
@@ -171,7 +176,8 @@
   "perso_faits": "Cité dans « Les 100 qui font le Droit 2026 » (General counsel, Crédit Agricole CIB) (juin 2026) — https://www.lemondedudroit.fr/les-100/les-100-2026.html ‖ CA CIB et Komgo collaborent pour apporter des capacités basées sur l'IA (oct. 2026) — https://www.ca-cib.com/fr/actualites/credit-agricole-cib-et-komgo-collaborent-pour-apporter-des-capacites-basees-sur-lia-0 ‖ General Counsel de CA CIB depuis 2010 (ex-Calyon) — https://www.legal500.com/gc-powerlist/france-2024/bruno-fontaine/",
   "accroche": "CA CIB intègre l'IA dans ses opérations, comme avec Komgo cet automne. Côté juridique, les dossiers de financement contiennent des informations privilégiées : nous permettons d'utiliser ChatGPT ou Claude sans qu'elles quittent la banque.",
   "qualif_commentaire": "Décideur confirmé (GC depuis 2010, Les 100 2026) ; aucun signal IA nominatif → score abaissé.",
-  "score_revu": "C"
+  "score_revu": "C",
+  "relation_linkedin": ""
  },
  {
   "cible": 4,
@@ -200,7 +206,8 @@
   "perso_faits": "Profil Legal 500 GC Powerlist : le plus grand changement sera « the consolidation of the legal technological market », pour « accelerating the digitalisation of our legal department, by automating volumetric or repetitive works » (non daté) — https://www.legal500.com/gc-powerlist/?p=54166 ‖ Membre du club EDHEC Legal Changers (liste 2026) — https://alll.legal/club-legal-changers/ ‖ Bpifrance prêt à investir 10 Md€ dans l'IA d'ici 2029 — https://www.cbnews.fr/digital/image-bpifrance-pret-investir-10-milliards-eu-ia-2029-90517",
   "accroche": "Vous anticipiez une automatisation des travaux répétitifs de votre direction juridique grâce aux legaltechs. L'IA générative le permet aujourd'hui, à condition que les données des entreprises financées restent chez Bpifrance : c'est précisément ce que nous garantissons.",
   "qualif_commentaire": "Décideur confirmé (DJ groupe, Legal Changers 2026) ; citation Legal 500 non datée ; contexte groupe très pro-IA.",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 4,
@@ -229,7 +236,8 @@
   "perso_faits": "AXA déploie AXA Secure GPT, service interne bâti sur Azure OpenAI dans un environnement cloud sécurisé, pour 140 000 salariés (juil. 2023) — https://www.axa.com/press/press-releases/axa-offers-securegenerative-ai-to-employees ‖ Legal 500 : les équipes juridiques devront « constantly adapt to new areas of law such as AI, cybersecurity, and sustainability matters » (2023) — https://www.legal500.com/gc-powerlist/france-2023/helen-browne-3/ ‖ Citée dans « Les 100 qui font le Droit 2026 » (Group general counsel, AXA) (juin 2026) — https://www.lemondedudroit.fr/les-100/les-100-2026.html",
   "accroche": "AXA a été pionnier avec Secure GPT. Pour les dossiers juridiques les plus sensibles, une étape de plus est possible : pseudonymiser localement noms et données d'assurés avant tout appel au modèle, puis les réidentifier au retour.",
   "qualif_commentaire": "Décideure confirmée (GC Groupe, comité de direction) ; AXA dispose déjà d'une IA interne : besoin à démontrer (complément, pas remplacement).",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 4,
@@ -258,7 +266,8 @@
   "perso_faits": "Secrétaire générale Groupe et membre du comité exécutif depuis janv. 2024, après avoir été Group Chief Compliance Officer (mars 2023) — https://www.cnp.fr/le-groupe-cnp-assurances/qui-sommes-nous/la-gouvernance/comite-executif/sun-lee ‖ CNP crée un comité pluridisciplinaire IA et Éthique placé sous la responsabilité du secrétariat général et de la direction financière (2020) — https://www.actuia.com/actualite/ethique-de-lintelligence-artificielle-cnp-assurances-met-en-place-un-dispositif-de-",
   "accroche": "Le comité IA et Éthique de CNP relève du secrétariat général que vous dirigez. Sur un sujet concret, l'usage de ChatGPT ou Claude par vos juristes, nous garantissons qu'aucune donnée d'assuré ne quitte le groupe.",
   "qualif_commentaire": "Décideure confirmée (COMEX) ; profil conformité ; source IA groupe ancienne (2020) : signal moyen.",
-  "score_revu": "C"
+  "score_revu": "C",
+  "relation_linkedin": ""
  },
  {
   "cible": 4,
@@ -287,7 +296,8 @@
   "perso_faits": "Lauréate du palmarès Choiseul « Les 40 qui font le futur du droit » (mai 2026) — https://www.choiseul.info/wp-content/uploads/2026/05/palmares-choiseul-futur-du-droit_2026_web-1.pdf ‖ Portrait SKEMA (alumni 2009) : dirige chez Thales une équipe de senior legal counsels, paralegals et stagiaires (mai 2026, vu en résultat de recherche) — https://www.skema.edu/en/news/between-law-finance-and-management-the-career-path-anne-laure-bardou-skema-2009 ‖ Position paper Thales « L'Intelligence Artificielle de confiance » (août 2026) — https://www.thalesgroup.com/sites/default/files/2026-08/V14%20-%20Position%20Paper%20-%20L%27Intelligence%20Artificielle%20de%20confiance%2020260831.pdf",
   "accroche": "Distinguée parmi « Les 40 qui font le futur du droit », vous dirigez une équipe juridique dans un groupe où le secret défense interdit tout envoi vers un LLM cloud. Nous proposons une pseudonymisation locale, déployable on-premise ou air-gapped.",
   "qualif_commentaire": "« Thales GPT » cité par https://cdn-assets.inwink.com/c62d5268-05a0-4161-999e-5585a5336919/c8ea619c-c77c-4ec2-8859-4269eae17f70 (non daté, non vérifié) ; périmètre exact non confirmé (SKEMA ne donne pas d'intitulé ; pas d'e-mail ni motif observé sur thalesgroup.com) : à vérifier avant envoi.",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 4,
@@ -316,7 +326,8 @@
   "perso_faits": "Entrée au CA de l'AFJE : l'IA « reconfigure déjà nos méthodes de travail, notre rapport à l'information, notre manière de structurer la conformité et de piloter le risque » (avr. 2026) — https://www.lemondedudroit.fr/nominations/103699-cinq-nouveaux-administrateurs-au-conseil-dadministration-de-lafje.html ‖ Copilote du groupe scientifique IA de l'AFJE, désignée ambassadrice IA par la DGE en 2025 (avr. 2026) — https://www.lemondedudroit.fr/nominations/103699-cinq-nouveaux-administrateurs-au-conseil-dadministration-de-lafje.html ‖ Intitulé « Directeur Juridique & Compliance Groupe, Aramis Group » au 1er Congrès des juristes d'entreprise (mars 2026) — https://www.lemondedudroit.fr/institutions/103646-premier-congresdesjuristesdentreprise-afje-consacre-reforme-majeure-dessine-avenir-profession.html ‖ Interview LMD sur l'IA et la place de l'humain (2024) — https://www.lemondedudroit.fr/interviews/94812-ia-chemin-non-fin-puissance-sepanouit-lorsque-humain-garde-destin.html",
   "accroche": "Vous écrivez que l'IA reconfigure déjà « notre manière de structurer la conformité et de piloter le risque ». Comme copilote du groupe IA de l'AFJE, la question de la confidentialité des données envoyées aux LLM vous intéresse sans doute : nous la réglons localement.",
   "qualif_commentaire": "Décideure confirmée (DJ & Compliance Groupe) ; prescriptrice IA n°1 côté AFJE, hors secteurs prioritaires ; statut : poste confirmé par LMD mars-avril 2026.",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 4,
@@ -345,7 +356,8 @@
   "perso_faits": "Legal 500 GC Powerlist : « We have invested very early on in digital technology in our legal work. Data management and artificial intelligence will have a significant impact on in-house legal teams » ; « Our approach has been a test and learn approach » (profil non daté, listée France 2026) — https://www.legal500.com/gc-powerlist/?p=83602 ‖ Citée dans « Les 100 qui font le Droit 2026 » (Secrétaire Général et membre du Comité de Direction Générale, Natixis) (juin 2026) — https://www.lemondedudroit.fr/les-100/les-100-2026.html",
   "accroche": "Vous décriviez une direction juridique qui a investi tôt dans le digital, avec une approche test & learn. Un test simple : permettre à vos juristes d'utiliser ChatGPT ou Claude sur des dossiers de transaction sans qu'aucune donnée ne quitte Natixis.",
   "qualif_commentaire": "Décideure confirmée (GC & membre du directoire, Legal 500 France 2026 + Les 100 2026) ; signal IA nominatif (citation non datée) → score relevé.",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 4,
@@ -374,6 +386,7 @@
   "perso_faits": "Cité dans « Les 100 qui font le Droit 2026 » (Directeur juridique, Crédit Agricole Île-de-France) (juin 2026) — https://www.lemondedudroit.fr/les-100/les-100-2026.html",
   "accroche": "Distingué parmi « Les 100 qui font le Droit », vous dirigez le juridique d'une banque régionale soumise au secret bancaire. Nous permettons à vos juristes d'utiliser ChatGPT ou Claude sans qu'aucune donnée client ne quitte la Caisse régionale.",
   "qualif_commentaire": "Décideur confirmé (Les 100 2026) mais aucun signal IA ; caisse régionale (budget plus limité, outils souvent mutualisés au niveau groupe).",
-  "score_revu": "C"
+  "score_revu": "C",
+  "relation_linkedin": ""
  }
 ]

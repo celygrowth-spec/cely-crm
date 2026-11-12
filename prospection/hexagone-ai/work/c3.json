@@ -26,7 +26,8 @@
   "perso_faits": "Page « Services juridiques » : agents qui analysent conclusions, ordonnances et assignations, références MHK Avocats, Screeb Notaires, Notaires du Trocadéro, badge « Claude Partner Network - Select Services Partner » (nov. 2026) — https://www.wesype.com/cas-usages/services-juridiques ‖ Page « Experts comptables » : logos CNCC et Ordre des Experts-Comptables Paris Île-de-France parmi les références, cas « check-list automatique avant signature par l'associé inscrit » (nov. 2026) — https://www.wesype.com/cas-usages/experts-comptables ‖ Fiche partenaire Claude : 200+ clients, 40+ experts, secteurs Private Equity, Accounting, Insurance, Legal Services (2026) — https://partnerhub.claude.com/directory/partner/wesype ‖ E-mail publié guillaume.linet@wesype.com (pied de page et section Contact) — https://www.wesype.com/qui-sommes-nous",
   "accroche": "Vos agents analysent déjà les assignations de MHK Avocats et les dossiers des Notaires du Trocadéro : chez ces clients, le secret professionnel finit toujours sur la table. Nous pseudonymisons localement les données avant Claude — une brique à intégrer dans vos déploiements juridiques ?",
   "qualif_commentaire": "Décideur confirmé (CEO & Co-Founder, e-mail nominatif publié) ; structure de 40 experts = décision rapide ; contexte idéal (verticales juridique + expertise comptable, références Ordre des EC Paris IdF et CNCC) ; risque : offre très centrée Dust, à positionner en complément.",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -55,7 +56,8 @@
   "perso_faits": "Listé « CEO & Co-Founder » sur la page Qui sommes-nous, aux côtés de Guillaume Linet (nov. 2026) — https://www.wesype.com/qui-sommes-nous ‖ Page « Experts comptables » : agents de détection d'incohérences de liasse fiscale et de dossier de révision annuel, logos CNCC et Ordre des EC Paris IdF (nov. 2026) — https://www.wesype.com/cas-usages/experts-comptables ‖ Fiche partenaire Claude : « secure AI », 200+ clients, Private Equity, Accounting, Legal Services (2026) — https://partnerhub.claude.com/directory/partner/wesype",
   "accroche": "Votre offre experts-comptables affiche la CNCC et l'Ordre des experts-comptables Paris Île-de-France, des professions tenues au secret. Une pseudonymisation locale avant Claude pourrait lever leur principale objection : seriez-vous ouvert à en parler comme partenaire ?",
   "qualif_commentaire": "Co-CEO confirmé sur le site officiel (2026), e-mail déduit du motif guillaume.linet@ ; à vérifier : un « Guillaume Luscan » apparaît sur zonebourse comme cofondateur de Cajoo et dirigeant de Flink SAS — homonymie ou même personne non confirmée.",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -84,7 +86,8 @@
   "perso_faits": "Modérateur de la « Session for Leaders Dust x Wesype » à Paris avec Guilhem Delorme (Argon & Co) et Xavier Brucker (Mews Partners) (date non indiquée, événement passé) — https://luma.com/wxbukic8 ‖ La page présente Wesype comme « premier partenaire pure player » de Dust, 200+ clients accompagnés — https://luma.com/wxbukic8 ‖ Listé « Partner » sur la page équipe (nov. 2026) — https://www.wesype.com/qui-sommes-nous",
   "accroche": "Vous animiez la « Session for Leaders Dust x Wesype » avec Argon & Co et Mews Partners, des cabinets dont les données clients sont sous NDA. Nous pseudonymisons ces données localement avant l'IA : un sujet à creuser pour vos déploiements ?",
   "qualif_commentaire": "Partner confirmé (site officiel 2026) et visage public de Wesype en événement ; e-mail déduit ; contact secondaire derrière les deux CEO.",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -113,7 +116,8 @@
   "perso_faits": "Listé « Partner » sur la page Qui sommes-nous (nov. 2026) — https://www.wesype.com/qui-sommes-nous ‖ Wesype : badge Select Services Partner Claude et références MHK Avocats / Notaires du Trocadéro (nov. 2026) — https://www.wesype.com/cas-usages/services-juridiques",
   "accroche": "Wesype déploie des agents chez des avocats et des notaires, des clients pour qui chaque nom de partie est confidentiel. Nous pseudonymisons localement ces données avant Claude ; seriez-vous la bonne personne pour étudier une intégration commune ?",
   "qualif_commentaire": "Partner confirmé, aucun fait public nominatif trouvé ; à garder en copie derrière les deux CEO.",
-  "score_revu": "C"
+  "score_revu": "C",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -142,7 +146,8 @@
   "perso_faits": "Contact « Want to know more? » de la page Sia x Anthropic, qui la décrit comme supervisant les relations avec les grands éditeurs tech et le fonds d'investissement startups de Sia (nov. 2026) — https://www.sia-partners.com/en/our-capabilities/sia-x-anthropic ‖ Sia passe Preferred Partner du Claude Partner Network et obtient la DRD Claude Code / Cowork (5 oct. 2026) — https://www.sia-partners.com/fr/a-propos/actualites/sia-devient-preferred-partner-du-claude-partner-network ‖ Cas Keytrade Bank : automatisation de l'onboarding KYC avec Claude (2026) — https://www.sia-partners.com/en/our-capabilities/sia-x-anthropic ‖ Diplômée de l'ESCP, chez Sia depuis 2013 — https://www.sia-partners.com/en/our-capabilities/sia-x-anthropic",
   "accroche": "Vous pilotez les alliances tech et le fonds startups de Sia, au moment où vos équipes automatisent le KYC de Keytrade Bank avec Claude. Une pseudonymisation locale des données clients avant le modèle pourrait devenir une brique commune — partenariat, voire plus ?",
   "qualif_commentaire": "Décideure partenariats confirmée (site officiel 2026, e-mail publié) ; double angle partenariat technologique + Sia Ventures ; contexte budgétaire favorable (programme Anthropic de 100 M$ pour les partenaires cité par Sia).",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -171,7 +176,8 @@
   "perso_faits": "Actuaire ENSAE, chez Sia depuis 2015, a développé des solutions data science / MLOps pour l'assurance, la banque, l'immobilier et l'énergie au sein de Heka (nov. 2026) — https://www.sia-partners.com/fr/a-propos/notre-organisation/equipe-dirigeante ‖ Sia annonce ses pods FDE qui construisent « des agents de qualité production sur l'API Claude » (5 oct. 2026) — https://www.sia-partners.com/fr/a-propos/actualites/sia-devient-preferred-partner-du-claude-partner-network ‖ Pilote Claude Enterprise sécurisé de 150 utilisateurs « on zero-trust foundations and GDPR / EU AI Act ready » (2026) — https://www.sia-partners.com/en/our-capabilities/sia-x-anthropic",
   "accroche": "Actuaire passé par la banque et l'assurance, vous savez ce que pèse une donnée assuré dans un prompt. Vos pods FDE mettent Claude en production ; nous pseudonymisons localement ces données avant l'appel au modèle — intéressé par une intégration dans vos agents ?",
   "qualif_commentaire": "Décideur technique confirmé (fiche officielle 2026, e-mail publié) ; sponsor naturel d'une intégration API ; aucune prise de parole publique récente trouvée.",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -200,7 +206,8 @@
   "perso_faits": "Managing Partner France, Italie, Maroc, diplômé de CentraleSupélec, spécialiste Transport & Mobilité (nov. 2026) — https://www.sia-partners.com/fr/a-propos/notre-organisation/equipe-dirigeante ‖ Sia devient Preferred Partner du Claude Partner Network (5 oct. 2026) — https://www.sia-partners.com/fr/a-propos/actualites/sia-devient-preferred-partner-du-claude-partner-network ‖ Cas « National road-safety agency » : modernisation d'un monolithe avec Claude Code (2026) — https://www.sia-partners.com/en/our-capabilities/sia-x-anthropic",
   "accroche": "Sia est passée Preferred Partner Claude en octobre et travaille avec des acteurs publics et bancaires français. Pour ces clients, faire sortir des données nominatives reste bloquant ; nous les pseudonymisons localement avant Claude. Un échange avec votre practice France ?",
   "qualif_commentaire": "Décideur confirmé (Managing Partner France, e-mail publié) mais profil sectoriel transport, pas IA : plutôt sponsor que porteur ; passer d'abord par Ramadier / Guillot.",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -229,7 +236,8 @@
   "perso_faits": "Présidente & COO depuis 2024, EDHEC, chez Sia depuis 2012, supervise les opérations groupe dont la stratégie M&A (nov. 2026) — https://www.sia-partners.com/fr/a-propos/notre-organisation/equipe-dirigeante ‖ Sia devient Preferred Partner du Claude Partner Network (5 oct. 2026) — https://www.sia-partners.com/fr/a-propos/actualites/sia-devient-preferred-partner-du-claude-partner-network",
   "accroche": "Sia vient de franchir le niveau Preferred chez Anthropic et cible des secteurs très régulés. Une couche française de pseudonymisation locale renforcerait vos réponses sur la conformité RGPD ; seriez-vous ouverte à un échange partenariat ?",
   "qualif_commentaire": "Décideure groupe confirmée (fiche officielle 2026, e-mail publié) ; trop haut pour un premier contact opérationnel, pertinente si angle M&A / investissement.",
-  "score_revu": "C"
+  "score_revu": "C",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -258,7 +266,8 @@
   "perso_faits": "Promu VP Partners après quatre ans comme Alliance Manager (11 juil. 2025) — https://www.sfeir.com/actualites/communiques/martin-regent-vp-partners/ ‖ SFEIR devient Preferred Partner du Claude Partner Network ; plus de 170 personnes certifiées Claude (5 oct. 2026) — https://www.sfeir.com/actualites/communiques/partenariat-preferred-claude-partner-network/ ‖ Partenariat stratégique Anthropic : Claude intégré à RAISE pour des agents « souverains » (5 juin 2026) — https://www.sfeir.com/actualites/communiques/partenariat-anthropic-2026/",
   "accroche": "Vous pilotez l'écosystème partenaires de SFEIR, qui promet avec RAISE des agents « souverains avec un contrôle total sur le contexte et les données ». Nous pseudonymisons localement les données sensibles avant Claude ; une brique à référencer dans votre écosystème ?",
   "qualif_commentaire": "Bonne porte d'entrée : rôle explicite d'alliances ; poste daté de 2025 (non reconfirmé en 2026) ; e-mail déduit du motif nom.initiale@sfeir.com.",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -287,7 +296,8 @@
   "perso_faits": "Citation : « Anthropic partage notre vision d'une IA rigoureuse et contrôlable » (5 juin 2026) — https://www.sfeir.com/actualites/communiques/partenariat-anthropic-2026/ ‖ Citation : « AI is judged in production, in the hands of the teams who use it every day » (5 oct. 2026) — https://www.sfeir.com/actualites/communiques/partenariat-preferred-claude-partner-network/ ‖ Speaker Devoxx France 2025, docteur en IA, Managing Director de SFEIR et WEnvision — https://m.devoxx.com/events/devoxxfr2025/speaker/64098/didier-girard",
   "accroche": "Vous parliez en juin d'une IA « rigoureuse et contrôlable ». Chez vos clients banque, assurance ou secteur public, le contrôle commence par les données envoyées au modèle : nous les pseudonymisons localement avant Claude. Une piste pour RAISE ?",
   "qualif_commentaire": "Décideur confirmé (cité dans deux communiqués 2026 ; « CEO » en juin, « Managing Director » en oct.) ; e-mail déduit ; très sollicité, accroche technique adaptée à son profil.",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -316,7 +326,8 @@
   "perso_faits": "Citation : « AI executes, humans govern, the project learns » (5 oct. 2026) — https://www.sfeir.com/actualites/communiques/partenariat-preferred-claude-partner-network/ ‖ Citation : « We measure our success by how fast our clients stop needing us » (5 oct. 2026) — https://www.sfeir.com/actualites/communiques/partenariat-preferred-claude-partner-network/ ‖ Nommé Président du Groupe SFEIR (Paperjam, date non indiquée) — https://paperjam.lu/article/xavier-muller-prend-la-presidence-du-groupe-sfeir",
   "accroche": "« L'IA exécute. Les humains gouvernent. » Chez un avocat ou un assureur, gouverner commence par ce qui sort du SI : nous pseudonymisons localement les données avant Claude. Une brique que vos équipes pourraient intégrer chez vos clients régulés ?",
   "qualif_commentaire": "Décideur ultime confirmé (communiqué officiel oct. 2026) ; à contacter en second, après Régent ou Girard ; e-mail déduit.",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -345,7 +356,8 @@
   "perso_faits": "Prend la direction de SFEIR Ouest avec l'ambition de passer de 60 à 120 collaborateurs et d'ouvrir Rennes et Niort (11 mars 2026) — https://www.sfeir.com/actualites/communiques/antoine-huet-directeur-sfeir-ouest/ ‖ Trois piliers : IA agentique, Cloud de confiance (S3NS, Scaleway), professionnalisation du « Vibe Coding » (mars 2026) — https://www.sfeir.com/actualites/communiques/antoine-huet-directeur-sfeir-ouest/ ‖ Breton de naissance, neuf ans à structurer les offres Data et piloter Luxe & Retail au siège — https://www.sfeir.com/actualites/communiques/antoine-huet-directeur-sfeir-ouest/",
   "accroche": "Vous ouvrez Rennes et Niort avec un pilier « Cloud de confiance » : les mutuelles et cabinets de l'Ouest y seront sensibles. Nous pseudonymisons localement les données avant Claude, sans infrastructure GPU — une offre commune pour SFEIR Ouest ?",
   "qualif_commentaire": "Décideur régional confirmé (communiqué mars 2026) ; bon relais terrain (Niort = assureurs mutualistes) ; e-mail déduit.",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -374,7 +386,8 @@
   "perso_faits": "Interview Les Pépites Tech : Galadrim compte 130 collaborateurs, 600+ clients depuis 2017 (BNP Paribas, Chanel, RATP) et a bâti « une équipe de vingt experts dédiés » à l'IA générative (oct. 2025) — https://lespepitestech.com/node/32170 ‖ Page juridique : « +40 projets livrés pour des cabinets d'avocats », FAQ sur le secret professionnel (nov. 2026) — https://www.galadrim.fr/secteurs/juridique ‖ Webinaire Galadrim « Une transformation IA conforme à l'AI Act » le mardi 17/11 (nov. 2026) — https://www.galadrim.fr/secteurs/juridique ‖ Ancien d'IBM, X et EPFL, a choisi le nom Galadrim en référence à Tolkien — https://www.galadrim.fr/equipe",
   "accroche": "Votre FAQ juridique répond déjà à « Nos dossiers restent-ils couverts par le secret professionnel ? » : c'est la question que vos 40 cabinets d'avocats posent. Nous pseudonymisons localement les pièces avant Claude ; un partenariat technique vous intéresserait-il ?",
   "qualif_commentaire": "CEO cofondateur confirmé (site officiel 2026) ; taille corrigée : 130 collaborateurs (Pépites Tech oct. 2025) ; client legaltech JurIA (non exclu) ; très bon fit co-vente juridique. Corrigé : taille = 130 collaborateurs (Pépites Tech, oct. 2025).",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -403,7 +416,8 @@
   "perso_faits": "Ancien de Facebook et Microsoft, major de promotion de l'X, diplômé de l'ENS ; « pilote aujourd'hui la stratégie de développement, d'innovation et d'adoption des nouvelles technologies » (nov. 2026) — https://www.galadrim.fr/equipe ‖ Fiche partenaire Claude : « deploying Claude agents in production » (2026) — https://partnerhub.claude.com/directory/partner/galadrim ‖ Page juridique : documents « exclus de tout entraînement de modèle tiers », modèle hébergé en UE ou dans l'environnement du client (nov. 2026) — https://www.galadrim.fr/secteurs/juridique",
   "accroche": "Votre page juridique promet des documents cloisonnés et un modèle hébergé en Europe ou chez le client. Nous ajoutons une pseudonymisation locale avant l'appel à Claude, sans auto-hébergement : intéressé par un test d'intégration API avec vos équipes ?",
   "qualif_commentaire": "CTO cofondateur confirmé sur la page équipe 2026 (la mention « 2017 à 2026 » sur la page Histoire reste à éclaircir) ; décideur technique d'intégration. Corrigé : taille = 130 collaborateurs (Pépites Tech, oct. 2025).",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -432,7 +446,8 @@
   "perso_faits": "Présenté comme « CTO Data & IA », « ancien conseiller à l'Autorité des marchés financiers », qui « définit les standards de nos équipes IA » (nov. 2026) — https://www.galadrim.fr/secteurs/juridique ‖ Listé « Partner et CTO IA » sur la page équipe (nov. 2026) — https://www.galadrim.fr/equipe ‖ Cas JurIA : génération et modification d'actes en 1 minute, 70 % de temps économisé, 500+ documents/mois (2026) — https://www.galadrim.fr/secteurs/juridique",
   "accroche": "Ancien de l'AMF, vous connaissez les organisations où chaque analyse doit rester justifiable. Pour vos assistants juridiques, nous pseudonymisons localement les pièces avant Claude et réidentifions au retour : un standard à ajouter à ceux de vos équipes IA ?",
   "qualif_commentaire": "Décideur technique confirmé (2026) ; profil régulateur (AMF) très réceptif à la confidentialité ; meilleur point d'entrée opérationnel chez Galadrim. Corrigé : taille = 130 collaborateurs (Pépites Tech, oct. 2025).",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -461,7 +476,8 @@
   "perso_faits": "Article « Claude en entreprise : sécurité des données, risques et bonnes pratiques » (Fabien Pasquet, 10 nov. 2026) : « La pseudonymisation peut également limiter l'exposition, sans faire disparaître les obligations RGPD » — https://eleven-labs.com/blog/claude-securite/ ‖ Page Select Partner Anthropic détaillant les critères (10 experts certifiés, clients en production) — https://eleven-labs.com/data-ia/partenaire-anthropic-claude/ ‖ Agent IA juridique : « 81% des avocats français utilisent désormais l'intelligence artificielle (sources : Wolters Kluwer 2026, CNB) » — https://eleven-labs.com/data-ia/agent-ia-juridique/ ‖ Directeur de la publication du site (Groupe Eleven) — https://eleven-labs.com/mentions/",
   "accroche": "Votre article du 10 novembre recommande l'anonymisation des informations confidentielles avant leur transmission au modèle. C'est exactement ce que nous faisons, localement et réversiblement, pour les cabinets d'avocats : à intégrer dans votre agent IA juridique ?",
   "qualif_commentaire": "Dirigeant (directeur de publication) confirmé ; besoin écrit noir sur blanc par Eleven Labs (10/11/2026) = signal le plus chaud du lot ; ne pas confondre avec ElevenLabs (voix IA) ; envisager aussi Fabien Pasquet (auteur) en copie.",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -490,7 +506,8 @@
   "perso_faits": "Référent nommé « Directeur Innovation » de l'offre Conseil et intégration en IA générative (nov. 2026) — https://www.talan.com/france/fr/conseil-et-integration-en-ia-generative ‖ Intervenant à VivaTech 2025 en tant que directeur de l'innovation de Micropole, « a Talan company » (juin 2025) — https://www.micropole.com/en/actus/evenement/vivatech-2025-regards-sur-une-innovation-plus-mature-plus-professionnelle/ ‖ Cas client : plateforme d'assistance juridique pilotée par Claude, 1,5 M d'assurés, mise en production en 9 mois — https://www.talan.com/france/fr/une-plateforme-dassistance-juridique-pilotee-par-lia ‖ Expert cité sur l'offre GEO de Talan — https://www.talan.com/global/en/generative-engine-optimization-geo-consulting-and-integration",
   "accroche": "Votre plateforme juridique sur Claude traite 300 000 dossiers d'assurés par an : autant de noms et de litiges qui transitent par le modèle. Nous les pseudonymisons localement avant l'appel ; une brique à proposer sur vos prochains projets juridiques ?",
   "qualif_commentaire": "Référent innovation confirmé sur talan.com (2026) mais venu de Micropole : décideur partiel ; page Micropole (VivaTech 2025) désormais redirigée, fait issu du résultat de recherche ; e-mail non trouvé.",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -519,7 +536,8 @@
   "perso_faits": "Audition devant la commission des affaires culturelles et de l'éducation de l'Assemblée nationale : « AI must not function as a response generator that stifles thought » (19 janv. 2026) — https://www.artefact.com/news/ai-sovereignty-and-the-future-of-knowledge/ ‖ Invité 3 h de Generation Do It Yourself (Matthieu Stefani) sur le « token maxing » (5 juil. 2026) — https://www.artefact.com/news/token-maxing-ai-silicon-valley-lie/ ‖ À VivaTech 2026 : « Sensitive, personal, or emotional requests must be handled by a human being » — https://www.artefact.com/news/enterprise-ai-roi-business-value/ ‖ « technological sovereignty is not only possible, but [...] the best lever for economic advantage in the short term » — https://www.artefact.com/news/european-ai-sovereignty-digital-resilience/",
   "accroche": "Vous défendez une souveraineté technologique « best lever for economic advantage ». Chez Cinven ou Ara Partners, la due diligence sur Claude bute vite sur les données confidentielles : nous les pseudonymisons localement avant le modèle. Un sujet pour votre offre Anthropic ?",
   "qualif_commentaire": "Executive Chairman confirmé (communiqués 2026) ; très exposé médiatiquement = difficile d'accès, mais angle souveraineté très aligné ; e-mail non trouvé (seul hello-france@artefact.com publié).",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -548,7 +566,8 @@
   "perso_faits": "Nommée CEO France d'Artefact ; la France compte 600+ salariés et 40 % du CA mondial ; chez Artefact depuis 2016, Managing Partner France en 2022 (fév. 2025) — https://artefact.com/news/justine-nerce-is-appointed-ceo-france-of-artefact ‖ Artefact devient partenaire Select Anthropic, 1 500 collaborateurs utilisent Claude (30 juin 2026) — https://www.artefact.com//wp-content/uploads/2026/06/CP_Artefact-et-Anthropic-sassocient-pour-accelerer-ladoption-de-lIA-en-entreprise.pdf",
   "accroche": "Artefact France porte 40 % du chiffre d'affaires du groupe et déploie désormais Claude chez des clients financiers. Leurs données sensibles peuvent rester chez eux : nous les pseudonymisons localement avant le modèle. Un échange avec vos équipes Claude ?",
   "qualif_commentaire": "CEO France confirmée (communiqué fév. 2025, poste « CEO France & Switzerland » sur le site 2026) ; décideure clé pour le marché français ; e-mail non trouvé.",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -577,7 +596,8 @@
   "perso_faits": "À VivaTech 2026, alliance HEC Paris x Artefact : « Le modèle d'adoption de l'IA réservé aux seuls ingénieurs a atteint ses limites » (juin 2026) — https://www.hec.edu/fr/institut-entrepreneuriat-innovation/actualites/l-essor-du-leadership-l-ere-de-l-ia-hec-paris-et-artefact-nouent-une-alliance-strategique-vivatech-2026 ‖ Reçoit le Prix spécial du jury des CCI France International Awards : l'IA est un catalyseur « when deployed responsibly and at scale » (2026) — https://www.consultancy.eu/news/13971/artefact-wins-special-jury-award-at-the-2026-cci-france-international-awards ‖ Alumni HEC (H.06) — même source HEC",
   "accroche": "Vous dites que l'IA n'est un catalyseur que « deployed responsibly and at scale ». Chez vos clients private equity et banque privée, le passage à l'échelle de Claude bute sur les données confidentielles ; nous les pseudonymisons localement. Un échange partenariat ?",
   "qualif_commentaire": "Group CEO confirmé (2026) ; niveau groupe international, à cibler en dernier ; pas d'e-mail.",
-  "score_revu": "C"
+  "score_revu": "C",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -606,7 +626,8 @@
   "perso_faits": "Listée « Partner Theodo HealthTech, CEO France » (nov. 2026) — https://www.theodo.com/nos-leaders ‖ Cas Vidal : assistant médical basé sur l'IA générative pour les professionnels de santé — https://www.theodo.com/secteur/healthtech ‖ Livre blanc « IA souveraine : mode d'emploi » : « Choisir le niveau de souveraineté par traitement, pas globalement » (7 oct. 2026) — https://www.theodo.com/livres-blancs/ia-souverain-mode-demploi ‖ Theodo met en place pour ses clients Anthropic une gouvernance « garantissant la sécurité, la conformité et la souveraineté » — https://www.theodo.com/partenaire/theodo-x-anthropic",
   "accroche": "Votre livre blanc d'octobre recommande de choisir la souveraineté « par traitement, pas globalement ». Pour vos clients santé sous HDS, pseudonymiser localement les données patients avant Claude est précisément ce traitement : on en parle ?",
   "qualif_commentaire": "CEO France confirmée (page leaders 2026) ; double casquette HealthTech très pertinente (données de santé) ; e-mail non trouvé.",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -635,7 +656,8 @@
   "perso_faits": "Auteur de « Le Mythe de l'IA Auto-hébergée » : « L'auto-hébergement peut être pertinent pour certains cas d'usage spécifiques, mais reste inaccessible pour la majorité sans compromis techniques ou financiers » (16 déc. 2025) — https://www.theodo.com/blog/le-mythe-de-lia-auto-hebergee ‖ Listé « Partner - CEO Theodo Fintech » (nov. 2026) — https://www.theodo.com/nos-leaders ‖ Theodo publie un « Fintech Radar » (8 juin 2026) — https://www.theodo.com/nos-livres-blancs",
   "accroche": "Vous écriviez que l'IA auto-hébergée « reste inaccessible pour la majorité ». Il existe une troisième voie : pseudonymiser localement les données clients et continuer à utiliser Claude. Pour vos clients fintech, cela vaut-il un échange ?",
   "qualif_commentaire": "Décideur confirmé (page leaders 2026) ; prise de position publique directement alignée avec la proposition de valeur ; e-mail non trouvé.",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -664,7 +686,8 @@
   "perso_faits": "Le Lean Tech Manifesto (avec Fabrice Bernhard) a été récompensé par le Shingo Institute — https://www.welcometothejungle.com/en/companies/theodo/featured/shingo-publication-award-c0d1cf41 ‖ Le Petit Journal : l'IA multiplie par 3 ou plus la productivité des projets de modernisation chez Theodo (fév. 2026) — https://lepetitjournal.com/londres/communaute/reinventer-tech-grande-echelle-lean-tech-manifesto-vision-theodo-436100 ‖ Listé « Co-Founder and CEO » (nov. 2026) — https://www.theodo.com/nos-leaders",
   "accroche": "Le Lean Tech Manifesto traque le gaspillage ; l'auto-hébergement d'un LLM juste pour protéger des données clients en est un. Nous pseudonymisons localement avant Claude : un outil pour vos équipes finance, santé et secteur public ?",
   "qualif_commentaire": "CEO confirmé ; décideur ultime, à toucher après Parker / Perrin ; e-mail non trouvé.",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -693,7 +716,8 @@
   "perso_faits": "« On Décrypte » : le sommet mondial sur l'IA de New Delhi, l'IA est « une négociation de puissance » (23 fév. 2026) — https://www.jobteaser.com/fr/companies/onepoint/newsfeed/94895ebe-d9c0-4cb4-9143-9b924e130fdd-on-decrypte-sommet-mondial-sur-lia-a-new-delhi ‖ Ancien directeur de cabinet du secrétaire d'État au Numérique Mounir Mahjoubi, auteur de « La Fin des idoles », CAIO depuis 2023 — https://www.groupeonepoint.com/fr/Personnes/nicolas-gaudemet/ ‖ Speaker du RAISE Summit 2025 — https://tickets.raisesummit.com/2025/speaker/1515436/nicolas-gaudemet",
   "accroche": "Vous décryptiez en février une IA devenue « négociation de puissance ». Pour vos clients publics et bancaires, garder la main commence par les données envoyées à Claude : nous les pseudonymisons localement. Un échange sur vos déploiements ?",
   "qualif_commentaire": "CAIO confirmé (fiche officielle) ; porteur naturel ; e-mail non trouvé (contact@groupeonepoint.com seulement).",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -722,7 +746,8 @@
   "perso_faits": "Recrutement d'Anthony Cirot comme directeur général adjoint (effectif 15 juil. 2026) pour devenir « a leading European player in artificial intelligence, cybersecurity, and sovereign technologies » — https://www.groupeonepoint.com/?p=16036286 ‖ A créé Onepoint à 22 ans — https://www.groupeonepoint.com/fr/Personnes/david-layani/ ‖ Onepoint au Google Cloud Summit 2026 sur l'industrialisation de l'IA et la souveraineté numérique — https://www.jobteaser.com/fr/companies/onepoint/newsfeed/a6b6d5f9-c574-4091-8919-381209d0e602-google-cloud-summit-2026-onepoint-leader-cloud-et-ia-en-europe",
   "accroche": "Onepoint vise le leadership européen en IA, cybersécurité et technologies souveraines. Une brique française de pseudonymisation locale, qui laisse les données clients chez eux avant Claude, s'inscrirait dans cette ambition : seriez-vous ouvert à un échange ?",
   "qualif_commentaire": "Président fondateur confirmé ; trop haut pour un premier contact (passer par Gaudemet) ; page d'annonce Cirot vue en résultat de recherche (lien anglais en 404 au 12/11/2026).",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -751,7 +776,8 @@
   "perso_faits": "Auteur de « Le jardin secret de Claude » sur le « J-space » d'Anthropic et la détection d'intentions de triche — https://www.groupeonepoint.com/fr/publications/le-jardin-secret-de-claude/ ‖ Physicien théoricien de formation (thèse à l'EPFL) — https://www.groupeonepoint.com/fr/Personnes/pirmin-lemberger/",
   "accroche": "Votre analyse du « jardin secret de Claude » regarde ce qui se passe dans le modèle ; nous traitons ce qui y entre, en pseudonymisant localement les données clients. Deux faces de l'IA de confiance : un échange vous tenterait-il ?",
   "qualif_commentaire": "Directeur scientifique confirmé ; influenceur technique plutôt que décideur commercial ; à garder en relais d'expertise.",
-  "score_revu": "C"
+  "score_revu": "C",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -780,7 +806,8 @@
   "perso_faits": "Citation sur la page Claude : des modèles et outils « they can trust with core business operations » (2026) — https://www.devoteam.com/fr/anthropic-claude-partner/ ‖ Group VP et directeur général de Devoteam G Cloud depuis janv. 2022 — https://www.solutions-numeriques.com/decideur-entreprise/lesn-devoteam-renforce-et-structure-son-comite-de-direction-en-france/ ‖ Devoteam : 175+ praticiens certifiés Claude, 11 000+ spécialistes dans 25+ pays EMEA — https://www.devoteam.com/fr/anthropic-claude-partner/",
   "accroche": "Vous voulez des modèles « they can trust with core business operations ». Chez vos clients régulés, cette confiance passe par les données qui quittent le SI : nous les pseudonymisons localement avant Claude. Une brique pour vos squads FDE ?",
   "qualif_commentaire": "VP Groupe confirmé (page Devoteam 2026) ; rôle GCloud depuis 2022 ; e-mail déduit prenom.nom@devoteam.com.",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -809,7 +836,8 @@
   "perso_faits": "Rejoint Devoteam en avril 2024 pour diriger l'agence IA (plan AMPLIFY), polytechnicien et docteur en informatique (août 2024) — https://publicnow.com/view/421E8E67510A5DED744A408E05842ADF1363E00E ‖ « Meet the specialists you'll talk to » : Olivier Mallet, CAIO Devoteam Group (2026) — https://www.devoteam.com/fr/anthropic-claude-partner/",
   "accroche": "Vous êtes l'un des deux spécialistes Claude que Devoteam met en avant, sur une offre « built for regulated industries ». Nous pseudonymisons localement les données sensibles avant l'appel au modèle : un composant à tester avec vos FDE ?",
   "qualif_commentaire": "Spécialiste désigné confirmé (2026) ; titre variable selon les sources (CAIO vs Head of AI Agency) ; e-mail déduit.",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -838,7 +866,8 @@
   "perso_faits": "ASI devient partenaire certifié du Claude Partner Network, niveau Certified, approche « multi-éditeurs » — https://www.asi.fr/actualites/asi-partenaire-certifie-claude-partner-network ‖ Article « Souveraineté numérique et IA générative : jusqu'où les entreprises doivent-elles aller ? » (section « Pas une souveraineté, mais des niveaux d'acceptabilité ») — https://www.asi.fr/blog/souverainete-numerique-ia-generative-jusquou-entreprises-doivent-elles-aller ‖ A repris la présidence d'ASI avec Christophe Péron le 2 janv. 2023 : « une évolution et non une révolution » — https://www.asi.fr/actualites/communique-presse-asi-nouvelle-gouvernance-ambitions-responsables",
   "accroche": "Votre article parle de « niveaux d'acceptabilité » de la souveraineté plutôt que d'un tout-ou-rien. La pseudonymisation locale avant Claude en est un : les données clients restent chez eux. Une brique à proposer dans vos projets Claude ?",
   "qualif_commentaire": "Co-président confirmé (communiqué 2023 + mentions légales) ; ESN société à mission de 450 personnes, approche multi-éditeurs = ouverte aux briques tierces ; niveau Certified seulement.",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 3,
@@ -867,6 +896,7 @@
   "perso_faits": "Co-président d'ASI depuis le 2 janv. 2023 ; avec Cédric Étienne et un collège de 29 cadres, détient 59 % du capital (janv. 2023) — https://www.asi.fr/actualites/communique-presse-asi-nouvelle-gouvernance-ambitions-responsables ‖ ASI partenaire Certified du Claude Partner Network — https://www.asi.fr/actualites/asi-partenaire-certifie-claude-partner-network",
   "accroche": "ASI vient d'entrer dans le Claude Partner Network en promettant un cadre de gouvernance des données. Nous pseudonymisons localement les données clients avant Claude ; seriez-vous ouvert à l'intégrer à cette offre ?",
   "qualif_commentaire": "Co-président (source 2023, non reconfirmé en 2026) ; à vérifier ; contacter plutôt Cédric Étienne.",
-  "score_revu": "C"
+  "score_revu": "C",
+  "relation_linkedin": ""
  }
 ]

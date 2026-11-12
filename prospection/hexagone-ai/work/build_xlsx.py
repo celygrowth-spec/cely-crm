@@ -4,7 +4,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 import os; L = os.path.dirname(os.path.abspath(__file__)) + "/"
 COLS = ["cible","entreprise","site_web","taille","ville","specialite_secteur","prenom","nom","poste","linkedin_url","email","email_generique","format_email_suppose","signal","source_signal","source_contact","perso_angle","score_priorite","statut_verification","date_recherche"]
-PERSO = ["score_revu","maturite_ia","outils_ia_cites","douleur_confidentialite","perso_faits","accroche","qualif_commentaire"]
+PERSO = ["relation_linkedin","score_revu","maturite_ia","outils_ia_cites","douleur_confidentialite","perso_faits","accroche","qualif_commentaire"]
 DNS = ["email_a_utiliser","email_a_utiliser_type","dns_domaine","dns_mx","dns_spf","dns_dmarc","dns_verdict"]
 rows = []
 import sys, unicodedata; sys.path.insert(0, L)

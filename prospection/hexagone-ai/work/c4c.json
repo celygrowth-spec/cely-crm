@@ -26,7 +26,8 @@
   "perso_faits": "Naval Group a repris le capital et la gouvernance de cortAIx France ; une quinzaine d'ingénieurs IA ont rejoint les équipes à Ollioules entre mars et juil. 2026 (21 juil. 2026) — https://naval-group.com/en/interview-cortaix-team-france-defence-ai ‖ Secrétaire générale, membre du comité exécutif, en charge notamment du juridique, contract management, contrôle export, sûreté (gouvernance) — https://www.naval-group.com/fr/gouvernance ‖ Ex-secrétaire générale et directrice juridique groupe d'Altran (depuis 2017), nommée chez Naval Group en janv. 2021 — https://naval-group.com/sites/default/files/2021-01/CP%20-%20Nomination%20G%C3%A9raldine%20Le%20Maire%20FR%20VDEF.pdf",
   "accroche": "Avec cortAIx, Naval Group se dote d'une IA souveraine pour ses systèmes critiques. Pour vos équipes juridiques et contract management, la même exigence vaut : utiliser l'IA générative sans qu'aucune donnée classifiée ou export-contrôlée ne sorte, en mode on-premise.",
   "qualif_commentaire": "Décideure confirmée (SG, COMEX) ; nomination 2021 mais toujours listée sur la page gouvernance ; motif e-mail issu d'un CP 2021 (à confirmer).",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 4,
@@ -55,7 +56,8 @@
   "perso_faits": "Citée dans « Les 100 qui font le Droit 2026 » (Directrice juridique, Groupe Suez) (juin 2026) — https://www.lemondedudroit.fr/les-100/les-100-2026.html ‖ EVP Chief Legal Officer de Suez (juridique, éthique, compliance, gouvernance, audit interne) — https://www.suez.com/en/biography/anne-sophie-le-lay",
   "accroche": "Distinguée parmi « Les 100 qui font le Droit 2026 », vous pilotez le juridique d'un groupe dont les contrats avec les collectivités sont sensibles. Nous permettons à vos juristes d'utiliser ChatGPT ou Claude sans qu'aucune donnée ne quitte Suez.",
   "qualif_commentaire": "Décideure confirmée (CLO, site Suez) ; la citation IA « Les 100 » et la plateforme CoDAI (Microsoft) n'ont pas pu être revérifiées (flipbook non lisible, recherche sans résultat) → score abaissé à B.",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 4,
@@ -84,6 +86,7 @@
   "perso_faits": "Legal 500 GC Powerlist France 2026 : « We notably held an “AI legal hackathon” during which Airbus legal professionals from different teams worked on creating custom AI tools in our GenAI system (Google Gemini) » (2026) — https://www.legal500.com/gc-powerlist/france/john-harrison-6/ ‖ Même profil : « we are also co-leading a Trustworthy AI Steering Committee with our Digital colleagues to ensure that AI at Airbus is developed safely, ethically, and legally » (2026) — https://www.legal500.com/gc-powerlist/france/john-harrison-6/ ‖ Intégration des Public Affairs dans Legal & Compliance (janv. 2024), sujets communs : réglementation IA de l'UE, contrôle export, sanctions — https://www.legal500.com/gc-powerlist/france/john-harrison-6/ ‖ Cité dans « Les 100 qui font le Droit 2026 » (juin 2026) — https://www.lemondedudroit.fr/les-100/les-100-2026.html",
   "accroche": "Vos juristes ont construit leurs propres outils IA sur Gemini lors de votre hackathon juridique. Sur des dossiers contrôle export ou enquêtes, une pseudonymisation locale avant chaque requête permettrait d'aller plus loin sans exposer de données sensibles.",
   "qualif_commentaire": "Décideur confirmé (GC, COMEX ; Legal 500 France 2026) ; Corrigé : signal IA nominatif fort trouvé (hackathon Gemini + Trustworthy AI Steering Committee) → score relevé de C à A ; anglophone : message en anglais conseillé.",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  }
 ]

@@ -26,7 +26,8 @@
   "perso_faits": "Article signé « IA et secret professionnel : pseudonymiser les données clients » (30 avr. 2026) : « La confidentialité n'est pas un obstacle à l'IA, c'est sa condition d'usage. » — https://hayot-expertise.fr/blog/ia-secret-professionnel-pseudonymisation-donnees ‖ Article « IA souveraine ou cloud américain : où traiter vos données financières en 2026 » (21 juin 2026), matrice par sensibilité dont « IA grand public possible après anonymisation » — https://hayot-expertise.fr/blog/ia-souveraine-vs-cloud-us-donnees-finance ‖ Partenaire certifié Pennylane ; « nous utilisons Inqom pour accélérer la production » (2026) — https://hayot-expertise.fr/outils/inqom",
   "accroche": "Dans votre article du 30 avril, vous écrivez que « la confidentialité n'est pas un obstacle à l'IA, c'est sa condition d'usage ». La pseudonymisation que vous décrivez à la main, nous l'automatisons en local avant ChatGPT ou Claude, réidentification comprise.",
   "qualif_commentaire": "Décideur confirmé (fondateur, représentant légal) ; cabinet solo donc budget modeste, mais adéquation parfaite au message : bon candidat early adopter / témoignage. Aucun e-mail nominatif publié (contact@ seulement).",
-  "score_revu": "A"
+  "score_revu": "A",
+  "relation_linkedin": ""
  },
  {
   "cible": 2,
@@ -55,7 +56,8 @@
   "perso_faits": "Page d'accueil : « Des collaborateurs qui utilisent déjà ChatGPT, sans cadre et parfois avec des données clients. » + Lab IA de démonstration avec Claude (2026) — https://worldofnumeric.fr/ ‖ Outil gratuit « Anonymiseur de FEC et de documents » proposé sur le site (2026) — https://worldofnumeric.fr/ ‖ Compta Online (27 mai 2026) : « L'IA n'est pas une fin en soi, c'est un moyen au service de nos clients. […] Nous apprenons en marchant » — https://www.compta-online.com/x-ao8638 ‖ A montré au Congrès national des experts-comptables le gain de temps permis par l'IA (mesinfos.fr) — https://mesinfos.fr/auvergne-rhone-alpes/ia-trois-exemples-pour-faciliter-le-travail-des-experts-comptables-en-quelques-clics-230218.html",
   "accroche": "Votre site décrit des collaborateurs qui utilisent ChatGPT « sans cadre et parfois avec des données clients », et votre anonymiseur de FEC y répond. Pour les cabinets que vous formez, une pseudonymisation locale automatique et réversible pourrait-elle compléter votre offre ?",
   "qualif_commentaire": "Décideure confirmée (directrice de publication, SASU) ; structure solo de formation → à approcher en prescriptrice/partenaire, pas en cliente ; risque : son anonymiseur gratuit recouvre en partie la promesse Hexagone.",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 2,
@@ -84,7 +86,8 @@
   "perso_faits": "Article signé « La Tech' et l'intrapreneuriat ? Ça se passe chez Bewiz » (janv. 2025) : un collaborateur a conçu un logiciel pour le pôle juridique, que le cabinet a racheté — https://www.bewiz.fr/articles/la-tech-et-lintrapreneuriat-ca-se-passe-chez-bewiz ‖ Associée A.-S. Widuch sur la page équipe : nos métiers de communication le seront « de plus en plus avec le déploiement de l'IA » — https://www.bewiz.fr/team",
   "accroche": "Votre article sur l'intrapreneuriat chez Bewiz raconte comment un collaborateur a créé le logiciel du pôle juridique. Le jour où vos équipes brancheront ChatGPT ou Claude sur ces outils, comment garder les dossiers clients hors des serveurs de l'IA ?",
   "qualif_commentaire": "Décideur (associé, signataire d'articles) ; taille confirmée (~50) ; signal IA faible et article daté de janv. 2025 ; e-mail lbenoudiz@bewiz.fr reste déduit (motif nliodenot@bewiz.fr revu sur les mentions légales).",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  },
  {
   "cible": 2,
@@ -113,6 +116,7 @@
   "perso_faits": "Cas client Studeria (2026) : audit sur site en juin 2026, rapport de cadrage de plus de 100 pages, moteurs testés en aveugle avant production — https://www.studeria.fr/cas-clients/aditec-ia-expertise-comptable-outil-production ‖ Même source : « Déploiement de l'ensemble sur une machine virtuelle hébergée chez le cabinet » ; 380 dossiers clients — https://www.studeria.fr/cas-clients/aditec-ia-expertise-comptable-outil-production",
   "accroche": "Le cas Studeria décrit votre exigence : des données sensibles « qui doivent rester chez le cabinet », d'où un déploiement sur votre propre machine virtuelle. Pour les usages hors production, mails, notes, synthèses avec ChatGPT ou Claude, appliquez-vous la même règle ?",
   "qualif_commentaire": "Contact faible : Marc Chezot n'est pas nommé dans le cas client et son statut d'associé/décideur n'est pas confirmé ; pas de site officiel ni d'e-mail ; risque : vient d'investir avec un prestataire IA. Interlocuteur à confirmer avant envoi.",
-  "score_revu": "B"
+  "score_revu": "B",
+  "relation_linkedin": ""
  }
 ]
