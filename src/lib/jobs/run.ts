@@ -15,7 +15,7 @@ import { publicClient, reconcileCalendar, rpc } from "@/lib/appointments/server"
 import { syncGoogleChanges } from "@/lib/appointments/google-sync";
 import { serverRpcKey } from "@/lib/appointments/secrets";
 
-export type JobName = "agenda" | "rappels" | "gmail" | "fireflies";
+export type JobName = "agenda" | "rappels" | "gmail" | "fireflies" | "corbeille";
 
 async function report(sb: SupabaseClient, job: JobName, ok: boolean, error: string | null, result: unknown) {
   await sb.rpc("job_report", { p_server_key: serverRpcKey(), p_job: job, p_ok: ok, p_error: error, p_result: result ?? null });

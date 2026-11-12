@@ -9,6 +9,7 @@ const JOBS = [
   { job: "rappels", label: "Rappels de rendez-vous", what: "Envoie par Gmail les rappels dus (version du rendez-vous vérifiée juste avant)." },
   { job: "gmail", label: "Réception Gmail", what: "Rattache les réponses de vos contacts ; met les relances en pause." },
   { job: "fireflies", label: "Fireflies", what: "Rattrape les appels manqués par le webhook." },
+  { job: "corbeille", label: "Corbeille", what: "Supprime définitivement les éléments à la corbeille depuis plus de 30 jours, avec leurs fichiers." },
 ] as const;
 
 type Row = { job: string; last_started_at: string | null; last_success_at: string | null; last_error: string | null; last_error_at: string | null; last_result: Record<string, unknown> | null };
