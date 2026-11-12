@@ -4,7 +4,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 import os; L = os.path.dirname(os.path.abspath(__file__)) + "/"
 COLS = ["cible","entreprise","site_web","taille","ville","specialite_secteur","prenom","nom","poste","linkedin_url","email","email_generique","format_email_suppose","signal","source_signal","source_contact","perso_angle","score_priorite","statut_verification","date_recherche"]
-PERSO = ["relation_linkedin","score_revu","maturite_ia","outils_ia_cites","douleur_confidentialite","perso_faits","accroche","qualif_commentaire"]
+PERSO = ["origine","relation_linkedin","score_revu","maturite_ia","outils_ia_cites","douleur_confidentialite","perso_faits","accroche","qualif_commentaire"]
 DNS = ["email_a_utiliser","email_a_utiliser_type","dns_domaine","dns_mx","dns_spf","dns_dmarc","dns_verdict"]
 rows = []
 import sys, unicodedata; sys.path.insert(0, L)
@@ -25,6 +25,7 @@ for f in [f for f in FILES if os.path.exists(L+f+".json")]:
         r["email_a_utiliser"], r["email_a_utiliser_type"] = email_envoi(r)
         dom = r["email_a_utiliser"].split("@")[-1].lower() if r["email_a_utiliser"] else email_domain(r)
         r["dns_domaine"] = dom; r.update(DNSC.get(dom, {}))
+        r["origine"] = "relations LinkedIn de Mariia" if f.startswith("c5") else "recherche web (sites publics)"
         r["score_v1"] = r["score_priorite"]
         if r.get("score_revu") in ("A","B","C"): r["score_priorite"] = r["score_revu"]
         r["segment"] = f.upper(); rows.append(r)
@@ -44,16 +45,16 @@ def sheet(ws, data, head):
     ws.freeze_panes = "C2"; ws.auto_filter.ref = ws.dimensions
 wb = Workbook(); s = wb.active; s.title = "Synthèse"
 from collections import Counter
-s.append(["Hexagone AI × Cely — Listes M1 — V2 qualifiée + personnalisation (recherche du 2026-11-12)"]); s["A1"].font = Font(bold=True, size=14)
+s.append(["Hexagone AI × Cely — Listes M1 — V3 : recherche web + relations LinkedIn de Mariia (2026-11-12)"]); s["A1"].font = Font(bold=True, size=14)
 s.append([]); s.append(["Cible","Objectif","Obtenus","A","B","C","Vérifié","Déduit","À vérifier","Avec LinkedIn","E-mail publié","E-mail déduit","Générique seul","Domaine sans MX"])
 for c in s[3]: c.font = Font(bold=True)
 for r in rows: r.setdefault("score_revu","")
 names = {1:"1 · Avocats d'affaires",2:"2 · Expertise comptable",3:"3 · Partenaires Anthropic",4:"4 · Directions juridiques"}
-goal = {1:55,2:35,3:30,4:30}
+goal = {1:100,2:100,3:100,4:50}
 for k in [1,2,3,4]:
     d = [r for r in rows if int(r["cible"])==k]; sc = Counter(r["score_priorite"] for r in d); st = Counter(r["statut_verification"] for r in d)
     s.append([names[k], goal[k], len(d), sc["A"], sc["B"], sc["C"], st["vérifié"], st["déduit"], st["à vérifier"], sum(1 for r in d if r.get("linkedin_url")), sum(1 for r in d if r.get("email")), sum(1 for r in d if r["email_a_utiliser_type"].startswith("déduit")), sum(1 for r in d if r["email_a_utiliser_type"]=="générique"), sum(1 for r in d if r.get("dns_verdict","").startswith("PAS DE MX"))])
-s.append(["TOTAL", 150, len(rows), *[sum(1 for r in rows if r["score_priorite"]==x) for x in "ABC"], *[sum(1 for r in rows if r["statut_verification"]==x) for x in ["vérifié","déduit","à vérifier"]], sum(1 for r in rows if r.get("linkedin_url")), sum(1 for r in rows if r.get("email")), sum(1 for r in rows if r["email_a_utiliser_type"].startswith("déduit")), sum(1 for r in rows if r["email_a_utiliser_type"]=="générique"), sum(1 for r in rows if r.get("dns_verdict","").startswith("PAS DE MX"))])
+s.append(["TOTAL", 350, len(rows), *[sum(1 for r in rows if r["score_priorite"]==x) for x in "ABC"], *[sum(1 for r in rows if r["statut_verification"]==x) for x in ["vérifié","déduit","à vérifier"]], sum(1 for r in rows if r.get("linkedin_url")), sum(1 for r in rows if r.get("email")), sum(1 for r in rows if r["email_a_utiliser_type"].startswith("déduit")), sum(1 for r in rows if r["email_a_utiliser_type"]=="générique"), sum(1 for r in rows if r.get("dns_verdict","").startswith("PAS DE MX"))])
 s.append([])
 NOTES = open(L+"notes_v1.txt").read().splitlines() if os.path.exists(L+"notes_v1.txt") else []
 for line in NOTES: s.append([line])
@@ -63,6 +64,8 @@ sheet(wb.create_sheet("Tous"), rows, HEAD)
 for k in [1,2,3,4]:
     sheet(wb.create_sheet(f"Cible {k}"), [r for r in rows if int(r["cible"])==k], HEAD)
 sheet(wb.create_sheet("Accroches"), [r for r in rows if r.get("accroche")], ["cible","score_priorite","entreprise","prenom","nom","poste","email_a_utiliser","maturite_ia","douleur_confidentialite","accroche","perso_faits","linkedin_url"])
+RM = [r for r in rows if r["origine"].startswith("relations")]
+sheet(wb.create_sheet("Relations Mariia"), RM, ["cible","score_priorite","entreprise","prenom","nom","poste","relation_linkedin","email_a_utiliser","dns_verdict","accroche","qualif_commentaire","linkedin_url"])
 if os.path.exists(L+"retires_v2.json"):
     R = json.load(open(L+"retires_v2.json"))
     sheet(wb.create_sheet("Retirés V2"), R, ["_fichier","cible","entreprise","prenom","nom","poste","qualif_commentaire","source_contact"])
@@ -101,10 +104,10 @@ P = [
 ]
 if os.path.exists(L+"pistes_v1.json"): P = [tuple(x) for x in json.load(open(L+"pistes_v1.json"))]
 sheet(wb.create_sheet("Pistes à creuser"), [dict(cible=a, piste=b, pourquoi=c) for a,b,c in P], ["cible","piste","pourquoi"])
-out = L + "../Hexagone_AI_leads_M1_V2.xlsx"; wb.save(out)
+out = L + "../Hexagone_AI_leads_M1_V3.xlsx"; wb.save(out)
 # Lemlist : uniquement les lignes avec une adresse à utiliser (nominative publiée > déduite d'un motif observé > générique) sur un domaine qui a un MX
 send = [r for r in rows if not str(r.get("qualif_commentaire","")).upper().startswith("À RETIRER") and r["email_a_utiliser"] and not r.get("dns_verdict","").startswith(("PAS DE MX","ERREUR"))]
-with open(L + "../Hexagone_AI_leads_M1_V2_lemlist.csv","w",newline="",encoding="utf-8-sig") as f:
-    w = csv.DictWriter(f, fieldnames=COLS+["email_a_utiliser","email_a_utiliser_type","dns_verdict","accroche","douleur_confidentialite","maturite_ia","perso_faits"], extrasaction="ignore"); w.writeheader(); [w.writerow(r) for r in send]
+with open(L + "../Hexagone_AI_leads_M1_V3_lemlist.csv","w",newline="",encoding="utf-8-sig") as f:
+    w = csv.DictWriter(f, fieldnames=COLS+["email_a_utiliser","email_a_utiliser_type","dns_verdict","origine","relation_linkedin","accroche","douleur_confidentialite","maturite_ia","perso_faits"], extrasaction="ignore"); w.writeheader(); [w.writerow(r) for r in send]
 print("lemlist:", len(send))
 print(out, len(rows))

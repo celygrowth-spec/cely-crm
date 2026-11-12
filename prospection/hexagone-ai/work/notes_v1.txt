@@ -1,3 +1,12 @@
+V3 (2026-11-12) — ajout des relations LinkedIn de Mariia :
+• Source : export « Connections.csv » de Mariia (3 935 relations, entreprise + poste), croisé avec l'export de ses messages (dates seulement, contenu retiré) et la liste des personnes qu'elle suit. Les exports bruts ne sont PAS dans le dépôt (confidentiels).
+• 475 relations classées dans les 4 cibles par mots-clés → 425 après filtres (exclusions SPEC, institutions, étudiants, indépendants sans cabinet, déjà présents) → qualifiées une par une sur les sites officiels → 169 retenues (fichiers c5a à c5f, colonne origine = « relations LinkedIn de Mariia »).
+• Écartées surtout : hors France (~90), non-décideurs (~50), structure introuvable (~50), hors droit des affaires, éditeurs legaltech, grands cabinets sans signal IA.
+• Colonne relation_linkedin : historique avec Mariia → « a répondu » = relance tiède (relire l'échange avant) ; « 3 messages sans réponse » = passer par e-mail avec un autre angle ; « relation sans échange » = premier contact.
+• E-mails : publiés sur le site du cabinet ou dans l'annuaire public du Barreau de Paris (contrôlé : 14 adresses de l'annuaire revérifiées via son API publique avocatparis.org/api/annuaire, 14/14 OK ; 15/20 adresses de sites tirées au hasard retrouvées directement, les 5 autres étaient des adresses de l'annuaire) ; aucune adresse personnelle (gmail, etc.).
+• Retirés en V3 : Vincent Fauchoux (plus sur la page équipe de DDG), François Gorriez (dirige l'éditeur LAWXER). Pierre Hoffman gardé : ancien bâtonnier (bâtonnier 2026 = Louis Degos).
+• À vérifier : Valérie Bensoussan (passage MMLaw → Sevenveils déduit), Etienne Ferré (Lifen, poste de DPO à confirmer), RX Global (groupe RELX), Action Avocats (article IA non signé), Tiphaine Le Berre Boivin (a répondu, cabinet introuvable).
+
 V2 (passe qualification + personnalisation, 2026-11-12) :
 • Chaque contact a 7 champs de plus : score_revu (remplace le score V1, gardé en score_v1), maturite_ia (0 aucune trace / 1 parle d'IA / 2 utilise un outil nommé / 3 construit ou vend une IA), outils_ia_cites, douleur_confidentialite, perso_faits (2-4 faits datés, chacun avec son URL), accroche (≤ 45 mots, bâtie uniquement sur ces faits), qualif_commentaire.
 • Contrôle : sur 40 citations « » tirées au hasard parmi 311, 38 sont présentes sur la page citée ; les 2 autres sont sur des pages en JavaScript que je n'ai pas pu relire.
