@@ -1,3 +1,9 @@
+V6 (2026-11-13) — plus de leads contactables :
+• 25 leads auparavant sans canal ont reçu une adresse (21 déduites d'une adresse nominative observée sur le domaine, 4 génériques) ; 5 sont « à vérifier » (format sous réserve).
+• 77 nouveaux leads, e-mail obligatoire : boutiques d'affaires parisiennes (24), cabinets IT/data/PI/social Paris et régions (23), experts-comptables (14), directions juridiques / DPO d'ETI (16). Signal IA quand il existe, sinon TEST À FROID (décideur vérifié, accroche liée au métier).
+• Contrôle : 14/16 e-mails tirés au hasard retrouvés sur la source ; les 2 autres étaient des adresses déduites mal classées, corrigées.
+• Les noms des 8 DPO issus du registre open data de la CNIL ont été reconstitués à partir de l'adresse : statut « déduit », orthographe à vérifier.
+
 Segment TEST À FROID (13/11) : 23 décideurs dans la cible mais sans signal IA public (fichier c9a), score C, accroche liée au métier (guide CNB / secret professionnel), sans fait personnalisé. 19 vérifiés (annuaire du Barreau de Paris ou site de la structure) forment la campagne V1-D, à comparer avec les campagnes A.
 
 V5 (2026-11-13) — compléments pour viser 340-350 :

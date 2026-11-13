@@ -3,7 +3,7 @@
 5 LinkedIn uniquement : leads sans adresse mais avec un profil LinkedIn. Les autres = non contactables tels quels."""
 import openpyxl, csv, re, os, json, collections
 L = os.path.dirname(os.path.abspath(__file__)) + "/"
-wb = openpyxl.load_workbook(L + "../Hexagone_AI_leads_M1_V5.xlsx"); ws = wb["Tous"]
+wb = openpyxl.load_workbook(L + "../Hexagone_AI_leads_M1_V6.xlsx"); ws = wb["Tous"]
 h = [c.value for c in ws[1]]; rows = [dict(zip(h, r)) for r in ws.iter_rows(min_row=2, values_only=True)]
 CAMP = {1: "1 · Avocats", 2: "2 · Experts-comptables", 3: "3 · Partenaires Anthropic", 4: "4 · Directions juridiques", 5: "5 · LinkedIn uniquement"}
 FILE = {1: "C1_avocats", 2: "C2_experts_comptables", 3: "C3_partenaires_anthropic", 4: "C4_directions_juridiques", 5: "C5_linkedin_uniquement"}

@@ -4,7 +4,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 B='/home/user/cely-crm/prospection/hexagone-ai/'
-src=openpyxl.load_workbook(B+'Hexagone_AI_leads_M1_V5.xlsx'); ws=src['Tous']
+src=openpyxl.load_workbook(B+'Hexagone_AI_leads_M1_V6.xlsx'); ws=src['Tous']
 h=[c.value for c in ws[1]]; L=[dict(zip(h,r)) for r in ws.iter_rows(min_row=2,values_only=True)]
 import glob
 FILECAMP={'C1':'1 · Avocats','C2':'2 · Experts-comptables','C3':'3 · Partenaires Anthropic','C4':'4 · Directions juridiques','C5':'5 · LinkedIn uniquement'}
@@ -65,12 +65,12 @@ def colorize(wsx,head,n,start=1):
 wb=Workbook()
 # ---------- Lisez-moi
 rd=wb.active; rd.title='Lisez-moi'
-lines=[('Hexagone AI × Cely — Prospects et campagnes',True,14),('Mis à jour le 13/11/2026 · 346 prospects · 5 campagnes, tous les prospects contactables sont dedans (293) · aucun prospect déjà contacté par Mariia',False,10),('',False,10),
+lines=[('Hexagone AI × Cely — Prospects et campagnes',True,14),('Mis à jour le 13/11/2026 · 423 prospects · 5 campagnes, tous les prospects contactables sont dedans (395) · aucun prospect déjà contacté par Mariia',False,10),('',False,10),
 ('LES ONGLETS',True,11),
 ('Tableau de bord — les chiffres clés (se recalculent si vous modifiez les onglets).',False,10),
 ('Campagnes — les 5 campagnes : pour qui, quel angle, quelles étapes, combien de prospects.',False,10),
-('Prospects par campagne — les 293 prospects contactables, rangés par campagne, avec l\'accroche de chacun et une colonne Statut à mettre à jour.',False,10),
-('Tous les leads — les 346 prospects avec leur campagne (ou « Non contactable » s\'il n\'y a ni e-mail ni LinkedIn).',False,10),
+('Prospects par campagne — les 395 prospects contactables, rangés par campagne, avec l\'accroche de chacun et une colonne Statut à mettre à jour.',False,10),
+('Tous les leads — les 423 prospects avec leur campagne (ou « Non contactable » s\'il n\'y a ni e-mail ni LinkedIn).',False,10),
 ('Séquences — le texte exact de chaque e-mail / message LinkedIn, étape par étape.',False,10),
 ('Retirés — les prospects écartés et pourquoi.',False,10),('',False,10),
 ('LES 5 CAMPAGNES',True,11),
@@ -181,13 +181,13 @@ db=wb.create_sheet('Tableau de bord',1)
 T="'Tous les leads'"
 db['A1']='Tableau de bord — prospects Hexagone AI'; db['A1'].font=Font(name='Arial',size=14,bold=True,color='1F3864')
 db['A2']='Calculé à partir de l\'onglet « Tous les leads » (se met à jour si vous le modifiez).'; db['A2'].font=Font(name='Arial',size=9,italic=True)
-hd=['Cible','Prospects','Priorité A','Priorité B','Priorité C','Avec e-mail utilisable','Dans une campagne','Nouveaux leads V4 (13/11)']
+hd=['Cible','Prospects','Priorité A','Priorité B','Priorité C','Avec e-mail utilisable','Dans une campagne','Dont test à froid']
 for j,x in enumerate(hd,1):
     c=db.cell(4,j,x); c.font=HF; c.fill=NAVY; c.alignment=Alignment(wrap_text=True,vertical='center')
 for i,cb in enumerate(['Avocats','Experts-comptables','Partenaires Anthropic','Directions juridiques'],5):
     db.cell(i,1,cb).font=ARB
     f=[f'=COUNTIF({T}!$C:$C,A{i})',f'=COUNTIFS({T}!$C:$C,A{i},{T}!$B:$B,"A")',f'=COUNTIFS({T}!$C:$C,A{i},{T}!$B:$B,"B")',f'=COUNTIFS({T}!$C:$C,A{i},{T}!$B:$B,"C")',
-       f'=COUNTIFS({T}!$C:$C,A{i},{T}!$K:$K,"OK")',f'=COUNTIFS({T}!$C:$C,A{i},{T}!$A:$A,"<>Non contactable*")',f'=COUNTIFS({T}!$C:$C,A{i},{T}!$N:$N,"Recherche V4*")']
+       f'=COUNTIFS({T}!$C:$C,A{i},{T}!$K:$K,"OK")',f'=COUNTIFS({T}!$C:$C,A{i},{T}!$A:$A,"<>Non contactable*")',f'=COUNTIFS({T}!$C:$C,A{i},{T}!$U:$U,"TEST À FROID*")']
     for j,x in enumerate(f,2): db.cell(i,j,x).font=AR
 db.cell(9,1,'TOTAL').font=ARB
 for j in range(2,9):

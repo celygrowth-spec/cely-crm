@@ -7,10 +7,10 @@ Pied de chaque e-mail : « Si vous ne souhaitez plus recevoir de messages de ma 
 
 | Campagne | Fichier | Prospects | Étapes |
 |---|---|---|---|
-| 1 · Avocats | C1_avocats.csv | 150 | J0 e-mail · J2 invitation LinkedIn · J5 relance · J12 clôture |
-| 2 · Experts-comptables | C2_experts_comptables.csv | 44 | J0 e-mail · J2 invitation LinkedIn · J5 relance · J12 clôture |
-| 3 · Partenaires Anthropic | C3_partenaires_anthropic.csv | 41 | J0 e-mail · J2 invitation LinkedIn · J6 relance · J13 clôture |
-| 4 · Directions juridiques | C4_directions_juridiques.csv | 34 | J0 e-mail · J3 invitation LinkedIn · J8 relance · J15 clôture |
+| 1 · Avocats | C1_avocats.csv | 197 | J0 e-mail · J2 invitation LinkedIn · J5 relance · J12 clôture |
+| 2 · Experts-comptables | C2_experts_comptables.csv | 58 | J0 e-mail · J2 invitation LinkedIn · J5 relance · J12 clôture |
+| 3 · Partenaires Anthropic | C3_partenaires_anthropic.csv | 42 | J0 e-mail · J2 invitation LinkedIn · J6 relance · J13 clôture |
+| 4 · Directions juridiques | C4_directions_juridiques.csv | 74 | J0 e-mail · J3 invitation LinkedIn · J8 relance · J15 clôture |
 | 5 · LinkedIn uniquement | C5_linkedin_uniquement.csv | 24 | J0 visite + invitation · J1 message (si accepté) · J6 relance |
 
 ---
