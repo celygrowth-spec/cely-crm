@@ -100,9 +100,9 @@
   "nom": "Sujkowski",
   "poste": "Avocat associé fondateur",
   "linkedin_url": "https://www.linkedin.com/in/jsujkowski",
-  "email": "",
+  "email": "contact@ally-avocats.fr",
   "email_generique": "contact@ally-avocats.fr",
-  "format_email_suppose": "annuaire du Barreau de Paris : contact@ally-avocats.fr (pas d'adresse nominative publiée)",
+  "format_email_suppose": "publié : annuaire public du Barreau de Paris (https://www.avocatparis.org/api/annuaire/avocat?cnbf=FpYw7Ub8TsNX4v7sDxEavQ%3D%3D)",
   "signal": "Podcast du cabinet LEXpérience EP5 « IA en entreprise : comment l'intégrer sans risque ? » (15 juin 2026) ; article sur IA générative et droit d'auteur.",
   "source_signal": "https://www.ally-avocats.fr/blog/lexperience-ep5-ia-en-entreprise/",
   "source_contact": "https://www.ally-avocats.fr/mentions-legales/",
@@ -116,7 +116,7 @@
   "douleur_confidentialite": "conseille ses clients sur l'intégration « sans risque » de l'IA : même question en interne pour les dossiers PI/RGPD (déduit)",
   "perso_faits": "Podcast LEXpérience EP5 « IA en entreprise : comment l'intégrer sans risque ? » (juin 2026) — https://www.ally-avocats.fr/blog/lexperience-ep5-ia-en-entreprise/ ‖ Hors-série été 2026 : Jérôme Sujkowski et Clotilde Biron, « les deux associés fondateurs », racontent la création du cabinet — https://www.ally-avocats.fr/feed/ ‖ Directeur de la publication du site — https://www.ally-avocats.fr/mentions-legales/",
   "accroche": "Votre épisode LEXpérience de juin posait la bonne question : comment intégrer l'IA sans risque. Je serais curieux de savoir comment vous y répondez pour vos propres dossiers, quand des données clients partent vers ChatGPT ou Claude.",
-  "qualif_commentaire": "Décideur confirmé (associé fondateur, directeur de publication) ; petit cabinet très orienté innovation ; 2e contact possible : Manon Chastel (collaboratrice).",
+  "qualif_commentaire": "E-mail nominatif ajouté depuis l'annuaire du Barreau de Paris (13/11). Décideur confirmé (associé fondateur, directeur de publication) ; petit cabinet très orienté innovation ; 2e contact possible : Manon Chastel (collaboratrice).",
   "score_revu": "B"
  },
  {
@@ -205,7 +205,7 @@
   "outils_ia_cites": "",
   "douleur_confidentialite": "contrats et contentieux commerciaux des clients (déduit du métier)",
   "perso_faits": "Barreau de Rennes, cabinet 8 place du Colombier ; droit commercial, des affaires, concurrence et arbitrage — https://consultation.avocat.fr/avocat-rennes/yann-heyraud-59102.html",
-  "accroche": "Beaucoup d'avocats d'affaires indépendants utilisent déjà ChatGPT pour gagner du temps, sans solution claire sur le secret professionnel ; est-ce un sujet que vous vous posez dans votre pratique à Rennes ?",
+  "accroche": "Le guide du CNB de mars 2026 encadre l'usage de l'IA par les avocats : dans votre pratique d'affaires à Rennes, comment utilisez-vous ChatGPT ou Claude sans exposer les dossiers de vos clients ?",
   "qualif_commentaire": "Décideur (solo) ; aucun e-mail pro trouvé ; aucun signal ; priorité faible.",
   "score_revu": "C"
  },
@@ -235,7 +235,7 @@
   "outils_ia_cites": "",
   "douleur_confidentialite": "levées de fonds et cap tables de startups clientes (déduit du métier)",
   "perso_faits": "Équipe Evolve : Simon Azan, droit des sociétés, levées de fonds, fusions-acquisitions — https://www.evolve-avocats.com/equipe/ ‖ Référence : levée de fonds d'une start-up auprès de business angels pour 2 M€ — https://www.evolve-avocats.com/",
-  "accroche": "Vous accompagnez des startups dans leurs levées ; vos clients utilisent l'IA tous les jours, et beaucoup de cabinets aussi, sans filet. Je peux vous montrer comment travailler une data room avec ChatGPT sans exposer les noms ni les chiffres.",
+  "accroche": "Vous accompagnez des startups dans leurs levées : je peux vous montrer comment travailler une data room avec ChatGPT ou Claude sans exposer les noms ni les chiffres de vos clients.",
   "qualif_commentaire": "Statut d'associé non affiché sur le site (4 avocats, probable cofondateur) ; Emilie Hounkpatin (même cabinet, gmail) non retenue ; signal IA faible et daté.",
   "score_revu": "C"
  },

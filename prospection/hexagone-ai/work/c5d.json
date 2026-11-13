@@ -40,9 +40,9 @@
   "nom": "Meneghini",
   "poste": "Avocat associé",
   "linkedin_url": "https://www.linkedin.com/in/manuel-meneghini",
-  "email": "",
+  "email": "mm@lincoln-avocats.com",
   "email_generique": "contact@lincoln-avocats.com",
-  "format_email_suppose": "",
+  "format_email_suppose": "publié : annuaire public du Barreau de Paris (https://www.avocatparis.org/api/annuaire/avocat?cnbf=BS%2FnaiPj6ocG9xV8Us6xDA%3D%3D)",
   "signal": "Le cabinet déclare suivre l'impact des nouvelles technologies sur l'assurance (« cyber risque, Iot, intelligence artificielle, détection de fraude ») ; un associé est membre d'Avotech.",
   "source_signal": "https://lincoln-avocats.com/equipe/",
   "source_contact": "profil LinkedIn (export relations de Mariia) — https://www.linkedin.com/in/manuel-meneghini",
@@ -56,7 +56,7 @@
   "douleur_confidentialite": "Dossiers d'assureurs : données de santé (prévoyance) et sinistres (déduit du métier)",
   "perso_faits": "Lincoln Avocats intervient en droit des assurances depuis 1999 et suit l'IA et la détection de fraude — https://lincoln-avocats.com/equipe/",
   "accroche": "Vos dossiers de prévoyance contiennent des données de santé, et le cabinet suit déjà l'IA dans l'assurance. Nous permettons d'utiliser ChatGPT ou Claude sans qu'aucune donnée client ne quitte le cabinet : un sujet pour vous ?",
-  "qualif_commentaire": "Associé (poste déclaré LinkedIn, non listé nommément sur la page équipe) ; signal IA générique au niveau cabinet.",
+  "qualif_commentaire": "E-mail nominatif ajouté depuis l'annuaire du Barreau de Paris (13/11). Associé (poste déclaré LinkedIn, non listé nommément sur la page équipe) ; signal IA générique au niveau cabinet.",
   "score_revu": "C"
  },
  {
@@ -130,9 +130,9 @@
   "nom": "Smadja",
   "poste": "Avocat associé, co-fondateur (département Corporate - M&A - Private Equity)",
   "linkedin_url": "https://www.linkedin.com/in/david-smadja-avocat",
-  "email": "",
+  "email": "d.smadja@djs-avocats.com",
   "email_generique": "contact@milestone-avocats.com",
-  "format_email_suppose": "",
+  "format_email_suppose": "publié : annuaire public du Barreau de Paris (https://www.avocatparis.org/api/annuaire/avocat?cnbf=V3kfbpaVP9IZjmm3cE6pRA%3D%3D)",
   "signal": "Tribune de Jade Griffaton (avocate counsel du cabinet) dans Stratégies sur le Code de bonnes pratiques de l'IA à usage général, relayée sur le site.",
   "source_signal": "https://milestone-avocats.com/vers-un-code-de-bonnes-pratiques-de-lia-a-usage-general/",
   "source_contact": "https://milestone-avocats.com/djs-avocats-devient-milestone-une-nouvelle-vision-du-conseil-juridique-pour-les-entreprises-ambitieuses/",
@@ -146,7 +146,7 @@
   "douleur_confidentialite": "Opérations M&A et private equity sous NDA (déduit du métier)",
   "perso_faits": "Création de Milestone par Camille Billard et David Smadja, ex-DJS Avocats — https://milestone-avocats.com/djs-avocats-devient-milestone-une-nouvelle-vision-du-conseil-juridique-pour-les-entreprises-ambitieuses/ ‖ A conseillé CheckMyGuest lors de son acquisition par OYO — https://milestone-avocats.com/ ‖ Tribune IA de Jade Griffaton dans Stratégies — https://milestone-avocats.com/vers-un-code-de-bonnes-pratiques-de-lia-a-usage-general/",
   "accroche": "Sur une opération comme CheckMyGuest/OYO, la data room ne peut pas partir chez OpenAI. Nous permettons aux équipes M&A d'utiliser ChatGPT ou Claude avec une pseudonymisation locale : aucune donnée client ne quitte le cabinet.",
-  "qualif_commentaire": "Décideur confirmé (associé co-fondateur) ; boutique corporate/PE ; signal IA au niveau cabinet (counsel), pas nominatif.",
+  "qualif_commentaire": "E-mail nominatif ajouté depuis l'annuaire du Barreau de Paris (13/11). Décideur confirmé (associé co-fondateur) ; boutique corporate/PE ; signal IA au niveau cabinet (counsel), pas nominatif.",
   "score_revu": "B"
  },
  {

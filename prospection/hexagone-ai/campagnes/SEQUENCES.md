@@ -2,16 +2,16 @@
 
 Expéditrice : **Mariia Zameshina, cofondatrice d'Hexagone AI**. Un fichier CSV par campagne dans ce dossier.
 Variables : `{{salutation}}` (« Maître Nom » ou « Bonjour Prénom »), `{{ligne_attention}}` (rempli seulement pour les adresses génériques), `{{accroche}}` (phrase personnalisée et sourcée de chaque prospect), `{{companyName}}`, `{{firstName}}`.
-Colonne `a_verifier = oui` : prospect dont le poste ou l'adresse reste à confirmer — à relire (ou retirer) avant l'envoi.
+Les 350 prospects des campagnes sont tous vérifiés ; les 45 « à vérifier » sont dans RESERVE.csv.
 Pied de chaque e-mail : « Si vous ne souhaitez plus recevoir de messages de ma part, répondez simplement "stop". »
 
 | Campagne | Fichier | Prospects | Étapes |
 |---|---|---|---|
-| 1 · Avocats | C1_avocats.csv | 197 | J0 e-mail · J2 invitation LinkedIn · J5 relance · J12 clôture |
-| 2 · Experts-comptables | C2_experts_comptables.csv | 58 | J0 e-mail · J2 invitation LinkedIn · J5 relance · J12 clôture |
-| 3 · Partenaires Anthropic | C3_partenaires_anthropic.csv | 42 | J0 e-mail · J2 invitation LinkedIn · J6 relance · J13 clôture |
-| 4 · Directions juridiques | C4_directions_juridiques.csv | 74 | J0 e-mail · J3 invitation LinkedIn · J8 relance · J15 clôture |
-| 5 · LinkedIn uniquement | C5_linkedin_uniquement.csv | 24 | J0 visite + invitation · J1 message (si accepté) · J6 relance |
+| 1 · Avocats | C1_avocats.csv | 181 | J0 e-mail · J2 invitation LinkedIn · J5 relance · J12 clôture |
+| 2 · Experts-comptables | C2_experts_comptables.csv | 50 | J0 e-mail · J2 invitation LinkedIn · J5 relance · J12 clôture |
+| 3 · Partenaires Anthropic | C3_partenaires_anthropic.csv | 40 | J0 e-mail · J2 invitation LinkedIn · J6 relance · J13 clôture |
+| 4 · Directions juridiques | C4_directions_juridiques.csv | 61 | J0 e-mail · J3 invitation LinkedIn · J8 relance · J15 clôture |
+| 5 · LinkedIn uniquement | C5_linkedin_uniquement.csv | 18 | J0 visite + invitation · J1 message (si accepté) · J6 relance |
 
 ---
 

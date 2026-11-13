@@ -1,3 +1,7 @@
+SÉLECTION 350 (13/11) : les 350 meilleurs prospects contactables sont dans les 5 campagnes (tri : vérifiés d'abord, puis score A > B > C, puis e-mail nominatif publié > déduit > générique > LinkedIn, puis maturité IA). Les 45 autres sont dans campagnes/RESERVE.csv (43 « à vérifier », 2 LinkedIn seulement).
+• Audit des 423 accroches : aucune vide, aucune > 50 mots, aucune fausse référence à un échange ; 4 généralités non prouvables réécrites ; 30 citations tirées au hasard contrôlées sur leur source (PDF et pages JavaScript compris) : 3 corrigées pour coller mot pour mot à la source.
+• 27 avocats passés d'une adresse générique (ou d'aucune) à une adresse nominative publiée dans l'annuaire du Barreau de Paris.
+
 V6 (2026-11-13) — plus de leads contactables :
 • 25 leads auparavant sans canal ont reçu une adresse (21 déduites d'une adresse nominative observée sur le domaine, 4 génériques) ; 5 sont « à vérifier » (format sous réserve).
 • 77 nouveaux leads, e-mail obligatoire : boutiques d'affaires parisiennes (24), cabinets IT/data/PI/social Paris et régions (23), experts-comptables (14), directions juridiques / DPO d'ETI (16). Signal IA quand il existe, sinon TEST À FROID (décideur vérifié, accroche liée au métier).

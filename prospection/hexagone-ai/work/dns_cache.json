@@ -353,6 +353,12 @@
   "dns_dmarc": "oui (p=none)",
   "dns_verdict": "OK"
  },
+ "brl-avocats.com": {
+  "dns_mx": "10 brlavocats-com0i.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=none)",
+  "dns_verdict": "OK"
+ },
  "bruzzodubucq.com": {
   "dns_mx": "0 bruzzodubucq-com.mail.protection.outlook.com. [Microsoft 365]",
   "dns_spf": "oui",
@@ -647,6 +653,12 @@
   "dns_dmarc": "oui (p=reject)",
   "dns_verdict": "OK"
  },
+ "djs-avocats.com": {
+  "dns_mx": "1 djsavocats-com0i.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=none)",
+  "dns_verdict": "OK"
+ },
  "domofrance.fr": {
   "dns_mx": "10 mx07-0050f001.pphosted.com. | 10 mx08-0050f001.pphosted.com. [Proofpoint]",
   "dns_spf": "oui",
@@ -710,7 +722,7 @@
  "elliot.bzh": {
   "dns_mx": "5 mta-gw.infomaniak.ch.",
   "dns_spf": "oui",
-  "dns_dmarc": "oui (p=reject)",
+  "dns_dmarc": "oui (p=none)",
   "dns_verdict": "OK"
  },
  "emargence.fr": {
@@ -989,6 +1001,12 @@
   "dns_dmarc": "non",
   "dns_verdict": "OK (MX) - DMARC absent"
  },
+ "iteanu.law": {
+  "dns_mx": "10 spool.mail.gandi.net. | 50 fb.mail.gandi.net. [Gandi]",
+  "dns_spf": "oui",
+  "dns_dmarc": "non",
+  "dns_verdict": "OK (MX) - DMARC absent"
+ },
  "itlaw.fr": {
   "dns_mx": "1 itlaw-fr.mail.protection.outlook.com. [Microsoft 365]",
   "dns_spf": "oui",
@@ -1074,6 +1092,12 @@
   "dns_verdict": "OK (MX) - DMARC absent"
  },
  "kohenavocats.com": {
+  "dns_mx": "1 smtp.google.com. [Google]",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=none)",
+  "dns_verdict": "OK"
+ },
+ "kohenavocats.fr": {
   "dns_mx": "1 smtp.google.com. [Google]",
   "dns_spf": "oui",
   "dns_dmarc": "oui (p=none)",

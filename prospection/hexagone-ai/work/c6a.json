@@ -70,9 +70,9 @@
   "nom": "Lepigeon",
   "poste": "Avocat associé, Corporate M&A",
   "linkedin_url": "",
-  "email": "",
+  "email": "g.lepigeon@pevensey.com",
   "email_generique": "contact@coblence-avocats.com",
-  "format_email_suppose": "déduit : lepigeon@coblence-avocats.com (motif nom@ observé sur erber@, guardelli@, coppinger@, brugiere@coblence-avocats.com — annuaire Barreau de Paris, ex. https://www.avocatparis.org/api/annuaire/avocat?cnbf=QJC%2BtpY%2BVyb9CYulVufSew%3D%3D). NB : sa fiche BdP affiche encore g.lepigeon@pevensey.com (https://www.avocatparis.org/api/annuaire/avocat?cnbf=WHe38xVSxB3ucJ%2Ffr27zVA%3D%3D)",
+  "format_email_suppose": "publié : annuaire public du Barreau de Paris (https://www.avocatparis.org/api/annuaire/avocat?cnbf=WHe38xVSxB3ucJ%2Ffr27zVA%3D%3D)",
   "signal": "Signe dans Option Droit & Affaires une analyse sur « ce que l'IA déplace dans l'organisation des cabinets d'avocats » (formation, clients, facturation) — relayée par Coblence le 23/09/2026.",
   "source_signal": "https://www.coblence-avocats.com/intelligence-artificielle-et-organisation-des-cabinets-davocats-notre-associe-gregoire-lepigeon-livre-son-analyse-dans-option-droit-affaires/",
   "source_contact": "https://www.coblence-avocats.com/feed/",
@@ -86,7 +86,7 @@
   "douleur_confidentialite": "Data rooms et cessions de PME (ex. Daytona/Profilia, oct. 2026) : informations non publiques sous confidentialité (déduit du métier).",
   "perso_faits": "Analyse dans Option Droit & Affaires : « L'IA ne produit pas du droit, elle produit de la prédiction », impacts sur formation des jeunes, clients et facturation (sept. 2026) — https://www.coblence-avocats.com/intelligence-artificielle-et-organisation-des-cabinets-davocats-notre-associe-gregoire-lepigeon-livre-son-analyse-dans-option-droit-affaires/ ‖ Conseil du cédant dans la cession de Profilia au groupe Oxygène Intérim (oct. 2026) — https://www.coblence-avocats.com/feed/ ‖ Cité parmi les associés distingués Best Law Firms 2027 / IFLR1000 2027 (oct.-nov. 2026) — https://www.coblence-avocats.com/feed/",
   "accroche": "Votre analyse dans Option Droit & Affaires part d'une idée forte : l'IA produit de la prédiction, l'avocat juge. Encore faut-il pouvoir lui confier un premier jet M&A sans exposer la data room : nous pseudonymisons localement avant ChatGPT/Claude.",
-  "qualif_commentaire": "Associé confirmé (site, oct. 2026) ; cabinet ~40 avocats ; incohérence d'adresse e-mail sur la fiche BdP (pevensey.com) à vérifier.",
+  "qualif_commentaire": "E-mail nominatif ajouté depuis l'annuaire du Barreau de Paris (13/11). Associé confirmé (site, oct. 2026) ; cabinet ~40 avocats ; incohérence d'adresse e-mail sur la fiche BdP (pevensey.com) à vérifier.",
   "score_revu": "A"
  },
  {
@@ -490,9 +490,9 @@
   "nom": "Vercken",
   "poste": "Associé",
   "linkedin_url": "",
-  "email": "",
+  "email": "contact@verckengaullier.com",
   "email_generique": "contact@verckengaullier.com",
-  "format_email_suppose": "déduit : gv@verckengaullier.com (motif initiales observé sur fg@verckengaullier.com — annuaire BdP https://www.avocatparis.org/api/annuaire/avocat?cnbf=fg0gFeOIe21HADsST%2FUcUA%3D%3D ; un seul exemple)",
+  "format_email_suppose": "publié : annuaire public du Barreau de Paris (https://www.avocatparis.org/api/annuaire/avocat?cnbf=FMsgvJmana%2FLQuMxwNUrzw%3D%3D)",
   "signal": "Intervient au MaMA Music & Convention à la table ronde ADAMI « Les artistes & l'IA : les clés pour comprendre et agir » (15/10/2026).",
   "source_signal": "https://www.verckengaullier.com/fr/actualites.html",
   "source_contact": "https://www.verckengaullier.com/fr/equipe/1-florencegaullier.html",
@@ -506,7 +506,7 @@
   "douleur_confidentialite": "Contrats d'artistes et de sociétés de gestion collective, contentieux de contrefaçon : informations confidentielles (déduit du métier).",
   "perso_faits": "Table ronde « Les artistes & l'IA : les clés pour comprendre et agir » au MaMA, avec Noémie Enser (15 oct. 2026) — https://www.verckengaullier.com/fr/actualites.html ‖ Le cabinet anime aussi un petit-déjeuner « Organismes assureurs et Règlement sur l'IA » (15 oct. 2026) — https://www.verckengaullier.com/fr/actualites.html ‖ Cabinet associé à la professeure Valérie-Laure Benabou (L'auteur face à l'IA, nov. 2026) — https://www.verckengaullier.com/fr/equipe/1-florencegaullier.html",
   "accroche": "Au MaMA, vous expliquiez aux artistes comment agir face à l'IA. Côté cabinet, l'enjeu est symétrique : utiliser ChatGPT ou Claude sur des contrats d'artistes sans exposer leurs données. Nous pseudonymisons localement, rien ne quitte le cabinet.",
-  "qualif_commentaire": "Associé (site, cabinet à son nom) ; e-mail déduit d'un seul exemple (initiales) ; 2e contact du cabinet.",
+  "qualif_commentaire": "E-mail nominatif ajouté depuis l'annuaire du Barreau de Paris (13/11). Associé (site, cabinet à son nom) ; e-mail déduit d'un seul exemple (initiales) ; 2e contact du cabinet.",
   "score_revu": "B"
  },
  {
@@ -640,9 +640,9 @@
   "nom": "Près",
   "poste": "Associé (cofondateur de Varet Près Killy, intégré à Valther)",
   "linkedin_url": "",
-  "email": "",
+  "email": "xpres@vpk-avocats.com",
   "email_generique": "",
-  "format_email_suppose": "déduit : xpres@valther.com (motif initiale+nom observé sur vvaret@valther.com — BdP https://www.avocatparis.org/api/annuaire/avocat?cnbf=iWs3%2F%2FLF%2F8HS1%2FZe5jd5Fg%3D%3D — et amihaescu@, bcharra@ sur valther.com/equipe). NB : sa fiche BdP affiche encore xpres@vpk-avocats.com",
+  "format_email_suppose": "publié : annuaire public du Barreau de Paris (https://www.avocatparis.org/api/annuaire/avocat?cnbf=6eBCDyY22YvvYHwKBnckwQ%3D%3D)",
   "signal": "Pôle IP/IT de Valther : posts « IA & mise en conformité » et « Droit d'auteur & IA » (30/09/2026).",
   "source_signal": "https://www.valther.com/post/droit-d-auteur-ia-1",
   "source_contact": "https://www.valther.com/team/xavier-pres",
@@ -656,7 +656,7 @@
   "douleur_confidentialite": "Contentieux PI, presse et marché de l'art : pièces et identités confidentielles (déduit du métier).",
   "perso_faits": "Post Valther « Droit d'auteur & IA » sur le jugement de Munich du 31 juil. 2026 (30 sept. 2026) — https://www.valther.com/post/droit-d-auteur-ia-1 ‖ Fiche : avocat, responsable juridique, enseignant-chercheur, fil conducteur l'art et la culture — https://www.valther.com/team/xavier-pres ‖ Cofondateur de Varet Près Killy (2020) avec V. Varet, équipe intégrée à Valther — https://www.valther.com/team/vincent-varet",
   "accroche": "Votre pôle suit l'IA générative jusqu'au jugement de Munich sur l'entraînement des modèles. Pour vos propres dossiers d'art ou de presse, utiliser ChatGPT ou Claude suppose de ne rien exposer : nous pseudonymisons localement, avant tout envoi.",
-  "qualif_commentaire": "Associé confirmé (fiche) ; e-mail déduit ; 2e contact Valther.",
+  "qualif_commentaire": "E-mail nominatif ajouté depuis l'annuaire du Barreau de Paris (13/11). Associé confirmé (fiche) ; e-mail déduit ; 2e contact Valther.",
   "score_revu": "B"
  },
  {

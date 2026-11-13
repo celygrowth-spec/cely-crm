@@ -65,12 +65,12 @@ def colorize(wsx,head,n,start=1):
 wb=Workbook()
 # ---------- Lisez-moi
 rd=wb.active; rd.title='Lisez-moi'
-lines=[('Hexagone AI × Cely — Prospects et campagnes',True,14),('Mis à jour le 13/11/2026 · 423 prospects · 5 campagnes, tous les prospects contactables sont dedans (395) · aucun prospect déjà contacté par Mariia',False,10),('',False,10),
+lines=[('Hexagone AI × Cely — Prospects et campagnes',True,14),('Mis à jour le 13/11/2026 · 423 prospects · 350 dans les 5 campagnes · 45 en réserve · 28 non contactables · aucun prospect déjà contacté par Mariia',False,10),('',False,10),
 ('LES ONGLETS',True,11),
 ('Tableau de bord — les chiffres clés (se recalculent si vous modifiez les onglets).',False,10),
 ('Campagnes — les 5 campagnes : pour qui, quel angle, quelles étapes, combien de prospects.',False,10),
-('Prospects par campagne — les 395 prospects contactables, rangés par campagne, avec l\'accroche de chacun et une colonne Statut à mettre à jour.',False,10),
-('Tous les leads — les 423 prospects avec leur campagne (ou « Non contactable » s\'il n\'y a ni e-mail ni LinkedIn).',False,10),
+('Prospects par campagne — les 350 prospects des campagnes, rangés par campagne, avec l\'accroche de chacun et une colonne Statut à mettre à jour.',False,10),
+('Tous les leads — les 423 prospects avec leur campagne, « Réserve » (à vérifier, hors des 350) ou « Non contactable » (ni e-mail ni LinkedIn).',False,10),
 ('Séquences — le texte exact de chaque e-mail / message LinkedIn, étape par étape.',False,10),
 ('Retirés — les prospects écartés et pourquoi.',False,10),('',False,10),
 ('LES 5 CAMPAGNES',True,11),
@@ -92,8 +92,8 @@ order={}
 rows=[]
 for r in L:
     cp=camp(r)
-    rows.append([cp,r['score_priorite'],CIB[r['cible']],r['entreprise'],r['prenom'],r['nom'],r['poste'],r['ville'],r['email_a_utiliser'] or '',etype(r['email_a_utiliser_type']),deliv(r),r['linkedin_url'] or '',hist(r),'Relations LinkedIn de Mariia' if str(r['origine']).startswith('relations') else ('Recherche V4 (13/11)' if 'V4' in str(r['origine']) else 'Recherche web'),mat(r['maturite_ia']),r['douleur_confidentialite'] or '',r['accroche'] or '',r['signal'] or '',r['perso_faits'] or '',r['source_contact'] or '',r['qualif_commentaire'] or '','À contacter' if not cp.startswith('Non') else ''])
-rows.sort(key=lambda x:(x[0].startswith('Non'),x[0],x[1],x[3] or ''))
+    rows.append([cp,r['score_priorite'],CIB[r['cible']],r['entreprise'],r['prenom'],r['nom'],r['poste'],r['ville'],r['email_a_utiliser'] or '',etype(r['email_a_utiliser_type']),deliv(r),r['linkedin_url'] or '',hist(r),'Relations LinkedIn de Mariia' if str(r['origine']).startswith('relations') else ('Recherche V4 (13/11)' if 'V4' in str(r['origine']) else 'Recherche web'),mat(r['maturite_ia']),r['douleur_confidentialite'] or '',r['accroche'] or '',r['signal'] or '',r['perso_faits'] or '',r['source_contact'] or '',r['qualif_commentaire'] or '','À contacter' if not cp.startswith(('Non','Réserve')) else ''])
+rows.sort(key=lambda x:(x[0].startswith(('Non','Réserve')),x[0],x[1],x[3] or ''))
 tl=wb.create_sheet('Tous les leads')
 table(tl,HT,rows,[30,9,18,28,13,16,30,14,32,18,16,30,24,18,10,45,60,45,60,35,45,16],wrapcols=('Poste','Pourquoi lui (douleur confidentialité)','Accroche (1re phrase de l\'e-mail)','Signal IA','Faits / preuves','À savoir / qualification','Entreprise'))
 colorize(tl,HT,len(rows)); NT=len(rows)
@@ -187,7 +187,7 @@ for j,x in enumerate(hd,1):
 for i,cb in enumerate(['Avocats','Experts-comptables','Partenaires Anthropic','Directions juridiques'],5):
     db.cell(i,1,cb).font=ARB
     f=[f'=COUNTIF({T}!$C:$C,A{i})',f'=COUNTIFS({T}!$C:$C,A{i},{T}!$B:$B,"A")',f'=COUNTIFS({T}!$C:$C,A{i},{T}!$B:$B,"B")',f'=COUNTIFS({T}!$C:$C,A{i},{T}!$B:$B,"C")',
-       f'=COUNTIFS({T}!$C:$C,A{i},{T}!$K:$K,"OK")',f'=COUNTIFS({T}!$C:$C,A{i},{T}!$A:$A,"<>Non contactable*")',f'=COUNTIFS({T}!$C:$C,A{i},{T}!$U:$U,"TEST À FROID*")']
+       f'=COUNTIFS({T}!$C:$C,A{i},{T}!$K:$K,"OK")',f'=COUNTIFS({T}!$C:$C,A{i},{T}!$A:$A,"<>Non contactable*",{T}!$A:$A,"<>Réserve")',f'=COUNTIFS({T}!$C:$C,A{i},{T}!$U:$U,"TEST À FROID*")']
     for j,x in enumerate(f,2): db.cell(i,j,x).font=AR
 db.cell(9,1,'TOTAL').font=ARB
 for j in range(2,9):
@@ -195,7 +195,7 @@ for j in range(2,9):
 hd2=['Prospects par campagne','Prospects']
 for j,x in enumerate(hd2,1):
     c=db.cell(11,j,x); c.font=HF; c.fill=NAVY
-cats=[c for c in ['1 · Avocats','2 · Experts-comptables','3 · Partenaires Anthropic','4 · Directions juridiques','5 · LinkedIn uniquement','Non contactable (ni e-mail ni LinkedIn)']]
+cats=[c for c in ['1 · Avocats','2 · Experts-comptables','3 · Partenaires Anthropic','4 · Directions juridiques','5 · LinkedIn uniquement','Réserve','Non contactable (ni e-mail ni LinkedIn)']]
 for i,cname in enumerate(cats,12):
     db.cell(i,1,cname).font=AR; db.cell(i,2,f'=COUNTIF({T}!$A:$A,A{i})').font=AR
     k=cname[:4]
