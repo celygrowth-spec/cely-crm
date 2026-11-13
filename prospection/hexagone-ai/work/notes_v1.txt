@@ -1,3 +1,10 @@
+V4 (2026-11-13) — consigne : aucun contact déjà approché par Mariia ; leads neufs très qualifiés :
+• 119 contacts retirés : toute personne ayant échangé au moins un message LinkedIn avec Mariia (117 issus de ses relations + Arnaud Touati, Mathieu Bui). Onglet « Retirés V2 ».
+• 96 nouveaux leads (fichiers c6a à c6e), chacun testé contre l'historique de Mariia : avocats 35 (articles IA, conférences, clients d'outils IA), experts-comptables 9, partenaires Anthropic 27 (KPMG, PwC, Capgemini, IBM, BCG, Bain…), directions juridiques 25. Score A ou B uniquement (signal IA nominatif 2025-26 obligatoire).
+• Contrôle : 18/18 e-mails publiés tirés au hasard retrouvés sur la source (site ou API publique de l'annuaire du Barreau de Paris).
+• Experts-comptables : peu d'EC s'expriment publiquement sur l'IA (les contenus sont surtout ceux des éditeurs) → la cible plafonne autour de 50 avec cette exigence.
+• À vérifier : 4 contacts PwC (site bloqué), e-mails déduits avec particule (d'Arabian, de Goursac, Di Marzo), cabinets peut-être < 5 avocats (Boëlle Bouissou, Lazarègue, Firsh, Jacob), Oyat (co-édite TrustFlow → plutôt partenaire), Cogep et Lussan (> 50 avocats, gardés pour signal très fort).
+
 V3 (2026-11-12) — ajout des relations LinkedIn de Mariia :
 • Source : export « Connections.csv » de Mariia (3 935 relations, entreprise + poste), croisé avec l'export de ses messages (dates seulement, contenu retiré) et la liste des personnes qu'elle suit. Les exports bruts ne sont PAS dans le dépôt (confidentiels).
 • 475 relations classées dans les 4 cibles par mots-clés → 425 après filtres (exclusions SPEC, institutions, étudiants, indépendants sans cabinet, déjà présents) → qualifiées une par une sur les sites officiels → 169 retenues (fichiers c5a à c5f, colonne origine = « relations LinkedIn de Mariia »).
