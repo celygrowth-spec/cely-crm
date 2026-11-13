@@ -5,6 +5,12 @@
   "dns_dmarc": "oui (p=quarantine)",
   "dns_verdict": "OK"
  },
+ "186.legal": {
+  "dns_mx": "10 mx5.colibriwithus.com. | 10 mx6.colibriwithus.com.",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=none)",
+  "dns_verdict": "OK"
+ },
  "9bavocat.com": {
   "dns_mx": "10 mail.protonmail.ch. | 20 mailsec.protonmail.ch. | 30 mx1.hostinger.com. | 35 mx2.hostinger.com.",
   "dns_spf": "oui",
@@ -119,6 +125,12 @@
   "dns_dmarc": "oui (p=none)",
   "dns_verdict": "OK"
  },
+ "apollo-avocats.com": {
+  "dns_mx": "0 apolloavocats-com01e.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "non",
+  "dns_verdict": "OK (MX) - DMARC absent"
+ },
  "aramis.group": {
   "dns_mx": "1 aspmx.l.google.com. | 10 alt3.aspmx.l.google.com. | 10 alt4.aspmx.l.google.com. | 5 alt1.aspmx.l.google.com. | 5 alt2.aspmx.l.google.com. [Google]",
   "dns_spf": "oui",
@@ -135,6 +147,12 @@
   "dns_mx": "0 archipellyon-fr02b.mail.protection.outlook.com. [Microsoft 365]",
   "dns_spf": "oui",
   "dns_dmarc": "oui (p=none)",
+  "dns_verdict": "OK"
+ },
+ "arsilon.com": {
+  "dns_mx": "0 arsilon-com.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=reject)",
   "dns_verdict": "OK"
  },
  "artefact.com": {
@@ -209,6 +227,12 @@
   "dns_dmarc": "oui (p=reject)",
   "dns_verdict": "OK"
  },
+ "bdlegal.fr": {
+  "dns_mx": "0 bdlegal-fr.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=none)",
+  "dns_verdict": "OK"
+ },
  "bewiz.fr": {
   "dns_mx": "10 bewiz-fr.mail.protection.outlook.com. [Microsoft 365]",
   "dns_spf": "oui",
@@ -226,6 +250,12 @@
   "dns_spf": "oui",
   "dns_dmarc": "non",
   "dns_verdict": "OK (MX) - DMARC absent"
+ },
+ "bolze-associes.com": {
+  "dns_mx": "0 bolzeassocies-com01c.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=quarantine)",
+  "dns_verdict": "OK"
  },
  "bpce.fr": {
   "dns_mx": "10 mail-in.protection.bpce-it.fr.",
@@ -455,6 +485,12 @@
   "dns_dmarc": "oui (p=reject)",
   "dns_verdict": "OK"
  },
+ "desfilisavocats.com": {
+  "dns_mx": "0 desfilisavocats-com.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=none)",
+  "dns_verdict": "OK"
+ },
  "devoteam.com": {
   "dns_mx": "1 aspmx.l.google.com. | 10 alt3.aspmx.l.google.com. | 10 alt4.aspmx.l.google.com. | 5 alt1.aspmx.l.google.com. | 5 alt2.aspmx.l.google.com. [Google]",
   "dns_spf": "oui",
@@ -484,6 +520,12 @@
   "dns_spf": "oui",
   "dns_dmarc": "oui (p=quarantine)",
   "dns_verdict": "OK"
+ },
+ "dtmvparis.com": {
+  "dns_mx": "0 dtmvparis-com.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "non",
+  "dns_verdict": "OK (MX) - DMARC absent"
  },
  "duroc-partners.com": {
   "dns_mx": "0 durocpartners-com01c.mail.protection.outlook.com. [Microsoft 365]",
@@ -524,7 +566,7 @@
  "elliot.bzh": {
   "dns_mx": "5 mta-gw.infomaniak.ch.",
   "dns_spf": "oui",
-  "dns_dmarc": "oui (p=reject)",
+  "dns_dmarc": "oui (p=none)",
   "dns_verdict": "OK"
  },
  "emargence.fr": {
@@ -627,6 +669,12 @@
   "dns_mx": "10 d4-mx7.colibriwithus.com. | 10 th2-mx7.colibriwithus.com.",
   "dns_spf": "oui",
   "dns_dmarc": "oui (p=quarantine)",
+  "dns_verdict": "OK"
+ },
+ "gramond-associes.com": {
+  "dns_mx": "0 gramondassocies-com01i.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=none)",
   "dns_verdict": "OK"
  },
  "grantthornton.fr": {
@@ -779,6 +827,12 @@
   "dns_dmarc": "oui (p=quarantine)",
   "dns_verdict": "OK"
  },
+ "jeausserand-audouard.com": {
+  "dns_mx": "10 jeausserandaudouard-com02i.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=none)",
+  "dns_verdict": "OK"
+ },
  "jmh-consulting.fr": {
   "dns_mx": "0 mx0.mail.ovh.net. | 10 mx1.mail.ovh.net. | 20 mx2.mail.ovh.net. | 30 mx3.mail.ovh.net. | 40 mx4.mail.ovh.net. [OVH]",
   "dns_spf": "oui",
@@ -801,6 +855,12 @@
   "dns_mx": "1 kalliopelaw-com02b.mail.protection.outlook.com. [Microsoft 365]",
   "dns_spf": "oui",
   "dns_dmarc": "oui (p=none)",
+  "dns_verdict": "OK"
+ },
+ "karman-associes.com": {
+  "dns_mx": "0 karmanassocies-com01e.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=quarantine)",
   "dns_verdict": "OK"
  },
  "kering.com": {
@@ -826,6 +886,12 @@
   "dns_spf": "oui",
   "dns_dmarc": "oui (p=reject)",
   "dns_verdict": "OK"
+ },
+ "kns-associes.fr": {
+  "dns_mx": "1 mx1.mail.ovh.net. [OVH]",
+  "dns_spf": "oui",
+  "dns_dmarc": "non",
+  "dns_verdict": "OK (MX) - DMARC absent"
  },
  "kohenavocats.com": {
   "dns_mx": "1 smtp.google.com. [Google]",
@@ -879,6 +945,12 @@
   "dns_mx": "0 lengereauavocat-fr02c.mail.protection.outlook.com. [Microsoft 365]",
   "dns_spf": "oui",
   "dns_dmarc": "oui (p=none)",
+  "dns_verdict": "OK"
+ },
+ "levinekeszler.com": {
+  "dns_mx": "0 levinekeszler-com.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=reject)",
   "dns_verdict": "OK"
  },
  "lex-patrimonis.com": {
@@ -953,6 +1025,12 @@
   "dns_dmarc": "oui (p=reject)",
   "dns_verdict": "OK"
  },
+ "mercure-avocats.com": {
+  "dns_mx": "1 mx0.mail.ovh.net. | 100 mx3.mail.ovh.net. | 5 mx1.mail.ovh.net. | 50 mx2.mail.ovh.net. [OVH]",
+  "dns_spf": "oui",
+  "dns_dmarc": "non",
+  "dns_verdict": "OK (MX) - DMARC absent"
+ },
  "milestone-avocats.com": {
   "dns_mx": "0 milestoneavocats-com02c.mail.protection.outlook.com. [Microsoft 365]",
   "dns_spf": "oui",
@@ -982,6 +1060,12 @@
   "dns_spf": "oui",
   "dns_dmarc": "non",
   "dns_verdict": "OK (MX) - DMARC absent"
+ },
+ "myne.fr": {
+  "dns_mx": "0 myne-fr.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=quarantine)",
+  "dns_verdict": "OK"
  },
  "natixis.com": {
   "dns_mx": "0 mail-in.protection.bpce-it.fr.",
@@ -1073,6 +1157,12 @@
   "dns_dmarc": "oui (p=none)",
   "dns_verdict": "OK"
  },
+ "orsaylaw.com": {
+  "dns_mx": "0 orsaylaw-com.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=none)",
+  "dns_verdict": "OK"
+ },
  "orwann.fr": {
   "dns_mx": "0 orwann-fr.mail.protection.outlook.com. [Microsoft 365]",
   "dns_spf": "oui",
@@ -1115,6 +1205,12 @@
   "dns_dmarc": "oui (p=quarantine)",
   "dns_verdict": "OK"
  },
+ "pdgb.com": {
+  "dns_mx": "0 pdgb-com.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=reject)",
+  "dns_verdict": "OK"
+ },
  "pechenard.com": {
   "dns_mx": "10 pechenard-com.mail.protection.outlook.com. [Microsoft 365]",
   "dns_spf": "oui",
@@ -1145,6 +1241,12 @@
   "dns_dmarc": "oui (p=none)",
   "dns_verdict": "OK"
  },
+ "redlink.fr": {
+  "dns_mx": "0 redlink-fr.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "non",
+  "dns_verdict": "OK (MX) - DMARC absent"
+ },
  "rescue.law": {
   "dns_mx": "0 rescue-law.mail.protection.outlook.com. [Microsoft 365]",
   "dns_spf": "oui",
@@ -1156,6 +1258,12 @@
   "dns_spf": "oui",
   "dns_dmarc": "oui (p=quarantine)",
   "dns_verdict": "OK"
+ },
+ "room-avocats.com": {
+  "dns_mx": "1 ASPMX.L.GOOGLE.com. | 10 ALT3.ASPMX.L.GOOGLE.com. | 10 ALT4.ASPMX.L.GOOGLE.com. | 5 ALT1.ASPMX.L.GOOGLE.com. | 5 ALT2.ASPMX.L.GOOGLE.com. [Google]",
+  "dns_spf": "oui",
+  "dns_dmarc": "non",
+  "dns_verdict": "OK (MX) - DMARC absent"
  },
  "salomon.com": {
   "dns_mx": "10 mxa-00153e01.gslb.pphosted.com. | 10 mxb-00153e01.gslb.pphosted.com. | 20 mx07-00153e01.pphosted.com. | 20 mx08-00153e01.pphosted.com. [Proofpoint]",
@@ -1173,6 +1281,12 @@
   "dns_mx": "1 sebia-com.mail.protection.outlook.com. [Microsoft 365]",
   "dns_spf": "oui",
   "dns_dmarc": "oui (p=none)",
+  "dns_verdict": "OK"
+ },
+ "selm-avocats.com": {
+  "dns_mx": "0 selmavocats-com01b.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=quarantine)",
   "dns_verdict": "OK"
  },
  "sfeir.com": {
@@ -1325,6 +1439,12 @@
   "dns_dmarc": "oui (p=quarantine)",
   "dns_verdict": "OK"
  },
+ "villechenon.com": {
+  "dns_mx": "1 villechenon-com.mail.protection.outlook.com. [Microsoft 365]",
+  "dns_spf": "oui",
+  "dns_dmarc": "non",
+  "dns_verdict": "OK (MX) - DMARC absent"
+ },
  "vinci-autoroutes.com": {
   "dns_mx": "1 vinciautoroutes-com01c.mail.protection.outlook.com. [Microsoft 365]",
   "dns_spf": "oui",
@@ -1342,6 +1462,12 @@
   "dns_spf": "non",
   "dns_dmarc": "non",
   "dns_verdict": "OK (MX) - SPF absent / DMARC absent"
+ },
+ "voltassocies.com": {
+  "dns_mx": "10 vade-mx-fr01.hornetsecurity.com. | 10 vade-mx-fr02.hornetsecurity.com. | 20 vade-mx-eu-fallback01.hornetsecurity.com. | 20 vade-mx-eu-fallback02.hornetsecurity.com.",
+  "dns_spf": "oui",
+  "dns_dmarc": "oui (p=none)",
+  "dns_verdict": "OK"
  },
  "vpk-avocats.com": {
   "dns_mx": "0 vpkavocats-com0i.mail.protection.outlook.com. [Microsoft 365]",

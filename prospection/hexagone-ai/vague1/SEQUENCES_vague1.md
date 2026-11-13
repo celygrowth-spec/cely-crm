@@ -1,4 +1,4 @@
-# Hexagone AI — Vague 1 (79 contacts, tous inconnus de Mariia) — séquences prêtes à importer
+# Hexagone AI — Vague 1 (98 contacts, tous inconnus de Mariia) — séquences prêtes à importer
 
 Expéditrice : **Mariia Zameshina, cofondatrice d'Hexagone AI**, depuis la boîte Hexagone AI (PAS depuis un autre compte).
 Fichier : `Hexagone_AI_vague1_leads.csv` (colonnes = variables Lemlist : `{{firstName}}`, `{{lastName}}`, `{{companyName}}`, `{{salutation}}`, `{{ligne_attention}}`, `{{accroche}}`, `{{douleur_confidentialite}}`…).
@@ -9,6 +9,7 @@ Règle d'or : l'accroche de chaque contact est déjà écrite et sourcée (colon
 | C_cabinet_premier_contact | 48 | avocats et experts-comptables score A, jamais contactés | e-mail + invitation LinkedIn |
 | P_partenaire_anthropic | 18 | décideurs chez les partenaires Claude (KPMG, Capgemini, IBM, Bain, BCG, Sia, SFEIR, Wesype, Galadrim…) | e-mail (angle partenariat) + invitation LinkedIn |
 | D_direction_juridique | 13 | DJ / DPO / legal ops de groupes | e-mail + invitation LinkedIn |
+| T_test_froid | 19 | décideurs dans la cible, sans signal IA public (test) | e-mail seulement |
 
 Consigne : aucun contact ayant déjà échangé un message LinkedIn avec Mariia (ils ont été retirés de la base).
 
@@ -114,6 +115,42 @@ Objet : `IA générative et confidentialité à la direction juridique de {{comp
 > Mariia
 
 **J15 · E-mail 3 (même fil, dernier)** : identique au J12 du segment C.
+
+---
+
+## Segment T — test à froid, sans signal IA (décideurs dans la cible)
+
+Objectif : mesurer la réponse de décideurs sans signal IA public, face aux campagnes A. E-mail seulement.
+
+**J0 · E-mail 1**
+Objet : `IA et secret professionnel chez {{companyName}}`
+
+> {{ligne_attention}}
+>
+> {{salutation}},
+>
+> {{accroche}}
+>
+> Hexagone AI pseudonymise les documents sur votre poste avant tout envoi à ChatGPT ou Claude, puis remet les vrais noms dans la réponse : le modèle ne voit jamais l'identité d'un client.
+>
+> 20 minutes pour vous montrer, sur un document de votre choix ?
+>
+> Mariia Zameshina
+> Cofondatrice, Hexagone AI
+
+**J5 · E-mail 2 (même fil)**
+> {{salutation}},
+>
+> Je me permets de revenir vers vous : une démonstration de 20 minutes suffit pour voir si la pseudonymisation locale a du sens pour {{companyName}}. Un créneau vous conviendrait-il ?
+>
+> Mariia
+
+**J10 · E-mail 3 (même fil, dernier)**
+> {{salutation}},
+>
+> Je clos ce fil pour ne pas vous relancer inutilement. Si le sujet de l'IA et de la confidentialité devient d'actualité chez {{companyName}}, il suffit de répondre à ce message.
+>
+> Mariia
 
 ---
 

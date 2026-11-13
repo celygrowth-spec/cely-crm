@@ -8,7 +8,7 @@ src=openpyxl.load_workbook(B+'Hexagone_AI_leads_M1_V5.xlsx'); ws=src['Tous']
 h=[c.value for c in ws[1]]; L=[dict(zip(h,r)) for r in ws.iter_rows(min_row=2,values_only=True)]
 V=list(csv.DictReader(open(B+'vague1/Hexagone_AI_vague1_leads.csv',encoding='utf-8-sig')))
 RET=json.load(open(B+'work/retires_v2.json'))
-CAMP={'C_cabinet_premier_contact':'V1-A · Cabinets (avocats & EC)','P_partenaire_anthropic':'V1-B · Partenaires Anthropic','D_direction_juridique':'V1-C · Directions juridiques'}
+CAMP={'C_cabinet_premier_contact':'V1-A · Cabinets (avocats & EC)','P_partenaire_anthropic':'V1-B · Partenaires Anthropic','D_direction_juridique':'V1-C · Directions juridiques','T_test_froid':'V1-D · Test à froid (sans signal IA)'}
 CIB={1:'Avocats',2:'Experts-comptables',3:'Partenaires Anthropic',4:'Directions juridiques'}
 vk={(r['firstName'],r['lastName']):r for r in V}
 FLAG=re.compile(r"à arbitrer|à vérifier|a verifier",re.I)
@@ -36,7 +36,7 @@ def mat(x): x=str(x or ''); return x[:1] if x[:1] in '0123' else ''
 AR=Font(name='Arial',size=10); ARB=Font(name='Arial',size=10,bold=True); HF=Font(name='Arial',size=10,bold=True,color='FFFFFF')
 NAVY=PatternFill('solid',fgColor='1F3864'); GREY=PatternFill('solid',fgColor='F2F2F2')
 SC={'A':'C6EFCE','B':'FFEB9C','C':'F4CCCC'}
-CC={'V1-A':'E2EFDA','V1-B':'FCE4D6','V1-C':'FFF2CC'}
+CC={'V1-A':'E2EFDA','V1-B':'FCE4D6','V1-C':'FFF2CC','V1-D':'EDEDED'}
 thin=Side(style='thin',color='D9D9D9'); BD=Border(bottom=thin)
 WR=Alignment(wrap_text=True,vertical='top'); TOP=Alignment(vertical='top')
 def table(wsx,head,rows,widths,wrapcols=(),start=1):
@@ -68,12 +68,12 @@ def colorize(wsx,head,n,start=1):
 wb=Workbook()
 # ---------- Lisez-moi
 rd=wb.active; rd.title='Lisez-moi'
-lines=[('Hexagone AI × Cely — Prospects et campagnes',True,14),('Mis à jour le 13/11/2026 · 323 prospects qualifiés, AUCUN déjà contacté par Mariia · 3 campagnes de la vague 1 (79 prospects) prêtes, NON lancées',False,10),('',False,10),
+lines=[('Hexagone AI × Cely — Prospects et campagnes',True,14),('Mis à jour le 13/11/2026 · 346 prospects qualifiés, AUCUN déjà contacté par Mariia · 4 campagnes de la vague 1 (98 prospects, dont 19 en test à froid) prêtes, NON lancées',False,10),('',False,10),
 ('LES ONGLETS',True,11),
 ('Tableau de bord — les chiffres clés (se recalculent si vous modifiez « Tous les leads »).',False,10),
-('Campagnes — les 3 campagnes de la vague 1 : pour qui, quel angle, quelles étapes, combien de prospects, statut.',False,10),
-('Prospects par campagne — les 79 prospects de la vague 1, regroupés par campagne, avec l\'accroche personnalisée de chacun.',False,10),
-('Tous les leads — les 323 prospects, avec la campagne prévue (ou la raison pour laquelle ils attendent).',False,10),
+('Campagnes — les 4 campagnes de la vague 1 (dont 1 test à froid) : pour qui, quel angle, quelles étapes, combien de prospects, statut.',False,10),
+('Prospects par campagne — les 98 prospects de la vague 1, regroupés par campagne, avec l\'accroche personnalisée de chacun.',False,10),
+('Tous les leads — les 346 prospects, avec la campagne prévue (ou la raison pour laquelle ils attendent).',False,10),
 ('Séquences — le texte exact de chaque e-mail / message LinkedIn, étape par étape.',False,10),
 ('Retirés — les prospects écartés et pourquoi (dont les 119 personnes ayant déjà échangé avec Mariia : consigne de ne pas les recontacter).',False,10),('',False,10),
 ('COMMENT LIRE UN PROSPECT',True,11),
@@ -129,7 +129,8 @@ HC=['Campagne','Pour qui','Angle du message','Étapes','Canal','Objet de l\'e-ma
 CD=[
 ('V1-A · Cabinets (avocats & EC)','Avocats et experts-comptables priorité A, jamais contactés','Accroche sourcée + ChatGPT/Claude sans exposer les dossiers + guide CNB / charte Barreau de Paris','J0 e-mail · J2 invitation LinkedIn · J5 relance · J12 clôture','E-mail + LinkedIn','{{companyName}} : ChatGPT et Claude sans exposer vos dossiers','—'),
 ('V1-B · Partenaires Anthropic','Décideurs IA chez les partenaires Claude (KPMG, Capgemini, IBM, Bain, BCG, Sia, SFEIR, Wesype, Galadrim…)','Partenariat / co-vente : brique de pseudonymisation pour leurs projets Claude chez des clients réglementés','J0 e-mail · J2 invitation LinkedIn · J6 relance · J13 clôture','E-mail + LinkedIn','Claude chez vos clients réglementés : une brique de pseudonymisation','Vérifier les e-mails déduits avec particule'),
-('V1-C · Directions juridiques','Directeurs juridiques / DPO / legal ops de groupes','Secret des affaires : les juristes gardent ChatGPT / Claude, rien ne sort de l\'entreprise','J0 e-mail · J3 invitation LinkedIn · J8 relance · J15 clôture','E-mail + LinkedIn','IA générative et confidentialité à la direction juridique de {{companyName}}','—')]
+('V1-C · Directions juridiques','Directeurs juridiques / DPO / legal ops de groupes','Secret des affaires : les juristes gardent ChatGPT / Claude, rien ne sort de l\'entreprise','J0 e-mail · J3 invitation LinkedIn · J8 relance · J15 clôture','E-mail + LinkedIn','IA générative et confidentialité à la direction juridique de {{companyName}}','—'),
+('V1-D · Test à froid (sans signal IA)','Décideurs dans la cible (surtout avocats d\'affaires) sans signal IA public','Accroche liée au métier (guide CNB, secret professionnel) : mesurer la réponse à froid face aux campagnes A','J0 e-mail · J5 relance · J10 clôture','E-mail seulement','IA et secret professionnel chez {{companyName}}','Comparer le taux de réponse avec V1-A')]
 for j,hd in enumerate(HC,1):
     c=cg.cell(1,j,hd); c.font=HF; c.fill=NAVY; c.alignment=Alignment(wrap_text=True,vertical='center')
 for i,d in enumerate(CD,2):
@@ -153,7 +154,7 @@ cg.cell(n+2,1,'Statut : aucune campagne n\'est lancée. Aucun prospect n\'a déj
 sq=wb.create_sheet('Séquences')
 md=open(B+'vague1/SEQUENCES_vague1.md',encoding='utf-8').read()
 HS=['Campagne','Étape','Jour','Canal','Objet','Message']
-segmap={'## Segment C':'V1-A · Cabinets (avocats & EC)','## Segment P':'V1-B · Partenaires Anthropic','## Segment D':'V1-C · Directions juridiques'}
+segmap={'## Segment C':'V1-A · Cabinets (avocats & EC)','## Segment P':'V1-B · Partenaires Anthropic','## Segment D':'V1-C · Directions juridiques','## Segment T':'V1-D · Test à froid (sans signal IA)'}
 SR=[]
 for block in re.split(r'\n(?=## Segment )',md)[1:]:
     head=block.split('\n',1)[0]; cname=next(v for k,v in segmap.items() if head.startswith(k))
@@ -204,7 +205,7 @@ for j in range(2,9):
 hd2=['Où en est chaque prospect','Prospects']
 for j,x in enumerate(hd2,1):
     c=db.cell(11,j,x); c.font=HF; c.fill=NAVY
-cats=[c for c in ['V1-A · Cabinets (avocats & EC)','V1-B · Partenaires Anthropic','V1-C · Directions juridiques','Vague 2 · priorité A','Vague 2 · score B','Réserve · score C','À vérifier avant envoi',"En attente : pas d'e-mail utilisable"]]
+cats=[c for c in ['V1-A · Cabinets (avocats & EC)','V1-B · Partenaires Anthropic','V1-C · Directions juridiques','V1-D · Test à froid (sans signal IA)','Vague 2 · priorité A','Vague 2 · score B','Réserve · score C','À vérifier avant envoi',"En attente : pas d'e-mail utilisable"]]
 for i,cname in enumerate(cats,12):
     db.cell(i,1,cname).font=AR; db.cell(i,2,f'=COUNTIF({T}!$A:$A,A{i})').font=AR
     k=cname[:4]
