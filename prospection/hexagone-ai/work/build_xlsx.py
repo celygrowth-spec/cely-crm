@@ -25,7 +25,7 @@ for f in [f for f in FILES if os.path.exists(L+f+".json")]:
         r["email_a_utiliser"], r["email_a_utiliser_type"] = email_envoi(r)
         dom = r["email_a_utiliser"].split("@")[-1].lower() if r["email_a_utiliser"] else email_domain(r)
         r["dns_domaine"] = dom; r.update(DNSC.get(dom, {}))
-        r["origine"] = "relations LinkedIn de Mariia" if f.startswith("c5") else "recherche web (sites publics)"
+        r["origine"] = "relations LinkedIn de Mariia" if f.startswith("c5") else ("recherche V4 (13/11)" if f.startswith("c6") else "recherche web (sites publics)")
         r["score_v1"] = r["score_priorite"]
         if r.get("score_revu") in ("A","B","C"): r["score_priorite"] = r["score_revu"]
         r["segment"] = f.upper(); rows.append(r)
@@ -45,7 +45,7 @@ def sheet(ws, data, head):
     ws.freeze_panes = "C2"; ws.auto_filter.ref = ws.dimensions
 wb = Workbook(); s = wb.active; s.title = "Synthèse"
 from collections import Counter
-s.append(["Hexagone AI × Cely — Listes M1 — V3 : recherche web + relations LinkedIn de Mariia (2026-11-12)"]); s["A1"].font = Font(bold=True, size=14)
+s.append(["Hexagone AI × Cely — Listes M1 — V4 : leads neufs très qualifiés, sans aucun contact déjà approché par Mariia (2026-11-13)"]); s["A1"].font = Font(bold=True, size=14)
 s.append([]); s.append(["Cible","Objectif","Obtenus","A","B","C","Vérifié","Déduit","À vérifier","Avec LinkedIn","E-mail publié","E-mail déduit","Générique seul","Domaine sans MX"])
 for c in s[3]: c.font = Font(bold=True)
 for r in rows: r.setdefault("score_revu","")
@@ -104,10 +104,10 @@ P = [
 ]
 if os.path.exists(L+"pistes_v1.json"): P = [tuple(x) for x in json.load(open(L+"pistes_v1.json"))]
 sheet(wb.create_sheet("Pistes à creuser"), [dict(cible=a, piste=b, pourquoi=c) for a,b,c in P], ["cible","piste","pourquoi"])
-out = L + "../Hexagone_AI_leads_M1_V3.xlsx"; wb.save(out)
+out = L + "../Hexagone_AI_leads_M1_V4.xlsx"; wb.save(out)
 # Lemlist : uniquement les lignes avec une adresse à utiliser (nominative publiée > déduite d'un motif observé > générique) sur un domaine qui a un MX
 send = [r for r in rows if not str(r.get("qualif_commentaire","")).upper().startswith("À RETIRER") and r["email_a_utiliser"] and not r.get("dns_verdict","").startswith(("PAS DE MX","ERREUR"))]
-with open(L + "../Hexagone_AI_leads_M1_V3_lemlist.csv","w",newline="",encoding="utf-8-sig") as f:
+with open(L + "../Hexagone_AI_leads_M1_V4_lemlist.csv","w",newline="",encoding="utf-8-sig") as f:
     w = csv.DictWriter(f, fieldnames=COLS+["email_a_utiliser","email_a_utiliser_type","dns_verdict","origine","relation_linkedin","accroche","douleur_confidentialite","maturite_ia","perso_faits"], extrasaction="ignore"); w.writeheader(); [w.writerow(r) for r in send]
 print("lemlist:", len(send))
 print(out, len(rows))
