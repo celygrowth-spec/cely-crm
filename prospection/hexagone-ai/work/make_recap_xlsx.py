@@ -172,7 +172,7 @@ CLO="{{salutation}},\n\nJe ne voudrais pas encombrer votre boîte : je clos ce f
 for x in SR:
     if x[0].startswith('V1-D') and x[2]=='J7': x[5]=CLO; x[4]='(même fil)'
     if x[0].startswith('V1-C') and x[2]=='J13': x[5]="{{salutation}},\n\nJe clos ce fil ; si un projet Claude bute sur la confidentialité chez un de vos clients, je reste disponible pour en parler.\n\nMariia"
-SR=[x for x in SR if not (x[0].startswith('V1-E') and x[2]=='J3')]
+SR=[x for x in SR if not (x[0].startswith('V1-E') and x[2] in ('J3','J8','J15'))]
 E='V1-E · Directions juridiques'
 SR+= [[E,'LinkedIn','J3','LinkedIn','','Invitation sans note (depuis le compte de Mariia).'],
       [E,'E-mail 2 (même fil)','J8','E-mail','(même fil)',"{{salutation}},\n\nJe me permets de revenir vers vous avec une question simple : vos juristes utilisent-ils déjà ChatGPT ou Claude, avec ou sans cadre ? La pseudonymisation locale permet de garder ces usages tout en protégeant le secret des affaires et les données personnelles.\n\nUn créneau de 20 minutes vous conviendrait-il ?\n\nMariia"],
