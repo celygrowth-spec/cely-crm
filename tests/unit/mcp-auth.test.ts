@@ -114,6 +114,7 @@ describe("connecteur MCP : périmètre des outils", () => {
       "list_pipelines",
       "list_projects",
       "log_interaction",
+      "make_client",
       "move_company",
       "move_project_files",
       "move_to_trash",
