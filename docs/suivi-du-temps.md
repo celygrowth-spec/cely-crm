@@ -1,6 +1,8 @@
-# Suivi du temps (menu « Temps »)
+# Suivi du temps (menu « Productivité › Temps »)
 
 Lancer un chrono pour un client, travailler, l'arrêter ; voir ensuite le temps passé par client sur une période.
+
+Adresse : `/productivite/temps`. L'ancienne adresse `/temps` redirige vers elle, paramètres compris.
 
 ## Chrono
 

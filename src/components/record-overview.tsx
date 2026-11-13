@@ -10,6 +10,7 @@ import { PROSPECT_STATUS_LABELS, formatDate, personName, relativeDay } from "@/l
 import type { RecordCtx } from "./company-record";
 import { EntryRow, useActivityEntries } from "./record-entry";
 import { PostponeButtons, useTaskActions } from "./record-tasks";
+import { RecordTodos } from "./todo/record-todos";
 import { Badge, Button, Skeleton, cn } from "./ui";
 
 export function RecordOverview({ ctx }: { ctx: RecordCtx }) {
@@ -30,6 +31,8 @@ export function RecordOverview({ ctx }: { ctx: RecordCtx }) {
           </p>
         )}
       </section>
+
+      <RecordTodos companyId={ctx.detail.company.id} />
 
       {booking && (
         <section className="flex flex-wrap items-center gap-2 rounded-xl border border-line px-3 py-2.5 text-sm">

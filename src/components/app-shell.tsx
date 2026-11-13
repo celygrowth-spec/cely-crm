@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { CalendarDays, CheckSquare, FolderKanban, Columns3, LayoutGrid, Library, LogOut, Mail, PhoneCall, Plus, Search, Settings, Timer, Trash2, Trophy, Users, Wallet, X } from "lucide-react";
+import { CalendarDays, CheckSquare, FolderKanban, Columns3, LayoutGrid, Library, ListTodo, LogOut, Mail, PhoneCall, Plus, Search, Settings, Trash2, Trophy, Users, Wallet, X } from "lucide-react";
 import type { LeadSource, List, PipelineWithStages } from "@/lib/crm/types";
 import { signOutAction } from "@/app/actions";
 import { QueryProvider, apiGet, useFlushRouterOnNavigate } from "@/lib/client/query";
@@ -62,6 +62,11 @@ export const RDV_NAV = [
   { href: "/rendez-vous/disponibilites", label: "Disponibilités" },
 ];
 
+export const PRODUCTIVITE_NAV = [
+  { href: "/productivite/temps", label: "Temps" },
+  { href: "/productivite/todo", label: "To do list" },
+];
+
 const NAV = [
   { href: "/", label: "Aujourd'hui", icon: CheckSquare },
   { href: "/prospection", label: "Prospection", icon: Users },
@@ -70,7 +75,7 @@ const NAV = [
   { href: "/projets", label: "Projets", icon: FolderKanban },
   { href: "/rendez-vous", label: "Rendez-vous", icon: CalendarDays },
   { href: "/finance", label: "Finance", icon: Wallet },
-  { href: "/temps", label: "Temps", icon: Timer },
+  { href: "/productivite", label: "Productivité", icon: ListTodo },
   { href: "/mail", label: "Mail", icon: Mail },
   { href: "/appels", label: "Appels", icon: PhoneCall },
   { href: "/bibliotheque", label: "Bibliothèque", icon: Library },
@@ -247,9 +252,9 @@ function Shell({
                       })}
                     </div>
                   )}
-                  {href === "/finance" && active && (
+                  {(href === "/finance" || href === "/productivite") && active && (
                     <div className="mt-0.5 mb-1 ml-[22px] border-l border-line pl-2">
-                      {FINANCE_NAV.map((n) => {
+                      {(href === "/finance" ? FINANCE_NAV : PRODUCTIVITE_NAV).map((n: { href: string; label: string; exact?: boolean }) => {
                         const on = n.exact ? pathname === n.href : pathname === n.href || pathname.startsWith(n.href + "/");
                         return (
                           <Link
