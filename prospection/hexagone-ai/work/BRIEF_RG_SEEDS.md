@@ -12,7 +12,7 @@ Ta tranche : /tmp/claude-0/-home-user-cely-crm/6a8412d7-42ce-572a-b5d7-ac6d5ffa9
 4. Cherche un SIGNAL IA concret (personne ou organisation) avec URL : intervention sur l'IA (beaucoup d'intervenants du salon parlent d'IA : cite la session et l'URL du programme), article, outil IA déployé, projet legal tech. Score A = décideur + signal IA nominatif + douleur confidentialité claire ; B = décideur + signal IA de l'organisation ou intervention sur la transformation numérique. Sans aucun signal → écarter (pas de C).
 5. E-mail : publié (site / annuaire BdP) > motif observé sur le domaine (cite l'adresse observée + URL) > générique publié.
 6. Personnalisation (BRIEF_PERSO) : perso_faits, accroche Hexagone (≤ 45 mots), douleur_confidentialite, maturite_ia, outils_ia_cites, qualif_commentaire.
-7. Dans qualif_commentaire, ajoute TOUJOURS, en tête : « Envoi à programmer après le 1er décembre 2026. » (sans autre explication).
+7. (pas de contrainte de date d'envoi)
 8. relation_linkedin = "".
 
 Sortie : le fichier indiqué dans ta mission (schéma de BRIEF_V4), date_recherche "2026-11-13". Max 20 WebSearch. Réponse finale (< 150 mots) : traités / retenus / écartés (raisons), A/B, e-mails publiés/déduits/génériques, 3 meilleures accroches.
