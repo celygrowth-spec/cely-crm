@@ -6,7 +6,7 @@ Le domaine testé = domaine de l'e-mail publié, sinon de l'adresse déduite, si
 import json, glob, os, re, sys, time, urllib.request, urllib.parse
 
 L = os.path.dirname(os.path.abspath(__file__)) + "/"
-FILES = ["c1a", "c1b", "c1c", "c1d", "c1e", "c2a", "c2b", "c2c", "c2d", "c3", "c4", "c4b", "c4c", "c5a", "c5b", "c5c", "c5d", "c5e", "c5f", "c6a", "c6b", "c6c", "c6d", "c6e", "c7a", "c7b", "c7c", "c7d", "c8a", "c8b", "c8c", "c8d", "c9a"]
+FILES = ["c1a", "c1b", "c1c", "c1d", "c1e", "c2a", "c2b", "c2c", "c2d", "c3", "c4", "c4b", "c4c", "c5a", "c5b", "c5c", "c5d", "c5e", "c5f", "c6a", "c6b", "c6c", "c6d", "c6e", "c7a", "c7b", "c7c", "c7d", "c8a", "c8b", "c8c", "c8d", "c9a", "c9b", "c9c", "c9d", "c9e", "c9f"]
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+'-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})")
 
 
