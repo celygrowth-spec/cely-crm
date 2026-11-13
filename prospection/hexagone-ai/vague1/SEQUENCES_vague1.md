@@ -154,7 +154,18 @@ Objet : `IA générative et confidentialité à la direction juridique de {{comp
 >
 > Mariia Zameshina, Hexagone AI
 
-**J3 · LinkedIn** : invitation sans note. **J8 · E-mail 2** et **J15 · E-mail 3** : sur le modèle du segment C (remplacer « secret professionnel » par « secret des affaires / confidentialité »).
+**J3 · LinkedIn** : invitation sans note.
+
+**J8 · E-mail 2 (même fil)**
+> {{salutation}},
+>
+> Je me permets de revenir vers vous avec une question simple : vos juristes utilisent-ils déjà ChatGPT ou Claude, avec ou sans cadre ? La pseudonymisation locale permet de garder ces usages tout en protégeant le secret des affaires et les données personnelles.
+>
+> Un créneau de 20 minutes vous conviendrait-il ?
+>
+> Mariia
+
+**J15 · E-mail 3 (même fil, dernier)** : identique au J12 du segment C.
 
 ---
 
