@@ -17,7 +17,8 @@ la page **Corbeille**. Après 30 jours, il est supprimé définitivement avec se
 | Point de suivi | son récapitulatif | le rendez-vous dans l'agenda |
 | Projet client | tâches, idées, planning, points, dossiers, liens vers les documents, historique, onboarding ; l'accès de ses contacts à ce projet au portail | les documents (sur la fiche et dans les autres projets), les rendez-vous, la vente, le temps passé |
 | Contact | son accès au portail, sa place dans les projets | ses échanges, tâches et rendez-vous sur la fiche |
-| Entreprise | contacts et accès au portail, vente, relances, historique, revenus, factures, règlements, projets, fichiers, diagnostics, campagnes, temps, mails, appels | les rendez-vous (dans l'agenda, sans fiche tant qu'elle est à la corbeille) |
+| Tâche de la To do list | — | la fiche liée |
+| Entreprise | contacts et accès au portail, vente, relances, historique, revenus, factures, règlements, projets, fichiers, diagnostics, campagnes, temps, mails, appels | les rendez-vous (dans l'agenda, sans fiche tant qu'elle est à la corbeille) ; les tâches de la To do list (sans lien tant qu'elle est à la corbeille, sans fiche après la purge) |
 
 La suppression ne déclenche aucune action externe (aucun mail, aucun changement d'agenda). Elle est réservée au
 propriétaire ; les contacts du portail n'y ont pas accès. Claude passe par la corbeille (`move_to_trash` et les outils

@@ -1,9 +1,12 @@
 // Corbeille : types et libellés partagés (interface, actions, connecteur Claude).
 
-export const TRASH_KINDS = [
+/** Types que Claude peut mettre à la corbeille (outil MCP move_to_trash). */
+export const CLAUDE_TRASH_KINDS = [
   "company", "person", "project", "project_task", "project_idea", "project_phase", "project_meeting",
   "finance_mission", "finance_invoice", "finance_payment",
 ] as const;
+/** Tous les types, dont ceux réservés à l'application (To do list : Claude n'y a pas accès). */
+export const TRASH_KINDS = [...CLAUDE_TRASH_KINDS, "todo_list_item"] as const;
 export type TrashKind = (typeof TRASH_KINDS)[number];
 
 export const KIND_LABEL: Record<TrashKind, string> = {
@@ -17,6 +20,7 @@ export const KIND_LABEL: Record<TrashKind, string> = {
   finance_mission: "Revenu",
   finance_invoice: "Facture",
   finance_payment: "Règlement",
+  todo_list_item: "Tâche de la To do list",
 };
 
 /** Éléments liés, par table : [singulier, pluriel]. L'ordre est celui de l'affichage. */

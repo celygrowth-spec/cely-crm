@@ -4,7 +4,7 @@
 // l'application (page Corbeille).
 import { z } from "zod";
 import { trashPreview, trashPut } from "@/lib/trash/service";
-import { KIND_LABEL, TRASH_KINDS, summaryParts } from "@/lib/trash/types";
+import { CLAUDE_TRASH_KINDS, KIND_LABEL, summaryParts } from "@/lib/trash/types";
 import { text, uuid } from "./helpers";
 import type { RegisterTool } from "./project-tools";
 
@@ -17,7 +17,7 @@ export function registerTrashTools(tool: RegisterTool) {
       title: "Mettre à la corbeille",
       description:
         "Met un élément à la corbeille du CRM avec ses éléments liés : entreprise (company), contact (person), projet (project), tâche de projet (project_task), idée (project_idea), phase du planning (project_phase), point de suivi (project_meeting), revenu (finance_mission), facture ou avoir (finance_invoice), règlement (finance_payment). L'élément disparaît partout (listes, Finance, portail client) et se restaure pendant 30 jours depuis la Corbeille de l'application. Aucun mail, aucun changement d'agenda. Sans confirmed_by_user=true, rien n'est fait : la réponse indique ce qui partirait, à présenter à l'utilisateur.",
-      inputSchema: z.object({ kind: z.enum(TRASH_KINDS), id: uuid, confirmed_by_user }),
+      inputSchema: z.object({ kind: z.enum(CLAUDE_TRASH_KINDS), id: uuid, confirmed_by_user }),
     },
     async ({ kind, id, confirmed_by_user: ok }, sb) => {
       const p = await trashPreview(sb, kind, id);
