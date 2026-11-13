@@ -6,7 +6,7 @@
 // retrouvent le même projet et le même revenu.
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Check, Link2 } from "lucide-react";
 import { confirmSaleAction, saleContextAction } from "@/app/sales-actions";
@@ -14,7 +14,7 @@ import { apiGet, attempt, useSync } from "@/lib/client/query";
 import { eur, toCents } from "@/lib/finance/money";
 import { todayISO } from "@/lib/format";
 import type { SaleRow } from "@/lib/sales/rules";
-import type { ConfirmInput, SaleContext } from "@/lib/sales/service";
+import type { ConfirmInput, ConfirmResult, SaleContext } from "@/lib/sales/service";
 import { RevenueTerms, revenueTermsError, type RevenueMode } from "@/components/finance/revenue-forms";
 import { Button, Field, Input, Modal, Select, Skeleton } from "@/components/ui";
 
@@ -32,20 +32,36 @@ export function useSaleSync() {
 type Mode = RevenueMode;
 
 /**
+ * Même formulaire, autre point d'entrée (« Passer en client » depuis le menu Actions de la fiche) : quelques champs
+ * en plus (`head`, `foot`) et l'envoi par une autre action serveur qui appelle elle-même sale_confirm.
+ */
+export type WinShortcut = {
+  title: string;
+  submitLabel: string;
+  head?: ReactNode;
+  foot?: ReactNode;
+  /** saisie propre au raccourci incomplète : message affiché, rien n'est envoyé */
+  check?: () => string | null;
+  submit: (input: ConfirmInput, key: string) => Promise<{ ok: true; data: ConfirmResult } | { ok: false; error: string }>;
+  /** après succès (les données de la vente sont déjà relues) */
+  onSuccess: (data: ConfirmResult) => void;
+};
+
+/**
  * `complete` : la fiche est déjà gagnée (ancien dossier, ou revenu « à renseigner plus tard ») : la clôture
  * n'est pas modifiée, on complète seulement ce qui manque.
  */
-export function WinSaleDialog({ company, open, onClose, complete = false, onDone }: {
-  company: { id: string; name: string }; open: boolean; onClose: () => void; complete?: boolean; onDone?: () => void;
+export function WinSaleDialog({ company, open, onClose, complete = false, onDone, shortcut }: {
+  company: { id: string; name: string }; open: boolean; onClose: () => void; complete?: boolean; onDone?: () => void; shortcut?: WinShortcut;
 }) {
   return (
-    <Modal open={open} onClose={onClose} title={complete ? `Compléter la vente · ${company.name}` : "Marquer comme gagné"}>
-      {open && <WinBody company={company} complete={complete} onClose={onClose} onDone={onDone} />}
+    <Modal open={open} onClose={onClose} title={shortcut?.title ?? (complete ? `Compléter la vente · ${company.name}` : "Marquer comme gagné")}>
+      {open && <WinBody company={company} complete={complete} onClose={onClose} onDone={onDone} shortcut={shortcut} />}
     </Modal>
   );
 }
 
-function WinBody({ company, complete, onClose, onDone }: { company: { id: string; name: string }; complete: boolean; onClose: () => void; onDone?: () => void }) {
+function WinBody({ company, complete, onClose, onDone, shortcut }: { company: { id: string; name: string }; complete: boolean; onClose: () => void; onDone?: () => void; shortcut?: WinShortcut }) {
   const ctx = useQuery({
     queryKey: ["sale-context", company.id],
     queryFn: async () => {
@@ -57,10 +73,10 @@ function WinBody({ company, complete, onClose, onDone }: { company: { id: string
   });
   if (ctx.isLoading) return <div className="space-y-2"><Skeleton className="h-9 w-full" /><Skeleton className="h-24 w-full" /></div>;
   if (ctx.isError || !ctx.data) return <p className="text-sm text-danger">{ctx.error?.message ?? "Chargement impossible."} <button className="underline" onClick={() => ctx.refetch()}>Réessayer</button></p>;
-  return <WinForm company={company} complete={complete} ctx={ctx.data} onClose={onClose} onDone={onDone} />;
+  return <WinForm company={company} complete={complete} ctx={ctx.data} onClose={onClose} onDone={onDone} shortcut={shortcut} />;
 }
 
-function WinForm({ company, complete, ctx, onClose, onDone }: { company: { id: string; name: string }; complete: boolean; ctx: SaleContext; onClose: () => void; onDone?: () => void }) {
+function WinForm({ company, complete, ctx, onClose, onDone, shortcut }: { company: { id: string; name: string }; complete: boolean; ctx: SaleContext; onClose: () => void; onDone?: () => void; shortcut?: WinShortcut }) {
   const router = useRouter();
   const saleSync = useSaleSync();
   const today = todayISO();
@@ -102,19 +118,23 @@ function WinForm({ company, complete, ctx, onClose, onDone }: { company: { id: s
     }
     if (!complete && closedOn > today) return setError("La date de clôture ne peut pas être dans le futur.");
     if (signedOn && signedOn > today) return setError("La date de signature ne peut pas être dans le futur.");
+    const extra = shortcut?.check?.();
+    if (extra) return setError(extra);
     setBusy(true);
-    const r = await attempt(() => confirmSaleAction(company.id, {
+    const input: ConfirmInput = {
       closed_on: closedOn, signed_on: signedOn || null, documents_ready: docsReady, revenue,
       link_mission_id: linkMission || null, link_invoice_id: linkInvoice || null,
       link_project_id: ctx.sale?.project_id ? null : linkProject || null, project_name: projectName,
       ...(projectRemoved ? { create_project: recreate } : {}),
-    }, key));
+    };
+    const r = await attempt(() => shortcut ? shortcut.submit(input, key) : confirmSaleAction(company.id, input, key));
     setBusy(false);
     // la même clé est gardée : « Réessayer » retrouve ce qui a déjà été enregistré, sans doublon
     if (!r.ok) return setError(r.error);
     saleSync(company.id);
     onDone?.();
     onClose();
+    if (shortcut) return shortcut.onSuccess(r.data);
     toast.success(complete ? `${company.name} : vente complétée` : `${company.name} : vente gagnée`, {
       description: r.data.created.project ? "Projet créé, préparation en cours." : r.data.project_id ? "Projet lié." : undefined,
       action: { label: "Voir dans Ventes", onClick: () => router.push("/ventes") },
@@ -125,6 +145,7 @@ function WinForm({ company, complete, ctx, onClose, onDone }: { company: { id: s
   return (
     <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void submit(); }} data-win-sale>
       <p className="text-sm">Client : <strong>{company.name}</strong></p>
+      {shortcut?.head}
       <div className="grid grid-cols-2 gap-2">
         {!complete && (
           <Field label="Date de clôture">
@@ -193,10 +214,11 @@ function WinForm({ company, complete, ctx, onClose, onDone }: { company: { id: s
         )
       )}
 
+      {shortcut?.foot}
       {error && <p className="rounded-lg bg-danger/5 px-3 py-2 text-sm text-danger" role="alert">{error} <span className="text-muted">Réessayer ne crée rien en double.</span></p>}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onClose}>Annuler</Button>
-        <Button type="submit" variant="primary" disabled={busy}><Check size={14} /> {busy ? "Enregistrement…" : complete ? "Enregistrer" : error ? "Réessayer" : "Confirmer la vente"}</Button>
+        <Button type="submit" variant="primary" disabled={busy}><Check size={14} /> {busy ? "Enregistrement…" : complete ? "Enregistrer" : error ? "Réessayer" : shortcut?.submitLabel ?? "Confirmer la vente"}</Button>
       </div>
     </form>
   );

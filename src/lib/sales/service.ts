@@ -119,19 +119,24 @@ export const confirmSchema = z.object({
 export type ConfirmInput = z.input<typeof confirmSchema>;
 export type ConfirmResult = { sale_id: string; cycle: number; project_id: string | null; mission_id: string | null; created: { sale?: boolean; revenue?: boolean; project?: boolean }; project_removed: boolean };
 
-export async function confirmSale(sb: SupabaseClient, companyId: string, input: ConfirmInput, key: string): Promise<ConfirmResult> {
+/** Données de sale_confirm, validées : partagées avec « Passer en client » (src/lib/crm/advance.ts). */
+export function confirmPayload(input: ConfirmInput) {
   const r = confirmSchema.safeParse(input);
   if (!r.success) throw new CrmError(r.error.issues.map((i) => i.message).join(" · "));
   const v = r.data;
   const revenue = v.revenue.mode === "plus_tard" ? { mode: "plus_tard" }
     : { mode: v.revenue.mode, amount: centsToDb(v.revenue.amount_cents), date: v.revenue.date, end_date: v.revenue.mode === "mensuel" ? v.revenue.end_date ?? null : null };
+  return {
+    closed_on: v.closed_on, signed_on: v.signed_on ?? null, documents_ready: v.documents_ready, revenue,
+    link_mission_id: v.link_mission_id ?? null, link_invoice_id: v.link_invoice_id ?? null, link_project_id: v.link_project_id ?? null,
+    project_name: v.project_name || null, create_project: v.create_project ?? false,
+  };
+}
+
+export async function confirmSale(sb: SupabaseClient, companyId: string, input: ConfirmInput, key: string): Promise<ConfirmResult> {
   return rpc<ConfirmResult>(sb, "sale_confirm", {
     p_company: uuid.parse(companyId),
-    p_data: {
-      closed_on: v.closed_on, signed_on: v.signed_on ?? null, documents_ready: v.documents_ready, revenue,
-      link_mission_id: v.link_mission_id ?? null, link_invoice_id: v.link_invoice_id ?? null, link_project_id: v.link_project_id ?? null,
-      project_name: v.project_name || null, create_project: v.create_project ?? false,
-    },
+    p_data: confirmPayload(input),
     p_idempotency_key: z.string().min(8).max(200).parse(key),
   });
 }

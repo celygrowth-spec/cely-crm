@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Archive, ArchiveRestore, Ban, CheckSquare, ChevronDown, ExternalLink, FileUp, Mail, Maximize2, MessageSquarePlus, MoreHorizontal, Pencil, Phone, Plus, Sparkles, StickyNote, Timer, UserRound, X } from "lucide-react";
+import { Archive, ArchiveRestore, Ban, CheckSquare, Columns3, Trophy, ChevronDown, ExternalLink, FileUp, Mail, Maximize2, MessageSquarePlus, MoreHorizontal, Pencil, Phone, Plus, Sparkles, StickyNote, Timer, UserRound, X } from "lucide-react";
 import { RecordDealClosing } from "./deal-closing";
+import { AddToPipelineDialog, MakeClientDialog } from "./record-advance";
 import { useTimer } from "./time/timer";
 import { useCompanyMails } from "./record-entry";
 import { formatDateTime } from "@/lib/format";
@@ -159,6 +160,7 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
   const router = useRouter();
   const timer = useTimer();
   const timing = timer.running?.company_id === c.id;
+  const [advance, setAdvance] = useState<"pipeline" | "client" | null>(null);
 
   async function toggleArchive() {
     const value = !c.archived_at;
@@ -244,6 +246,9 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
             trigger={<><MoreHorizontal size={14} /> <span className="max-md:hidden">Actions</span><ChevronDown size={12} className="text-muted max-md:hidden" /></>}>
             {(close) => (
               <div data-actions-menu>
+                <MenuItem icon={Columns3} onClick={() => { close(); setAdvance("pipeline"); }}>Ajouter à une pipeline</MenuItem>
+                {c.deal_status === "open" && <MenuItem icon={Trophy} onClick={() => { close(); setAdvance("client"); }}>Passer en client</MenuItem>}
+                <div className="my-1 border-t border-line" />
                 <MenuItem icon={StickyNote} onClick={() => { close(); ctx.logExchange("note"); }}>Ajouter une note</MenuItem>
                 <MenuItem icon={Phone} onClick={() => { close(); ctx.logExchange("call"); }}>Enregistrer un appel</MenuItem>
                 <MenuItem icon={MessageSquarePlus} onClick={() => { close(); ctx.logExchange("message_in"); }}>Enregistrer un autre échange</MenuItem>
@@ -256,6 +261,8 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
               </div>
             )}
           </Popover>
+          <AddToPipelineDialog ctx={ctx} open={advance === "pipeline"} onClose={() => setAdvance(null)} />
+          <MakeClientDialog ctx={ctx} open={advance === "client"} onClose={() => setAdvance(null)} />
         </div>
       </div>
     </header>
