@@ -25,7 +25,7 @@ for f in [f for f in FILES if os.path.exists(L+f+".json")]:
         r["email_a_utiliser"], r["email_a_utiliser_type"] = email_envoi(r)
         dom = r["email_a_utiliser"].split("@")[-1].lower() if r["email_a_utiliser"] else email_domain(r)
         r["dns_domaine"] = dom; r.update(DNSC.get(dom, {}))
-        r["origine"] = "relations LinkedIn de Mariia" if f.startswith("c5") else ("recherche V4 (13/11)" if f.startswith(("c6","c7")) else "recherche web (sites publics)")
+        r["origine"] = "relations LinkedIn de Mariia" if f.startswith("c5") else ("recherche V4 (13/11)" if f.startswith("c6") else ("pistes salon TransfoDroit requalifiées" if f.startswith("c7") else "recherche web (sites publics)"))
         r["score_v1"] = r["score_priorite"]
         if r.get("score_revu") in ("A","B","C"): r["score_priorite"] = r["score_revu"]
         r["segment"] = f.upper(); rows.append(r)

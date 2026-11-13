@@ -11,7 +11,7 @@ RET=json.load(open(B+'work/retires_v2.json'))
 CAMP={'C_cabinet_premier_contact':'V1-A · Cabinets (avocats & EC)','P_partenaire_anthropic':'V1-B · Partenaires Anthropic','D_direction_juridique':'V1-C · Directions juridiques'}
 CIB={1:'Avocats',2:'Experts-comptables',3:'Partenaires Anthropic',4:'Directions juridiques'}
 vk={(r['firstName'],r['lastName']):r for r in V}
-FLAG=re.compile(r'à arbitrer|à vérifier|a verifier',re.I)
+FLAG=re.compile(r"à arbitrer|à vérifier|a verifier|n'envoyer qu'après",re.I)
 def camp(r):
     v=vk.get((r['prenom'],r['nom']))
     if v: return CAMP[v['segment']]

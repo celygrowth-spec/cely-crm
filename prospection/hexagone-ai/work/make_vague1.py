@@ -10,7 +10,7 @@ W, skip = [], collections.Counter()
 for r in rows:
     if r["score_priorite"] != "A": continue
     if not r["email_a_utiliser"] or str(r["dns_verdict"]).startswith(("PAS", "ERR")): skip["pas d'adresse envoyable"] += 1; continue
-    if r["statut_verification"] == "à vérifier" or re.search(r"à arbitrer|à vérifier|a verifier", str(r["qualif_commentaire"] or ""), re.I): skip["à vérifier avant envoi"] += 1; continue
+    if r["statut_verification"] == "à vérifier" or re.search(r"à arbitrer|à vérifier|a verifier|n'envoyer qu'après", str(r["qualif_commentaire"] or ""), re.I): skip["à vérifier avant envoi"] += 1; continue
     if not r["accroche"]: skip["pas d'accroche"] += 1; continue
     W.append(r)
 F = ["email","firstName","lastName","companyName","jobTitle","linkedinUrl","salutation","ligne_attention","segment","cible","score","accroche","douleur_confidentialite","email_type","dns_verdict","perso_faits","source_contact"]
