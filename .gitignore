@@ -42,5 +42,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# configuration locale de Claude Code
-.claude/
+# configuration locale de Claude Code (sauf le hook de démarrage des sessions cloud)
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+.claude/hooks/*
+!.claude/hooks/session-start.sh
