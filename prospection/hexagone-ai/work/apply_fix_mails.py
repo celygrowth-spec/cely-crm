@@ -12,6 +12,8 @@ for p in sorted(glob.glob(L + "c[0-9]*.json")):
         if not f or r.get("email"): continue
         if f.get("format_email_suppose") and "non confirm" not in f["format_email_suppose"].lower():
             r["format_email_suppose"] = f["format_email_suppose"]; ch = True; k += 1
+            if re.search(r"sous réserve|à confirmer|incertain", f["format_email_suppose"] + " " + (f.get("note") or ""), re.I):
+                r["qualif_commentaire"] = "À vérifier : format d'e-mail sous réserve (" + (f.get("note") or "")[:120] + "). " + (r.get("qualif_commentaire") or "")
         elif f.get("email_generique"):
             r["email_generique"] = f["email_generique"]; ch = True; k += 1
     if ch: json.dump(d, open(p, "w"), ensure_ascii=False, indent=1)

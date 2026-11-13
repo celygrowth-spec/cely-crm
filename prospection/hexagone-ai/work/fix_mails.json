@@ -1,0 +1,210 @@
+[
+  {
+    "prenom": "John",
+    "nom": "Harrison",
+    "entreprise": "Airbus",
+    "format_email_suppose": "john.harrison@airbus.com — déduit (motif prenom.nom observé sur guillaume.steuer@airbus.com et martin.aguera@airbus.com, CP conjoint Airbus/Thales/Leonardo 23/10/2025, https://echanges.dila.gouv.fr/OPENDATA/AMF/ECO/2025/10/FCECO080011_20251023.pdf)",
+    "email_generique": "",
+    "note": "Nom simple, motif net. Remplace l'hypothèse non confirmée précédente."
+  },
+  {
+    "prenom": "Juliette",
+    "nom": "Rouilloux-Sicre",
+    "entreprise": "Thales",
+    "format_email_suppose": "juliette.rouilloux-sicre@thalesgroup.com — déduit (motif prenom.nom observé sur cedric.leurquin@thalesgroup.com, même CP, https://echanges.dila.gouv.fr/OPENDATA/AMF/ECO/2025/10/FCECO080011_20251023.pdf)",
+    "email_generique": "",
+    "note": "Nom composé : trait d'union conservé probable mais non vérifié (variante possible juliette.rouilloux@thalesgroup.com)."
+  },
+  {
+    "prenom": "Julie",
+    "nom": "Duvivier",
+    "entreprise": "Klépierre",
+    "format_email_suppose": "julie.duvivier@klepierre.com — déduit (motif prenom.nom observé sur helene.salmon@klepierre.com, CP nomination U. Trussoni, https://klepierre.com/files/48ac88fc/cp_nomination_umberto_trussoni_def.pdf)",
+    "email_generique": "",
+    "note": "Accents supprimés dans le motif (hélène → helene)."
+  },
+  {
+    "prenom": "Morgane",
+    "nom": "Boucher",
+    "entreprise": "Bureau Veritas",
+    "format_email_suppose": "morgane.boucher@bureauveritas.com — déduit (motif prenom.nom observé sur laurent.brunelle@bureauveritas.com et colin.verbrugghe@bureauveritas.com, page Investisseurs https://group.bureauveritas.com/investors)",
+    "email_generique": "",
+    "note": "Domaine e-mail bureauveritas.com (site group.bureauveritas.com)."
+  },
+  {
+    "prenom": "Emmanuel",
+    "nom": "Rollin",
+    "entreprise": "Colas (groupe Bouygues)",
+    "format_email_suppose": "emmanuel.rollin@colas.com — déduit (motif prenom.nom observé sur fabienne.bouloc@colas.com et charlotte.denis@colas.com, CP VINCI Construction x Colas juillet 2025, https://www.etf.fr/wp-content/uploads/2025/07/CP-VINCI-Construction-x-Colas_Contrat-ferroviaire-Chili_020725.pdf)",
+    "email_generique": "",
+    "note": ""
+  },
+  {
+    "prenom": "David",
+    "nom": "Legrand",
+    "entreprise": "Spie Batignolles",
+    "format_email_suppose": "david.legrand@spiebatignolles.fr — déduit (motif prenom.nom observé sur pascal.pilon@spiebatignolles.fr et tatiana.allais@spiebatignolles.fr, dossier de presse 2016 https://fpa.fr/wp-content/uploads/2016/03/DP-Actus-Chantiers-2016.pdf ; marine.danterroches@spiebatignolles.fr en 2019 https://fpa.fr/wp-content/uploads/2019/11/DPSpiebatignollesNov2019.pdf)",
+    "email_generique": "dpo@spiebatignolles.fr (https://www.spiebatignolles.fr/mentions-legales/)",
+    "note": "Motif observé sur des documents 2016-2019 (pas 2026)."
+  },
+  {
+    "prenom": "Boris",
+    "nom": "Paulin",
+    "entreprise": "Kering",
+    "format_email_suppose": "boris.paulin@kering.com — déduit (motif prenom.nom observé sur emilie.gargatte@kering.com et victoria.gerard@kering.com, CP Kering 2026, https://ml-eu.globenewswire.com/Resource/Download/a7cbf57d-9ad0-4bd0-9b27-a02e8b393a82)",
+    "email_generique": "privacy@kering.com (https://www.kering.com/fr/mentions-legales/)",
+    "note": "Particules collées dans le motif Kering (philippine.deschonen@kering.com)."
+  },
+  {
+    "prenom": "Martin",
+    "nom": "Pailhes",
+    "entreprise": "BNP Paribas",
+    "format_email_suppose": "martin.pailhes@bnpparibas.com — déduit (motif prenom.nom observé sur sandrine.romano@bnpparibas.com et thomas.alexandre@bnpparibas.com, CP BNP Paribas/BPCE, https://invest.bnpparibas/document/bnp-paribas-et-bpce-annoncent-leur-projet-de-creer-un-partenariat-strategique-dans-les-paiements)",
+    "email_generique": "",
+    "note": "Domaine e-mail bnpparibas.com (site group.bnpparibas)."
+  },
+  {
+    "prenom": "Boubakar",
+    "nom": "Dione",
+    "entreprise": "Bpifrance",
+    "format_email_suppose": "boubakar.dione@bpifrance.fr — déduit (motif prenom.nom observé sur sarah.madani@bpifrance.fr, CP Accélérateur France-Italie, https://api.elite-network.com/api/resources/download/news/cdp-bpifrance-elite-euronext-group-and-team-france-export-launch-the-french-italian-accelerator/documents/fr-cp-accelerateur-france-italie-pdf)",
+    "email_generique": "",
+    "note": ""
+  },
+  {
+    "prenom": "Stéphane",
+    "nom": "Roussille",
+    "entreprise": "Crédit Agricole (entité à préciser)",
+    "format_email_suppose": "stephane.roussille@credit-agricole-sa.fr — déduit SOUS RÉSERVE (motif prenom.nom observé sur alexandre.barat@credit-agricole-sa.fr et jean-yann.asseraf@credit-agricole-sa.fr, CP Crédit Agricole S.A., https://ml-eu.globenewswire.com/Resource/Download/9a0a0e19-5c00-487f-a73a-8bb236825417)",
+    "email_generique": "",
+    "note": "Valable seulement s'il est bien chez Crédit Agricole S.A. ; une Caisse régionale ou la FNCA utilisent d'autres domaines (ca-xxx.fr, ca-fnca.fr). Entité à confirmer avant envoi."
+  },
+  {
+    "prenom": "Guillaume",
+    "nom": "de Crémiers",
+    "entreprise": "Crédit Agricole Île-de-France",
+    "format_email_suppose": "guillaume.decremiers@ca-paris.fr — déduit, particule INCERTAINE (motif prenom.nom observé sur andrea.leite@ca-paris.fr et aurelie.leroy@ca-paris.fr, CP 2020, https://www.monchasseurimmo.com/hubfs/2020-website-mci/presse/Communiques-de-Presse/2020-06-26-BonConseil-le-Credit-Agricole-IDF-fait-confiance-a-Mon-Chasseur-Immo.pdf)",
+    "email_generique": "dpo@ca-paris.fr (https://www.credit-agricole.fr/association/informations/politique-de-protection-des-donnees-personnelles-de-la-caisse-regionale-old.html)",
+    "note": "Particule non observée chez CA IDF : variantes guillaume.de-cremiers@ / guillaume.cremiers@ possibles. Motif daté de 2020. Domaine e-mail ca-paris.fr (≠ site credit-agricole.fr)."
+  },
+  {
+    "prenom": "Geoffrey",
+    "nom": "Delcroix",
+    "entreprise": "Ubisoft",
+    "format_email_suppose": "geoffrey.delcroix@ubisoft.com — déduit (motif prenom.nom observé sur alexandre.enjalbert@ubisoft.com et michael.burk@ubisoft.com, CP Ubisoft déc. 2025, https://cdn.uc.assets.prezly.com/4db11713-51b8-4b2a-9d95-b39f35f8fd97/-/inline/no/20251215stratospressreleasefinal.pdf)",
+    "email_generique": "",
+    "note": ""
+  },
+  {
+    "prenom": "Marie",
+    "nom": "Duault",
+    "entreprise": "Groupe Limagrain",
+    "format_email_suppose": "marie.duault@limagrain.com — déduit (motif prenom.nom observé sur camille.bourg@limagrain.com, CP Vilmorin & Cie (groupe Limagrain) juillet 2026, https://api.vilmorincie.com/uploads/202607_Press_release_VCO_NGT_EN_229637ccd2.pdf)",
+    "email_generique": "",
+    "note": "Adresse @limagrain.com utilisée par la filiale Vilmorin & Cie : domaine groupe partagé."
+  },
+  {
+    "prenom": "Najib",
+    "nom": "Saïl",
+    "entreprise": "Mirakl",
+    "format_email_suppose": "najib.sail@mirakl.com — déduit (motif prenom.nom observé sur louise.melis@mirakl.com, https://www.mirakl.com/news/mirakl-announces-a-new-appointment-and-two-promotions-to-strengthen-its-executive-committee)",
+    "email_generique": "privacy@mirakl.com (https://www.mirakl.com/privacy-policy)",
+    "note": "Tréma supposé supprimé (saïl → sail)."
+  },
+  {
+    "prenom": "Romain",
+    "nom": "Catala",
+    "entreprise": "DataDome",
+    "format_email_suppose": "romain.catala@datadome.co — déduit (motif prenom.nom observé sur maureen.shaw@datadome.co, CP levée de fonds mars 2023, https://infraviacapital.com/infravia-leads-the-usd-42m-series-c-of-datadome-a-worldwide-leader-in-bot-online-fraud-mitigation/)",
+    "email_generique": "",
+    "note": "Domaine e-mail datadome.co. Motif observé en 2023."
+  },
+  {
+    "prenom": "Stéphanie",
+    "nom": "Corbière",
+    "entreprise": "Aramis Group",
+    "format_email_suppose": "stephanie.corbiere@aramis.group — déduit (motif prenom.nom observé sur alexandre.leroy@aramis.group, CP Aramis Group 2025, https://aramis.group/wp-content/uploads/2025/04/63fe978d-e2f6-41e0-ae12-e63584e5e54f.pdf)",
+    "email_generique": "",
+    "note": "La filiale Aramisauto peut utiliser un autre domaine (aramisauto.com) : non observé."
+  },
+  {
+    "prenom": "Anne-Sophie",
+    "nom": "Jourdain",
+    "entreprise": "Auchan Retail International",
+    "format_email_suppose": "ajourdain@auchan.com — déduit, prénom composé INCERTAIN (motif initiale+nom observé sur apernod@auchan.com, CP Auchan Retail 2024, https://www.auchan-retail.com/storage/app/uploads/public/65c/0b4/d22/65c0b4d225c13473533775.pdf)",
+    "email_generique": "",
+    "note": "Motif p.nom collé (initiale + nom). Pour un prénom composé, variante asjourdain@auchan.com possible. Domaine auchan.com (≠ site auchan-retail.com)."
+  },
+  {
+    "prenom": "Laurent",
+    "nom": "Delaurière",
+    "entreprise": "Groupe Rocher",
+    "format_email_suppose": "laurent.delauriere@yrnet.com — déduit, motif ANCIEN (prenom.nom observé sur marion.moulin@yrnet.com, CP Groupe Rocher 2021, https://groupe-rocher.com/sites/default/files/2021-02/EM_Communiqu%C3%A9%20de%20presse%20FR.pdf)",
+    "email_generique": "",
+    "note": "Domaine e-mail yrnet.com (≠ site groupe-rocher.com) ; observé en 2019-2021, depuis 2023 les CP citent presse@yr.net : le domaine nominatif a pu changer (yr.net). À vérifier."
+  },
+  {
+    "prenom": "Frédérique",
+    "nom": "Minelle",
+    "entreprise": "Groupe Rocher",
+    "format_email_suppose": "frederique.minelle@yrnet.com — déduit, motif ANCIEN (prenom.nom observé sur marion.moulin@yrnet.com, CP Groupe Rocher 2021, https://groupe-rocher.com/sites/default/files/2021-02/EM_Communiqu%C3%A9%20de%20presse%20FR.pdf)",
+    "email_generique": "",
+    "note": "Mêmes réserves que L. Delaurière (yrnet.com vs yr.net)."
+  },
+  {
+    "prenom": "Sophie",
+    "nom": "Deis-Beauquesne",
+    "entreprise": "VINCI",
+    "format_email_suppose": "sophie.deis-beauquesne@vinci.com — déduit (motif prenom.nom observé sur boris.valet@vinci.com et gregoire.thibault@vinci.com, CP résultats annuels 2024 VINCI, https://bnains.org/archives/communiques/Vinci/20250206_Communique_resultats_annuels_2024_Vinci.pdf)",
+    "email_generique": "",
+    "note": "Nom composé : trait d'union conservé supposé (non observé chez VINCI). Le CP VINCI est hébergé sur bnains.org (archive)."
+  },
+  {
+    "prenom": "Sabine",
+    "nom": "Le Gac",
+    "entreprise": "EDF",
+    "format_email_suppose": "sabine.le-gac@edf.fr ou sabine.legac@edf.fr — motif prenom.nom confirmé (alexandra.istrate@edf.fr, marie-pierre.thamie@edf.fr, CP EDF mars 2026, https://echanges.dila.gouv.fr/OPENDATA/AMF/ECO/2026/03/FCECO081129_20260303.pdf)",
+    "email_generique": "informatique-et-libertes@edf.fr (https://www.edf.fr/donnees-personnelles)",
+    "note": "Trait d'union conservé dans les prénoms composés (marie-pierre) ; traitement de l'espace dans « Le Gac » non observé : incertain."
+  },
+  {
+    "prenom": "Eric",
+    "nom": "Ravy",
+    "entreprise": "SNCF Connect & Tech",
+    "format_email_suppose": "hypothèse non confirmée : eric.ravy@sncf.fr (motif prenom.nom observé sur gubina.nsilou@sncf.fr, SNCF Voyageurs, CP Alstom mai 2026, https://www.alstom.com/sites/alstom.com/files/2026/05/28/20260529_PR_TGVM_ERA_FR.pdf)",
+    "email_generique": "",
+    "note": "Aucun e-mail @sncf-connect.com / @sncf-connect-tech.fr observé : domaine de la filiale non confirmé."
+  },
+  {
+    "prenom": "Long",
+    "nom": "Le Xuan",
+    "entreprise": "Cognizant France",
+    "format_email_suppose": "",
+    "email_generique": "DataProtectionOfficer@cognizant.com (https://www.cognizant.com/fr/fr/privacy-notice)",
+    "note": "Générique DPO groupe, aucun e-mail nominatif Cognizant observé."
+  },
+  {
+    "prenom": "Ivana",
+    "nom": "Gautier",
+    "entreprise": "Sebia",
+    "format_email_suppose": "",
+    "email_generique": "webmaster@sebia.com (https://www.sebia.com/fr/mentions-legales/)",
+    "note": "Seule adresse publiée (mentions légales) ; peu pertinente (webmaster). Aucun e-mail nominatif observé."
+  },
+  {
+    "prenom": "Emmanuelle",
+    "nom": "Vaudoyer",
+    "entreprise": "Imerys",
+    "format_email_suppose": "",
+    "email_generique": "finance@imerys.com (CP AG 12/05/2026, https://echanges.dila.gouv.fr/OPENDATA/AMF/ECO/2026/05/FCECO081990_20260512.pdf)",
+    "note": "Générique relations investisseurs, faute de mieux ; aucun e-mail nominatif @imerys.com publié."
+  },
+  {
+    "prenom": "Marie",
+    "nom": "Champet",
+    "entreprise": "Christian Dior Couture",
+    "format_email_suppose": "",
+    "email_generique": "contactdioreu@dior.com (vu via résultat de recherche sur https://dior.com/en_my/legal-terms ; page non accessible en direct, 403)",
+    "note": "Adresse service client, peu pertinente pour la direction juridique."
+  }
+]
