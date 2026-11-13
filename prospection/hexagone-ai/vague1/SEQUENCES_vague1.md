@@ -1,4 +1,4 @@
-# Hexagone AI — Vague 1 (75 contacts, tous inconnus de Mariia) — séquences prêtes à importer
+# Hexagone AI — Vague 1 (79 contacts, tous inconnus de Mariia) — séquences prêtes à importer
 
 Expéditrice : **Mariia Zameshina, cofondatrice d'Hexagone AI**, depuis la boîte Hexagone AI (PAS depuis un autre compte).
 Fichier : `Hexagone_AI_vague1_leads.csv` (colonnes = variables Lemlist : `{{firstName}}`, `{{lastName}}`, `{{companyName}}`, `{{salutation}}`, `{{ligne_attention}}`, `{{accroche}}`, `{{douleur_confidentialite}}`…).
@@ -6,9 +6,9 @@ Règle d'or : l'accroche de chaque contact est déjà écrite et sourcée (colon
 
 | Segment | Nb | Qui | Canal |
 |---|---|---|---|
-| C_cabinet_premier_contact | 46 | avocats et experts-comptables score A, jamais contactés | e-mail + invitation LinkedIn |
+| C_cabinet_premier_contact | 48 | avocats et experts-comptables score A, jamais contactés | e-mail + invitation LinkedIn |
 | P_partenaire_anthropic | 18 | décideurs chez les partenaires Claude (KPMG, Capgemini, IBM, Bain, BCG, Sia, SFEIR, Wesype, Galadrim…) | e-mail (angle partenariat) + invitation LinkedIn |
-| D_direction_juridique | 11 | DJ / DPO / legal ops de groupes | e-mail + invitation LinkedIn |
+| D_direction_juridique | 13 | DJ / DPO / legal ops de groupes | e-mail + invitation LinkedIn |
 
 Consigne : aucun contact ayant déjà échangé un message LinkedIn avec Mariia (ils ont été retirés de la base).
 
@@ -85,7 +85,7 @@ Objet : `Claude chez vos clients réglementés : une brique de pseudonymisation`
 
 ---
 
-## Segment D — directions juridiques (11)
+## Segment D — directions juridiques (13)
 
 **J0 · E-mail 1**
 Objet : `IA générative et confidentialité à la direction juridique de {{companyName}}`

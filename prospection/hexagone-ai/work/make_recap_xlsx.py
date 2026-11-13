@@ -4,7 +4,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 B='/home/user/cely-crm/prospection/hexagone-ai/'
-src=openpyxl.load_workbook(B+'Hexagone_AI_leads_M1_V4.xlsx'); ws=src['Tous']
+src=openpyxl.load_workbook(B+'Hexagone_AI_leads_M1_V5.xlsx'); ws=src['Tous']
 h=[c.value for c in ws[1]]; L=[dict(zip(h,r)) for r in ws.iter_rows(min_row=2,values_only=True)]
 V=list(csv.DictReader(open(B+'vague1/Hexagone_AI_vague1_leads.csv',encoding='utf-8-sig')))
 RET=json.load(open(B+'work/retires_v2.json'))
@@ -68,12 +68,12 @@ def colorize(wsx,head,n,start=1):
 wb=Workbook()
 # ---------- Lisez-moi
 rd=wb.active; rd.title='Lisez-moi'
-lines=[('Hexagone AI × Cely — Prospects et campagnes',True,14),('Mis à jour le 13/11/2026 · 295 prospects qualifiés, AUCUN déjà contacté par Mariia · 3 campagnes de la vague 1 (75 prospects) prêtes, NON lancées',False,10),('',False,10),
+lines=[('Hexagone AI × Cely — Prospects et campagnes',True,14),('Mis à jour le 13/11/2026 · 323 prospects qualifiés, AUCUN déjà contacté par Mariia · 3 campagnes de la vague 1 (79 prospects) prêtes, NON lancées',False,10),('',False,10),
 ('LES ONGLETS',True,11),
 ('Tableau de bord — les chiffres clés (se recalculent si vous modifiez « Tous les leads »).',False,10),
 ('Campagnes — les 3 campagnes de la vague 1 : pour qui, quel angle, quelles étapes, combien de prospects, statut.',False,10),
-('Prospects par campagne — les 75 prospects de la vague 1, regroupés par campagne, avec l\'accroche personnalisée de chacun.',False,10),
-('Tous les leads — les 295 prospects, avec la campagne prévue (ou la raison pour laquelle ils attendent).',False,10),
+('Prospects par campagne — les 79 prospects de la vague 1, regroupés par campagne, avec l\'accroche personnalisée de chacun.',False,10),
+('Tous les leads — les 323 prospects, avec la campagne prévue (ou la raison pour laquelle ils attendent).',False,10),
 ('Séquences — le texte exact de chaque e-mail / message LinkedIn, étape par étape.',False,10),
 ('Retirés — les prospects écartés et pourquoi (dont les 119 personnes ayant déjà échangé avec Mariia : consigne de ne pas les recontacter).',False,10),('',False,10),
 ('COMMENT LIRE UN PROSPECT',True,11),

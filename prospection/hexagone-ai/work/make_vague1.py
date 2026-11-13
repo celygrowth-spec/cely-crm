@@ -3,7 +3,7 @@ Règle : score A + adresse utilisable (domaine avec MX) + statut ≠ « à véri
 Aucun contact déjà approché par Mariia (ils ont été retirés en amont)."""
 import openpyxl, csv, re, os, collections
 L = os.path.dirname(os.path.abspath(__file__)) + "/"
-wb = openpyxl.load_workbook(L + "../Hexagone_AI_leads_M1_V4.xlsx"); ws = wb["Tous"]
+wb = openpyxl.load_workbook(L + "../Hexagone_AI_leads_M1_V5.xlsx"); ws = wb["Tous"]
 h = [c.value for c in ws[1]]; rows = [dict(zip(h, r)) for r in ws.iter_rows(min_row=2, values_only=True)]
 SEG = {1: "C_cabinet_premier_contact", 2: "C_cabinet_premier_contact", 3: "P_partenaire_anthropic", 4: "D_direction_juridique"}
 W, skip = [], collections.Counter()
