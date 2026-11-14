@@ -79,4 +79,8 @@ export type ThreadView = {
   ok: boolean;
   error: string | null;
   messages: ThreadMessage[];
+  /** expéditeur des réponses par canal, déduit du fil par le serveur (null : réponse impossible depuis le CRM) */
+  reply_from: { email: { name: string | null; email: string } | null; linkedin: { name: string | null } | null };
 };
+
+export type ReplyResult = { status: "sent" | "failed" | "uncertain"; duplicate: boolean; message: string | null };

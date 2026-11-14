@@ -6,12 +6,12 @@
 // sans masquer les autres.
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, Mail, RefreshCw } from "lucide-react";
-import { Badge, Button, EmptyState, PageHeader, Select, Spinner, cn } from "@/components/ui";
+import { AlertTriangle, ArrowLeft, Mail, RefreshCw, Send } from "lucide-react";
+import { Badge, Button, EmptyState, PageHeader, Select, Spinner, Textarea, cn } from "@/components/ui";
 import { apiGet } from "@/lib/client/query";
-import type { InboxConversation, InboxData, MessageChannel, SyncResult, ThreadView } from "@/lib/lemlist/types";
+import type { InboxConversation, InboxData, MessageChannel, ReplyResult, SyncResult, ThreadMessage, ThreadView } from "@/lib/lemlist/types";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 const INBOX = ["lemlist-inbox"];
@@ -109,7 +109,7 @@ export function MessagesView() {
   const unreadCount = data?.conversations.filter((c) => c.unread).length ?? 0;
 
   return (
-    <div className="flex h-[calc(100dvh-7rem)] min-h-[480px] flex-col md:h-[calc(100dvh-4rem)]">
+    <div className="flex h-[calc(100dvh-10rem)] min-h-[480px] flex-col md:h-[calc(100dvh-8rem)]">
       <PageHeader
         title="Messages"
         description="Conversations email et LinkedIn des comptes lemlist de vos clients."
@@ -189,6 +189,8 @@ export function MessagesView() {
 
 function Thread({ c, onBack }: { c: InboxConversation; onBack: () => void }) {
   const qc = useQueryClient();
+  // réponses envoyées depuis le CRM, affichées tant que lemlist ne les renvoie pas encore dans le fil
+  const [local, setLocal] = useState<ThreadMessage[]>([]);
   const t = useQuery({
     queryKey: ["lemlist-thread", c.id],
     queryFn: async () => {
@@ -200,6 +202,8 @@ function Thread({ c, onBack }: { c: InboxConversation; onBack: () => void }) {
     staleTime: 0,
     retry: false,
   });
+  const norm = (x: string) => x.replace(/\s+/g, " ").trim();
+  const pendingShown = local.filter((m) => !t.data?.messages.some((x) => x.direction === "out" && x.channel === m.channel && norm(x.text) === norm(m.text)));
   return (
     <>
       <header className="flex items-start gap-2 border-b border-line px-4 py-3">
@@ -215,9 +219,9 @@ function Thread({ c, onBack }: { c: InboxConversation; onBack: () => void }) {
           <p className="text-sm font-semibold text-danger">{t.error.message}</p>
         ) : !t.data.ok ? (
           <p className="text-sm font-semibold text-danger">{t.data.error}</p>
-        ) : !t.data.messages.length ? (
+        ) : !t.data.messages.length && !pendingShown.length ? (
           <p className="text-sm text-muted">Aucun message email ou LinkedIn dans ce fil.</p>
-        ) : t.data.messages.map((m) => (
+        ) : [...t.data.messages, ...pendingShown].map((m) => (
           <article key={m.id} className={cn("max-w-[85%] rounded-2xl border px-3 py-2 text-sm", m.direction === "in" ? "border-line bg-white" : "ml-auto border-violet/30 bg-violet-soft")} data-direction={m.direction}>
             <p className="mb-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted">
               <ChannelIcon c={m.channel} size={11} />
@@ -226,9 +230,87 @@ function Thread({ c, onBack }: { c: InboxConversation; onBack: () => void }) {
             </p>
             {m.subject && <p className="mb-1 font-semibold text-ink">{m.subject}</p>}
             <p className="whitespace-pre-wrap break-words text-ink">{m.text || "(message vide)"}</p>
+            {m.id.startsWith("local-") && <p className="mt-1 text-[11px] text-muted">Envoyé depuis le CRM · apparaîtra dans lemlist au prochain rafraîchissement</p>}
           </article>
         ))}
       </div>
+      {t.data?.ok && <Composer c={c} view={t.data} onSent={(m) => { setLocal((l) => [...l, m]); qc.invalidateQueries({ queryKey: ["lemlist-thread", c.id] }); }} />}
     </>
+  );
+}
+
+// brouillons par conversation, gardés tant que la page est ouverte (changer de conversation ne perd rien)
+const drafts = new Map<string, string>();
+
+function Composer({ c, view, onSent }: { c: InboxConversation; view: ThreadView; onSent: (m: ThreadMessage) => void }) {
+  const available = c.channels.filter((x) => (x === "email" ? view.reply_from.email : view.reply_from.linkedin));
+  const [channel, setChannel] = useState<MessageChannel>(available.includes(mainChannel(c)) ? mainChannel(c) : available[0] ?? mainChannel(c));
+  const [text, setTextState] = useState(() => drafts.get(c.id) ?? "");
+  const setText = (v: string) => { drafts.set(c.id, v); setTextState(v); };
+  const [sending, setSending] = useState(false);
+  const [problem, setProblem] = useState<{ kind: "failed" | "uncertain"; message: string } | null>(null);
+  // une clé par tentative : un double clic ou une requête rejouée ne part qu'une fois
+  const attempt = useRef<string | null>(null);
+  const from = channel === "email" ? view.reply_from.email : view.reply_from.linkedin;
+  const sender = channel === "email" && view.reply_from.email
+    ? [view.reply_from.email.name, view.reply_from.email.email].filter(Boolean).join(" · ")
+    : view.reply_from.linkedin?.name || "membre de l'équipe qui suit la conversation";
+
+  async function send(again = false) {
+    if (sending || !text.trim() || !from) return;
+    if (!attempt.current || again) attempt.current = crypto.randomUUID();
+    setSending(true);
+    setProblem(null);
+    try {
+      const r = await post<ReplyResult>(`/api/lemlist/conversations/${c.id}`, { op: "reply", channel, text, key: attempt.current });
+      if (r.status === "sent") {
+        onSent({ id: `local-${attempt.current}`, channel, direction: "out", at: new Date().toISOString(), subject: null, text: text.trim(), sender_name: channel === "email" ? view.reply_from.email?.name ?? null : view.reply_from.linkedin?.name ?? null, sender_email: channel === "email" ? view.reply_from.email?.email ?? null : null });
+        attempt.current = null;
+        setText("");
+        toast.success(r.duplicate ? "Cette réponse était déjà partie." : "Réponse envoyée.");
+      } else if (r.status === "uncertain") {
+        setProblem({ kind: "uncertain", message: r.message ?? "Envoi incertain : actualisez le fil pour vérifier avant de renvoyer." });
+      } else {
+        attempt.current = null; // échec certain : la prochaine tentative est un nouvel envoi
+        setProblem({ kind: "failed", message: r.message ?? "La réponse n'est pas partie." });
+      }
+    } catch (e) {
+      // réponse du serveur perdue : on ne sait pas si l'envoi est parti, la même clé protège d'un double envoi
+      setProblem({ kind: "uncertain", message: e instanceof Error ? `${e.message} Réessayer renvoie la même demande : elle ne partira qu'une fois.` : "Résultat inconnu." });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (!available.length) {
+    return <p className="border-t border-line px-4 py-3 text-xs text-muted">Réponse impossible depuis le CRM : l&apos;expéditeur de cette conversation n&apos;apparaît pas dans le fil. Répondez depuis lemlist.</p>;
+  }
+  return (
+    <form className="space-y-2 border-t border-line p-3" onSubmit={(e) => { e.preventDefault(); void send(); }}>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <p className="flex-1 text-muted" data-reply-from>
+          Envoi depuis : <span className="font-semibold text-ink">compte lemlist de {view.company_name}</span>
+          {view.team_name ? ` (${view.team_name})` : ""}, <span className="font-semibold text-ink">{sender}</span>
+          {" "}· par {CHANNEL_LABEL[channel]}
+        </p>
+        {available.length > 1 && (
+          <Select aria-label="Canal de la réponse" value={channel} onChange={(e) => { setChannel(e.target.value as MessageChannel); setProblem(null); attempt.current = null; }} className="h-7 w-auto text-xs">
+            {available.map((x) => <option key={x} value={x}>{CHANNEL_LABEL[x]}</option>)}
+          </Select>
+        )}
+      </div>
+      <Textarea aria-label="Votre réponse" rows={3} value={text} disabled={sending} maxLength={5000}
+        onChange={(e) => { setText(e.target.value); if (problem?.kind === "failed") setProblem(null); }}
+        placeholder={`Répondre à ${contactLabel(c)}…`} />
+      {problem && (
+        <p role="alert" className={cn("text-xs font-semibold", problem.kind === "failed" ? "text-danger" : "text-amber-800")}>{problem.message}</p>
+      )}
+      <div className="flex justify-end gap-2">
+        {problem?.kind === "uncertain" && (
+          <Button type="button" size="sm" variant="ghost" disabled={sending} onClick={() => { if (confirm("Renvoyer quand même ? Si la première réponse est partie, le contact la recevra deux fois.")) void send(true); }}>Renvoyer quand même</Button>
+        )}
+        <Button type="submit" size="sm" variant="primary" disabled={sending || !text.trim()}>{sending ? <Spinner /> : <Send size={13} />} Envoyer</Button>
+      </div>
+    </form>
   );
 }

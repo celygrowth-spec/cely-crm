@@ -31,6 +31,22 @@ Lire et répondre aux messages reçus sur les comptes lemlist des clients, depui
   fil dans le CRM ne le marque pas lu chez lemlist. Une réponse faite directement dans lemlist le marque lu chez lemlist :
   le non-lu disparaît au rafraîchissement suivant.
 
+## Répondre (M3)
+- Sous le fil : zone de réponse et bouton **Envoyer**. Au-dessus, « Envoi depuis : compte lemlist du client (équipe),
+  expéditeur · par Email/LinkedIn ». Si la conversation a les deux canaux, on choisit le canal.
+- Le serveur retrouve tout seul le compte (celui de la conversation) et l'expéditeur, en relisant le fil chez lemlist :
+  - email : le membre de l'équipe et sa boîte mail qui ont écrit en dernier (`POST /inbox/email`), en réponse dans le
+    même fil (`replyToActivityId` = dernier email) ;
+  - LinkedIn : le membre qui a écrit en dernier et le lead du contact (`POST /inbox/linkedin`).
+  Sans expéditeur identifiable, rien n'est envoyé : « répondez depuis lemlist ».
+- La requête du navigateur ne contient que la conversation, le canal, le texte et une clé d'envoi ; tout champ en plus
+  (identifiant de compte, clé…) fait refuser la requête.
+- Un seul envoi par clé (double clic, requête rejouée). Échec certain : message, texte conservé, nouvel essai possible.
+  lemlist ne répond pas : état **incertain** (jamais « envoyé »), texte conservé, « Renvoyer quand même » après
+  confirmation. Clé refusée : le compte passe « À reconnecter ».
+- Après l'envoi, la réponse apparaît dans le fil (relu chez lemlist ; en attendant, affichée « Envoyé depuis le CRM »).
+- Seul l'état de chaque envoi est enregistré (`lemlist_replies`) : jamais le texte.
+
 ## Sécurité
 - La clé est chiffrée par le serveur (AES-256-GCM, `src/lib/mail/crypto.ts`) avant d'être enregistrée, dans une table
   séparée (`lemlist_account_secrets`) que seule la fonction `lemlist_account_key` lit, pour un compte visible.
@@ -44,6 +60,7 @@ Lire et répondre aux messages reçus sur les comptes lemlist des clients, depui
 ## Migrations
 - `20261119000100_lemlist_comptes.sql` (additive).
 - `20261119000200_lemlist_conversations.sql` (additive), à appliquer après la précédente.
+- `20261119000300_lemlist_reponses.sql` (additive), à appliquer après la précédente.
 
 ## Limites lemlist (documentation officielle)
 - 20 requêtes par 2 secondes, par clé : un compte limité ne ralentit pas les autres.
@@ -53,6 +70,7 @@ Lire et répondre aux messages reçus sur les comptes lemlist des clients, depui
 fictives : `test-lemlist-alpha-0001` et `test-lemlist-beta-0002`. Il sert aussi des conversations
 et messages fictifs (email, LinkedIn, un même contact chez les deux clients, une conversation WhatsApp ignorée).
 Pilotage : `POST /__revoke {"key"}` (clé révoquée), `POST /__limit {"key"}` (débit dépassé),
-`POST /__reply {"key", "contactId", "text", "channel"}` (nouvelle réponse du contact).
+`POST /__reply {"key", "contactId", "text", "channel"}` (nouvelle réponse du contact),
+`POST /__sendfail {"key", "mode": "error" | "timeout" | "off"}` (envoi refusé ou sans réponse), `GET /__sent` (envois reçus).
 L'application ne s'adresse à ce faux lemlist que si `CELY_TEST_ENV=1` et que l'adresse est en 127.0.0.1 ; ailleurs,
 c'est toujours `https://api.lemlist.com/api`. Une clé de chiffrement locale, tirée au hasard, remplace celle de `.env.local`.

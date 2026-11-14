@@ -55,6 +55,7 @@ for (const [team, convs] of Object.entries(DATA)) {
 }
 
 const revoked = new Set();
+const sendFail = new Map(); // clé → "error" (refus 400) | "timeout" (aucune réponse)
 const limited = new Set();
 const sent = [];
 const keyOf = (auth) => Buffer.from(String(auth ?? "").replace(/^Basic /, ""), "base64").toString("utf8").replace(/^:/, "");
@@ -84,6 +85,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === "/__revoke" && req.method === "POST") { revoked.add(input().key); return send(200, { ok: true }); }
   if (url.pathname === "/__limit" && req.method === "POST") { const { key, off } = input(); if (off) limited.delete(key); else limited.add(key); return send(200, { ok: true }); }
   if (url.pathname === "/__sent" && req.method === "GET") return send(200, sent);
+  if (url.pathname === "/__sendfail" && req.method === "POST") { const { key, mode } = input(); if (mode === "off") sendFail.delete(key); else sendFail.set(key, mode); return send(200, { ok: true }); }
   if (url.pathname === "/__reply" && req.method === "POST") {
     const { key, contactId, text, channel = "email" } = input();
     const team = FAKE_KEYS[key]?._id;
@@ -109,6 +111,22 @@ const server = http.createServer(async (req, res) => {
     const data = all.slice((page - 1) * limit, page * limit);
     const totalPages = Math.max(1, Math.ceil(all.length / limit));
     return send(200, { data, pagination: { totalItems: all.length, currentPage: page, nextPage: page < totalPages ? page + 1 : null, previousPage: page > 1 ? page - 1 : null, perPage: limit, totalPages } });
+  }
+  if ((url.pathname === "/api/inbox/email" || url.pathname === "/api/inbox/linkedin") && req.method === "POST") {
+    const b = input();
+    const channel = url.pathname.endsWith("email") ? "email" : "linkedin";
+    const c = DATA[team._id].find((x) => x.contact._id === b.contactId);
+    if (!team.userIds.includes(b.sendUserId)) return send(400, "Invalid sendUserId", "text/plain");
+    if (!c) return send(400, "Invalid contactId", "text/plain");
+    if (channel === "email" && (!b.sendUserEmail || !b.sendUserMailboxId || !b.message)) return send(400, "Invalid sendUserMailboxId", "text/plain");
+    if (channel === "linkedin" && (b.leadId !== c.lead || !b.message)) return send(400, "Invalid leadId", "text/plain");
+    const mode = sendFail.get(key);
+    if (mode === "error") return send(400, channel === "email" ? "Failed to send email" : "Failed to send message", "text/plain");
+    const u = SENDERS[b.sendUserId];
+    messages.get(c.contact._id).push({ _id: `act_api_${Date.now()}`, type: channel === "email" ? "emailsSent" : "linkedinSent", createdAt: new Date().toISOString(), teamId: team._id, contactId: c.contact._id, leadId: c.lead, sendUserId: b.sendUserId, sendUserName: u.name, sendUserEmail: u.email, sendUserMailboxId: u.mailbox, message: b.message, ...(channel === "email" ? { subject: "Re:" } : {}) });
+    sent.push({ team: team._id, channel, contactId: c.contact._id, sendUserId: b.sendUserId, at: new Date().toISOString() });
+    if (mode === "timeout") return; // l'envoi est enregistré mais la réponse ne revient jamais (cas « incertain »)
+    return send(200, channel === "email" ? { ok: true, contactId: c.contact._id } : { ok: true });
   }
   const m = url.pathname.match(/^\/api\/inbox\/(ctc_[A-Za-z0-9]+)$/);
   if (m && req.method === "GET") {

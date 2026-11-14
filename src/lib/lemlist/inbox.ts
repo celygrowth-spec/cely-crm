@@ -6,10 +6,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import sanitizeHtml from "sanitize-html";
 import { z } from "zod";
 import { CrmError } from "@/lib/crm/service";
-import { htmlToText } from "@/lib/mail/render";
+import { htmlToText, textToHtml } from "@/lib/mail/render";
 import { withLemlistAccount } from "./accounts";
 import { getTeam, lemlistRequest } from "./client";
-import type { InboxData, SyncResult, ThreadMessage, ThreadView } from "./types";
+import type { InboxData, ReplyResult, SyncResult, ThreadMessage, ThreadView } from "./types";
 
 /** Pages lues par membre de l'équipe à chaque actualisation (100 conversations par page, les plus récentes d'abord). */
 const PAGES_PER_USER = 2;
@@ -161,16 +161,117 @@ export async function getConversation(sb: SupabaseClient, id: string): Promise<C
   return c;
 }
 
+const THREAD_PATH = (contactId: string) => `/inbox/${encodeURIComponent(contactId)}`;
+
+async function rawThread(apiKey: string, contactId: string): Promise<RawMessage[]> {
+  const res = await lemlistRequest<{ data?: unknown }>(apiKey, THREAD_PATH(contactId), { query: { limit: 100 } });
+  return (Array.isArray(res.data) ? res.data : []) as RawMessage[];
+}
+
+const byDateDesc = (list: RawMessage[]) => [...list].sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
+
+export type EmailTarget = { sendUserId: string; sendUserEmail: string; sendUserMailboxId: string; senderName: string | null; replyToActivityId: string | null };
+export type LinkedinTarget = { sendUserId: string; leadId: string; senderName: string | null };
+
+/**
+ * Expéditeur d'une réponse, déduit par le serveur du fil lu chez lemlist : le membre de l'équipe (et sa boîte mail)
+ * qui a écrit en dernier sur ce canal. `null` si le fil ne permet pas de le savoir : rien n'est envoyé au hasard.
+ */
+export function replyTargets(list: RawMessage[], fallbackUserId: string | null): { email: EmailTarget | null; linkedin: LinkedinTarget | null } {
+  const sorted = byDateDesc(list);
+  const outEmail = sorted.find((m) => str(m.type)?.startsWith("email") && /Sent$/.test(String(m.type)) && str(m.sendUserId) && str(m.sendUserEmail) && str(m.sendUserMailboxId));
+  const lastEmail = sorted.find((m) => /^emails(Sent|Replied)$/.test(String(m.type)) && str(m._id));
+  const outLinkedin = sorted.find((m) => str(m.type)?.startsWith("linkedin") && /Sent$/.test(String(m.type)) && str(m.sendUserId));
+  const lead = sorted.find((m) => str(m.type)?.startsWith("linkedin") && str(m.leadId)) ?? sorted.find((m) => str(m.leadId));
+  const linkedinUser = str(outLinkedin?.sendUserId) ?? fallbackUserId;
+  return {
+    email: outEmail ? {
+      sendUserId: str(outEmail.sendUserId)!, sendUserEmail: str(outEmail.sendUserEmail)!, sendUserMailboxId: str(outEmail.sendUserMailboxId)!,
+      senderName: str(outEmail.sendUserName), replyToActivityId: str(lastEmail?._id),
+    } : null,
+    linkedin: linkedinUser && lead ? { sendUserId: linkedinUser, leadId: str(lead.leadId)!, senderName: str(outLinkedin?.sendUserName) } : null,
+  };
+}
+
 /** Ouvre un fil : messages lus chez lemlist avec la clé du compte de la conversation, puis « vue » dans le CRM. */
 export async function openThread(sb: SupabaseClient, id: string): Promise<ThreadView> {
   const c = await getConversation(sb, id);
-  const head = { id: c.id, company_name: c.company_name, team_name: c.team_name, contact_name: c.contact_name, contact_email: c.contact_email, channels: c.channels };
+  const head = { id: c.id, company_name: c.company_name, team_name: c.team_name, contact_name: c.contact_name, contact_email: c.contact_email, channels: c.channels, reply_from: { email: null, linkedin: null } };
   if (c.account_status !== "connected") return { ...head, ok: false, error: "Compte lemlist à reconnecter (Paramètres › Connecteurs) : le fil ne peut pas être lu.", messages: [] };
-  const r = await withLemlistAccount(sb, c.account_id, async (key) => {
-    const res = await lemlistRequest<{ data?: unknown }>(key, `/inbox/${encodeURIComponent(c.contact_id)}`, { query: { limit: 100 } });
-    return ((Array.isArray(res.data) ? res.data : []) as RawMessage[]).map(toThreadMessage).filter((m): m is ThreadMessage => !!m).sort((a, b) => a.at.localeCompare(b.at));
-  });
+  const r = await withLemlistAccount(sb, c.account_id, (key) => rawThread(key, c.contact_id));
   if (!r.ok) return { ...head, ok: false, error: r.message, messages: [] };
   await rpc(sb, "lemlist_conversation_seen", { p_id: c.id });
-  return { ...head, ok: true, error: null, messages: r.data };
+  const t = replyTargets(r.data, c.sender_user_id);
+  return {
+    ...head, ok: true, error: null,
+    messages: r.data.map(toThreadMessage).filter((m): m is ThreadMessage => !!m).sort((a, b) => a.at.localeCompare(b.at)),
+    reply_from: {
+      email: t.email ? { name: t.email.senderName, email: t.email.sendUserEmail } : null,
+      linkedin: t.linkedin ? { name: t.linkedin.senderName } : null,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Réponse (lot M3)
+// ---------------------------------------------------------------------------
+
+const replyInput = z.object({
+  channel: z.enum(["email", "linkedin"], { message: "Canal inconnu." }),
+  text: z.string().trim().min(1, { message: "Écrivez votre réponse." }).max(5000, { message: "Réponse trop longue (5 000 caractères au plus)." }),
+  key: z.string().min(8).max(100),
+});
+
+/**
+ * Envoie une réponse dans une conversation, par son canal, depuis le compte lemlist de la conversation et l'expéditeur
+ * déduit du fil. Le compte et l'expéditeur sont retrouvés par le serveur ; la clé d'idempotence empêche un double envoi.
+ * Résultat honnête : « sent » seulement si lemlist a confirmé ; « uncertain » si lemlist n'a pas répondu.
+ */
+export async function sendReply(sb: SupabaseClient, id: string, input: { channel: string; text: string; key: string }): Promise<ReplyResult> {
+  const { channel, text, key } = replyInput.parse(input);
+  const c = await getConversation(sb, id);
+  const claim = await rpc<{ id: string; status: ReplyResult["status"] | "sending"; error: string | null; duplicate: boolean }>(sb, "lemlist_reply_claim", { p_conversation: c.id, p_channel: channel, p_key: key });
+  if (claim.duplicate) {
+    const status = claim.status === "sending" ? "uncertain" : claim.status;
+    return { status, duplicate: true, message: claim.status === "sending" ? "Cet envoi est déjà en cours." : claim.error };
+  }
+  const finish = async (status: ReplyResult["status"], message: string | null): Promise<ReplyResult> => {
+    await rpc(sb, "lemlist_reply_finish", { p_id: claim.id, p_status: status, p_error: message });
+    return { status, duplicate: false, message };
+  };
+  // 1. expéditeur : lu dans le fil chez lemlist (un échec ici est certain : rien n'est parti)
+  let fresh: Awaited<ReturnType<typeof withLemlistAccount<RawMessage[]>>>;
+  try {
+    fresh = await withLemlistAccount(sb, c.account_id, (k) => rawThread(k, c.contact_id));
+  } catch (e) {
+    return finish("failed", `${e instanceof CrmError ? e.message : "Préparation de l'envoi impossible."} La réponse n'est pas partie.`);
+  }
+  if (!fresh.ok) return finish("failed", `${fresh.message} La réponse n'est pas partie.`);
+  const targets = replyTargets(fresh.data, c.sender_user_id);
+  let path: string;
+  let body: Record<string, unknown>;
+  if (channel === "email") {
+    const t = targets.email;
+    if (!t) return finish("failed", "Expéditeur email introuvable dans ce fil : répondez depuis lemlist. La réponse n'est pas partie.");
+    path = "/inbox/email";
+    body = { sendUserId: t.sendUserId, sendUserEmail: t.sendUserEmail, sendUserMailboxId: t.sendUserMailboxId, contactId: c.contact_id, message: textToHtml(text), replyToActivityId: t.replyToActivityId ?? "latest" };
+  } else {
+    const t = targets.linkedin;
+    if (!t) return finish("failed", "Expéditeur LinkedIn introuvable dans ce fil : répondez depuis lemlist. La réponse n'est pas partie.");
+    path = "/inbox/linkedin";
+    body = { sendUserId: t.sendUserId, leadId: t.leadId, contactId: c.contact_id, message: text };
+  }
+  // 2. envoi, avec la clé du compte de la conversation
+  let sent: Awaited<ReturnType<typeof withLemlistAccount<{ ok?: unknown }>>>;
+  try {
+    sent = await withLemlistAccount(sb, c.account_id, (k) => lemlistRequest<{ ok?: unknown }>(k, path, { method: "POST", body, timeoutMs: 20_000 }));
+  } catch {
+    return finish("uncertain", "Résultat de l'envoi inconnu. Actualisez le fil pour vérifier avant de renvoyer.");
+  }
+  if (sent.ok) {
+    if (sent.data?.ok === false) return finish("failed", "lemlist a refusé l'envoi. La réponse n'est pas partie.");
+    return finish("sent", null);
+  }
+  if (sent.code === "unavailable") return finish("uncertain", "lemlist n'a pas confirmé l'envoi. Actualisez le fil pour vérifier avant de renvoyer.");
+  return finish("failed", `${sent.message} La réponse n'est pas partie.`);
 }
