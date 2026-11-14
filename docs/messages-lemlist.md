@@ -47,6 +47,13 @@ Lire et répondre aux messages reçus sur les comptes lemlist des clients, depui
 - Après l'envoi, la réponse apparaît dans le fil (relu chez lemlist ; en attendant, affichée « Envoyé depuis le CRM »).
 - Seul l'état de chaque envoi est enregistré (`lemlist_replies`) : jamais le texte.
 
+## Non-lus (M4)
+- Compteur de non-lus sur **Messages** dans le menu (point sur « Plus » et nombre dans son panneau sur téléphone).
+  Les compteurs du menu sont relus toutes les 5 minutes, page visible ; à cette occasion, les comptes lemlist lus il y a
+  plus de 5 minutes sont relus (3 secondes au plus : une lenteur de lemlist ne retarde jamais les autres compteurs).
+- **Aujourd'hui** : une ligne « N message(s) lemlist attendent une réponse » quand le dernier événement d'une conversation
+  est une réponse du contact et qu'aucune réponse n'est partie du CRM depuis. Lue au CRM : Aujourd'hui n'appelle pas lemlist.
+
 ## Sécurité
 - La clé est chiffrée par le serveur (AES-256-GCM, `src/lib/mail/crypto.ts`) avant d'être enregistrée, dans une table
   séparée (`lemlist_account_secrets`) que seule la fonction `lemlist_account_key` lit, pour un compte visible.
@@ -61,6 +68,7 @@ Lire et répondre aux messages reçus sur les comptes lemlist des clients, depui
 - `20261119000100_lemlist_comptes.sql` (additive).
 - `20261119000200_lemlist_conversations.sql` (additive), à appliquer après la précédente.
 - `20261119000300_lemlist_reponses.sql` (additive), à appliquer après la précédente.
+- `20261119000400_lemlist_compteurs.sql` (additive), à appliquer après la précédente.
 
 ## Limites lemlist (documentation officielle)
 - 20 requêtes par 2 secondes, par clé : un compte limité ne ralentit pas les autres.

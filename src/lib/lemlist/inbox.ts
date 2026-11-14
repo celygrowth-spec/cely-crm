@@ -275,3 +275,20 @@ export async function sendReply(sb: SupabaseClient, id: string, input: { channel
   if (sent.code === "unavailable") return finish("uncertain", "lemlist n'a pas confirmé l'envoi. Actualisez le fil pour vérifier avant de renvoyer.");
   return finish("failed", `${sent.message} La réponse n'est pas partie.`);
 }
+
+// ---------------------------------------------------------------------------
+// Compteurs (lot M4)
+// ---------------------------------------------------------------------------
+
+export type InboxCounts = { unread: number; awaiting: number };
+
+export const inboxCounts = (sb: SupabaseClient) => rpc<InboxCounts>(sb, "lemlist_counts", {});
+
+/** Actualisation de fond pour le compteur du menu : comptes lus il y a plus de 5 minutes, sans jamais attendre plus de `timeoutMs`. */
+export async function refreshIfStale(sb: SupabaseClient, opts: { maxAgeMs?: number; timeoutMs?: number } = {}): Promise<void> {
+  const maxAge = opts.maxAgeMs ?? 5 * 60_000;
+  const { accounts } = await loadInbox(sb);
+  const now = Date.now();
+  if (!accounts.some((a) => a.status === "connected" && (!a.last_synced_at || now - Date.parse(a.last_synced_at) > maxAge))) return;
+  await Promise.race([syncInbox(sb).catch(() => undefined), new Promise((r) => setTimeout(r, opts.timeoutMs ?? 3000))]);
+}

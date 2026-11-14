@@ -58,6 +58,7 @@ export function MessagesView() {
     queryFn: async () => {
       const r = await post<{ results: SyncResult[]; inbox: InboxData }>("/api/lemlist/inbox", { force: false });
       qc.setQueryData(INBOX, r.inbox);
+      qc.invalidateQueries({ queryKey: ["counters"] }); // compteur du menu
       return r.results;
     },
     refetchInterval: AUTO_REFRESH_MS,
@@ -76,6 +77,7 @@ export function MessagesView() {
     try {
       const r = await post<{ results: SyncResult[]; inbox: InboxData }>("/api/lemlist/inbox", { force: true });
       qc.setQueryData(INBOX, r.inbox);
+      qc.invalidateQueries({ queryKey: ["counters"] }); // compteur du menu
       qc.setQueryData(["lemlist-sync"], r.results);
       const failed = r.results.filter((x) => !x.ok);
       if (failed.length) toast.error(failed.length === 1 ? `Compte de ${failed[0].company_name} non actualisé.` : `${failed.length} comptes non actualisés.`);
@@ -196,7 +198,10 @@ function Thread({ c, onBack }: { c: InboxConversation; onBack: () => void }) {
     queryFn: async () => {
       const v = await post<ThreadView>(`/api/lemlist/conversations/${c.id}`, { op: "open" });
       // ouverte dans le CRM : n'est plus « non lue » ici (rien n'est changé chez lemlist)
-      if (v.ok) qc.setQueryData<InboxData>(INBOX, (d) => d && { ...d, conversations: d.conversations.map((x) => (x.id === c.id ? { ...x, unread: false } : x)) });
+      if (v.ok) {
+        qc.setQueryData<InboxData>(INBOX, (d) => d && { ...d, conversations: d.conversations.map((x) => (x.id === c.id ? { ...x, unread: false } : x)) });
+        qc.invalidateQueries({ queryKey: ["counters"] });
+      }
       return v;
     },
     staleTime: 0,
