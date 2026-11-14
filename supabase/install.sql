@@ -17531,3 +17531,494 @@ returns table (row_table text, row_id uuid) language sql stable set search_path 
 $$;
 revoke all on function trash_private.describe_todo_list_item(uuid), trash_private.collect_todo_list_item(uuid) from public, anon;
 grant execute on function trash_private.describe_todo_list_item(uuid), trash_private.collect_todo_list_item(uuid) to authenticated;
+
+
+-- ===== 20261119000100_lemlist_comptes.sql =====
+-- Messages lemlist, lot M1 : comptes lemlist des clients (une clé API par compte, chiffrée par l'application).
+-- Additive : deux tables et leurs fonctions, aucune table ni fonction existante modifiée.
+--  * Un compte lemlist (une équipe lemlist) est rattaché à UNE seule fiche client ; une fiche peut en avoir plusieurs.
+--  * La clé est chiffrée côté serveur (AES-256-GCM, MAIL_TOKEN_KEY) avant d'arriver ici : la base n'en voit jamais
+--    la valeur. Elle est rangée à part et n'est lue que par lemlist_account_key, pour un compte connecté.
+--  * Propriétaire uniquement : ni le portail client (anon), ni un autre compte, ni Claude (MCP) n'y ont accès.
+--  * Fiche à la corbeille : le compte est caché et inutilisable (politique de la Corbeille), il revient à la
+--    restauration ; purge définitive : compte et clé supprimés ; fusion : le compte suit la fiche conservée ;
+--    fiche archivée : le compte reste actif.
+
+create table public.lemlist_accounts (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies (id) on delete cascade,
+  team_id text not null check (char_length(team_id) between 1 and 100),
+  team_name text not null default '' check (char_length(team_name) <= 200),
+  -- connected : utilisable ; needs_reconnect : clé refusée par lemlist ; disconnected : déconnecté (clé effacée)
+  status text not null default 'connected' check (status in ('connected', 'needs_reconnect', 'disconnected')),
+  last_error text check (last_error is null or char_length(last_error) <= 300),
+  last_checked_at timestamptz,
+  last_ok_at timestamptz,
+  connected_at timestamptz not null default now(),
+  disconnected_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+-- une équipe lemlist n'appartient qu'à une fiche à la fois
+create unique index lemlist_accounts_team_idx on public.lemlist_accounts (team_id);
+create index lemlist_accounts_company_idx on public.lemlist_accounts (company_id);
+create trigger set_updated_at before update on public.lemlist_accounts
+  for each row execute function public.tg_set_updated_at();
+
+create table public.lemlist_account_secrets (
+  account_id uuid primary key references public.lemlist_accounts (id) on delete cascade,
+  api_key_enc text not null check (api_key_enc like 'v1.%'),
+  updated_at timestamptz not null default now()
+);
+create trigger set_updated_at before update on public.lemlist_account_secrets
+  for each row execute function public.tg_set_updated_at();
+
+do $$
+declare t text;
+begin
+  foreach t in array array['lemlist_accounts', 'lemlist_account_secrets'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('create policy owner_all on public.%I for all to authenticated
+      using ((select public.is_app_owner()) and public.current_actor() = ''user'')
+      with check ((select public.is_app_owner()) and public.current_actor() = ''user'')', t);
+    execute format('revoke all on public.%I from anon', t);
+  end loop;
+end $$;
+
+-- Corbeille : compte d'une fiche à la corbeille invisible (et donc inutilisable), comme le reste de la fiche
+select trash_private.hide('lemlist_accounts', array['company_id:companies']);
+
+-- Fusion de fiches : le compte suit la fiche conservée
+create or replace function public.tg_companies_merge_lemlist()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.merged_into_id is not null and old.merged_into_id is null then
+    update public.lemlist_accounts set company_id = new.merged_into_id where company_id = new.id;
+  end if;
+  return null;
+end;
+$$;
+create trigger companies_merge_lemlist after update of merged_into_id on public.companies
+  for each row execute function public.tg_companies_merge_lemlist();
+
+-- ---------------------------------------------------------------------------
+-- Fonctions (droits de l'appelant : la RLS s'applique)
+-- ---------------------------------------------------------------------------
+
+-- Connexion ou reconnexion après un test réussi de la clé (fait par le serveur).
+create or replace function public.lemlist_connect(p_company uuid, p_team_id text, p_team_name text, p_key_enc text)
+returns uuid
+language plpgsql
+as $$
+declare v_id uuid; v_other uuid; v_status text; v_other_name text;
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Connexion lemlist');
+  if p_key_enc is null or p_key_enc not like 'v1.%' then
+    raise exception 'Clé chiffrée attendue.' using errcode = '22023';
+  end if;
+  if coalesce(btrim(p_team_id), '') = '' then raise exception 'Équipe lemlist inconnue.' using errcode = '22023'; end if;
+  if not exists (select 1 from public.companies c where c.id = p_company and c.merged_into_id is null) then
+    raise exception 'Fiche client introuvable.' using errcode = 'P0001';
+  end if;
+  select a.id, a.company_id, a.status into v_id, v_other, v_status from public.lemlist_accounts a where a.team_id = p_team_id;
+  if v_id is not null and v_other <> p_company and v_status <> 'disconnected' then
+    select c.name into v_other_name from public.companies c where c.id = v_other;
+    raise exception 'Ce compte lemlist est déjà rattaché à la fiche « % ». Déconnectez-le d''abord de cette fiche.', coalesce(v_other_name, 'autre fiche')
+      using errcode = 'P0001';
+  end if;
+  begin
+    if v_id is null then
+      insert into public.lemlist_accounts (company_id, team_id, team_name, status, last_checked_at, last_ok_at, connected_at)
+      values (p_company, p_team_id, left(coalesce(p_team_name, ''), 200), 'connected', now(), now(), now())
+      returning id into v_id;
+    else
+      -- reconnexion (même fiche) ou nouveau rattachement d'un compte déconnecté
+      update public.lemlist_accounts
+         set company_id = p_company, team_name = left(coalesce(p_team_name, ''), 200), status = 'connected', last_error = null,
+             last_checked_at = now(), last_ok_at = now(), connected_at = now(), disconnected_at = null
+       where id = v_id;
+    end if;
+  exception when unique_violation then
+    -- la ligne existe mais n'est pas visible : sa fiche est à la corbeille
+    raise exception 'Ce compte lemlist est rattaché à une fiche à la corbeille. Restaurez-la ou videz-la de la corbeille d''abord.'
+      using errcode = 'P0001';
+  end;
+  insert into public.lemlist_account_secrets (account_id, api_key_enc) values (v_id, p_key_enc)
+  on conflict (account_id) do update set api_key_enc = excluded.api_key_enc;
+  return v_id;
+end;
+$$;
+
+-- Déconnexion : la clé est effacée du CRM (elle reste valable chez lemlist tant qu'on ne l'y supprime pas).
+create or replace function public.lemlist_disconnect(p_id uuid)
+returns void
+language plpgsql
+as $$
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Déconnexion lemlist');
+  update public.lemlist_accounts set status = 'disconnected', disconnected_at = now(), last_error = null where id = p_id;
+  if not found then raise exception 'Compte introuvable.' using errcode = 'P0001'; end if;
+  delete from public.lemlist_account_secrets where account_id = p_id;
+end;
+$$;
+
+-- Résultat d'un appel à lemlist pour UN compte : un refus de la clé le passe « à reconnecter », sans toucher aux autres.
+-- p_kind : ok | auth (clé refusée) | other (erreur passagère : l'état ne change pas, l'erreur est notée).
+create or replace function public.lemlist_account_result(p_id uuid, p_kind text, p_error text)
+returns text
+language plpgsql
+as $$
+declare v_status text;
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('lemlist');
+  if p_kind not in ('ok', 'auth', 'other') then raise exception 'Résultat inconnu.' using errcode = '22023'; end if;
+  update public.lemlist_accounts
+     set status = case when status = 'disconnected' then status when p_kind = 'auth' then 'needs_reconnect' when p_kind = 'ok' then 'connected' else status end,
+         last_error = case when p_kind = 'ok' then null else left(p_error, 300) end,
+         last_checked_at = now(),
+         last_ok_at = case when p_kind = 'ok' then now() else last_ok_at end
+   where id = p_id
+  returning status into v_status;
+  if v_status is null then raise exception 'Compte introuvable.' using errcode = 'P0001'; end if;
+  return v_status;
+end;
+$$;
+
+-- Clé chiffrée d'UN compte utilisable (connecté ou à reconnecter, pour le tester) et visible : fiche pas à la corbeille.
+-- Le serveur la déchiffre ; elle n'est jamais renvoyée au navigateur.
+create or replace function public.lemlist_account_key(p_id uuid)
+returns text
+language sql
+stable
+as $$
+  select s.api_key_enc
+    from public.lemlist_account_secrets s
+    join public.lemlist_accounts a on a.id = s.account_id
+   where a.id = p_id and a.status in ('connected', 'needs_reconnect') and public.current_actor() = 'user';
+$$;
+
+-- Comptes affichables (jamais la clé) : un seul (p_id) ou tous ceux qui ne sont pas déconnectés.
+create or replace function public.lemlist_accounts_list(p_id uuid default null)
+returns jsonb
+language sql
+stable
+as $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id', a.id, 'company_id', a.company_id, 'company_name', c.name, 'company_archived', c.archived_at is not null,
+    'team_id', a.team_id, 'team_name', a.team_name, 'status', a.status, 'last_error', a.last_error,
+    'last_checked_at', a.last_checked_at, 'last_ok_at', a.last_ok_at, 'connected_at', a.connected_at
+  ) order by a.connected_at), '[]'::jsonb)
+    from public.lemlist_accounts a
+    join public.companies c on c.id = a.company_id
+   where (p_id is null and a.status <> 'disconnected') or a.id = p_id;
+$$;
+
+-- Fiches proposées au rattachement : clients (vente gagnée), non fusionnées, hors corbeille (RLS).
+create or replace function public.lemlist_client_options()
+returns jsonb
+language sql
+stable
+as $$
+  select coalesce(jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name, 'archived', c.archived_at is not null) order by lower(c.name)), '[]'::jsonb)
+    from public.companies c
+   where c.merged_into_id is null
+     and (c.deal_status = 'won' or exists (select 1 from public.sales s where s.company_id = c.id and s.state = 'won'));
+$$;
+
+do $$
+declare f text;
+begin
+  foreach f in array array['public.lemlist_connect(uuid, text, text, text)', 'public.lemlist_disconnect(uuid)',
+    'public.lemlist_account_result(uuid, text, text)', 'public.lemlist_account_key(uuid)',
+    'public.lemlist_accounts_list(uuid)', 'public.lemlist_client_options()'] loop
+    execute format('revoke execute on function %s from public, anon', f);
+    execute format('grant execute on function %s to authenticated', f);
+  end loop;
+end $$;
+
+
+-- ===== 20261119000200_lemlist_conversations.sql =====
+-- Messages lemlist, lot M2 : liste des conversations des comptes lemlist des clients.
+-- Additive : une table, ses fonctions, une colonne ajoutée à lemlist_accounts (lot M1, même chantier).
+--  * Le CRM ne garde que de quoi afficher la liste et les non-lus : contact (nom, email), canaux, dates, état lu.
+--    Le contenu des messages n'est jamais stocké : il est lu chez lemlist à l'ouverture du fil.
+--  * Chaque conversation appartient à UN compte (donc à une fiche). Même contact chez deux clients : deux lignes.
+--  * Ces contacts sont les prospects des clients : aucune fiche, aucun contact, aucune pipeline n'est créé.
+--  * Non-lu : lemlist l'indique non lue ET elle n'a pas été ouverte dans le CRM depuis sa dernière activité.
+--    Ouvrir le fil dans le CRM ne change rien chez lemlist (pas de « marquer comme lu » côté client).
+--  * Propriétaire uniquement, ni portail ni Claude ; cachée avec la fiche mise à la corbeille.
+
+alter table public.lemlist_accounts add column if not exists last_synced_at timestamptz;
+
+create table public.lemlist_conversations (
+  id uuid primary key default gen_random_uuid(),
+  account_id uuid not null references public.lemlist_accounts (id) on delete cascade,
+  -- recopiée du compte (et suivie à la fusion) : sert au filtre Client et à la Corbeille
+  company_id uuid not null references public.companies (id) on delete cascade,
+  lemlist_id text not null check (char_length(lemlist_id) between 1 and 100),
+  contact_id text not null check (char_length(contact_id) between 1 and 100),
+  contact_name text check (contact_name is null or char_length(contact_name) <= 300),
+  contact_email text check (contact_email is null or char_length(contact_email) <= 320),
+  channels text[] not null default '{}',
+  last_channel text check (last_channel is null or last_channel in ('email', 'linkedin')),
+  -- membre de l'équipe lemlist qui suit la conversation (expéditeur des réponses, lot M3)
+  sender_user_id text check (sender_user_id is null or char_length(sender_user_id) <= 100),
+  last_activity_at timestamptz not null,
+  last_reply_at timestamptz,
+  has_replies boolean not null default false,
+  lemlist_unread boolean not null default false,
+  seen_at timestamptz,
+  synced_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  unique (account_id, lemlist_id)
+);
+create index lemlist_conversations_recent_idx on public.lemlist_conversations (last_activity_at desc);
+create index lemlist_conversations_company_idx on public.lemlist_conversations (company_id);
+
+alter table public.lemlist_conversations enable row level security;
+create policy owner_all on public.lemlist_conversations for all to authenticated
+  using ((select public.is_app_owner()) and public.current_actor() = 'user')
+  with check ((select public.is_app_owner()) and public.current_actor() = 'user');
+revoke all on public.lemlist_conversations from anon;
+select trash_private.hide('lemlist_conversations', array['company_id:companies']);
+
+-- Compte déconnecté : ses conversations sont retirées du CRM (relues à la reconnexion). Compte rattaché à une autre
+-- fiche (fusion de fiches, nouveau rattachement) : ses conversations suivent.
+create or replace function public.tg_lemlist_accounts_conversations()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.status = 'disconnected' and old.status <> 'disconnected' then
+    delete from public.lemlist_conversations where account_id = new.id;
+  elsif new.company_id <> old.company_id then
+    update public.lemlist_conversations set company_id = new.company_id where account_id = new.id;
+  end if;
+  return null;
+end;
+$$;
+create trigger lemlist_accounts_conversations after update of status, company_id on public.lemlist_accounts
+  for each row execute function public.tg_lemlist_accounts_conversations();
+
+-- ---------------------------------------------------------------------------
+-- Fonctions (droits de l'appelant)
+-- ---------------------------------------------------------------------------
+
+-- Enregistre la liste lue chez lemlist pour UN compte connecté. p_rows : [{lemlist_id, contact_id, contact_name,
+-- contact_email, channels, last_channel, sender_user_id, last_activity_at, last_reply_at, has_replies, unread}].
+-- Les conversations absentes de la lecture sont gardées (la lecture ne remonte que les plus récentes).
+create or replace function public.lemlist_conversations_sync(p_account uuid, p_rows jsonb)
+returns integer
+language plpgsql
+as $$
+declare v_company uuid; v_n integer;
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('lemlist');
+  select company_id into v_company from public.lemlist_accounts where id = p_account and status = 'connected';
+  if v_company is null then raise exception 'Compte lemlist introuvable ou pas connecté.' using errcode = 'P0001'; end if;
+  if jsonb_typeof(p_rows) <> 'array' then raise exception 'Liste attendue.' using errcode = '22023'; end if;
+  insert into public.lemlist_conversations as c (account_id, company_id, lemlist_id, contact_id, contact_name, contact_email, channels,
+    last_channel, sender_user_id, last_activity_at, last_reply_at, has_replies, lemlist_unread, synced_at)
+  select p_account, v_company, r ->> 'lemlist_id', r ->> 'contact_id', left(nullif(r ->> 'contact_name', ''), 300), left(nullif(r ->> 'contact_email', ''), 320),
+         coalesce(array(select ch.x from jsonb_array_elements_text(case when jsonb_typeof(r -> 'channels') = 'array' then r -> 'channels' else '[]'::jsonb end) as ch(x) where ch.x in ('email', 'linkedin')), '{}'),
+         case when r ->> 'last_channel' in ('email', 'linkedin') then r ->> 'last_channel' end,
+         left(nullif(r ->> 'sender_user_id', ''), 100), (r ->> 'last_activity_at')::timestamptz, nullif(r ->> 'last_reply_at', '')::timestamptz,
+         coalesce((r ->> 'has_replies')::boolean, false), coalesce((r ->> 'unread')::boolean, false), now()
+    from jsonb_array_elements(p_rows) r
+   where coalesce(r ->> 'lemlist_id', '') <> '' and coalesce(r ->> 'contact_id', '') <> '' and r ->> 'last_activity_at' is not null
+  on conflict (account_id, lemlist_id) do update set
+    contact_id = excluded.contact_id, contact_name = excluded.contact_name, contact_email = excluded.contact_email,
+    channels = excluded.channels, last_channel = excluded.last_channel, sender_user_id = excluded.sender_user_id,
+    last_activity_at = excluded.last_activity_at, last_reply_at = excluded.last_reply_at, has_replies = excluded.has_replies,
+    lemlist_unread = excluded.lemlist_unread, synced_at = now();
+  get diagnostics v_n = row_count;
+  update public.lemlist_accounts set last_synced_at = now() where id = p_account;
+  return v_n;
+end;
+$$;
+
+-- Liste affichée dans Messages (toutes les conversations des comptes visibles et non déconnectés).
+create or replace function public.lemlist_inbox(p_limit integer default 500)
+returns jsonb
+language sql
+stable
+as $$
+  select jsonb_build_object(
+    'conversations', coalesce((select jsonb_agg(row_to_json(x) order by x.last_activity_at desc) from (
+      select c.id, c.account_id, c.company_id, co.name as company_name, c.contact_name, c.contact_email, c.channels, c.last_channel,
+             c.last_activity_at, c.last_reply_at, c.has_replies,
+             (c.lemlist_unread and (c.seen_at is null or c.seen_at < c.last_activity_at)) as unread
+        from public.lemlist_conversations c
+        join public.lemlist_accounts a on a.id = c.account_id and a.status <> 'disconnected'
+        join public.companies co on co.id = c.company_id
+       order by c.last_activity_at desc
+       limit least(greatest(coalesce(p_limit, 500), 1), 2000)) x), '[]'::jsonb),
+    'accounts', coalesce((select jsonb_agg(jsonb_build_object('id', a.id, 'company_id', a.company_id, 'company_name', co.name,
+        'team_name', a.team_name, 'status', a.status, 'last_synced_at', a.last_synced_at, 'last_error', a.last_error) order by co.name)
+      from public.lemlist_accounts a join public.companies co on co.id = a.company_id where a.status <> 'disconnected'), '[]'::jsonb)
+  );
+$$;
+
+-- Ouverture du fil dans le CRM : la conversation n'est plus « non lue » ici (rien n'est changé chez lemlist).
+create or replace function public.lemlist_conversation_seen(p_id uuid)
+returns void
+language plpgsql
+as $$
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('lemlist');
+  update public.lemlist_conversations set seen_at = now() where id = p_id;
+  if not found then raise exception 'Conversation introuvable.' using errcode = 'P0001'; end if;
+end;
+$$;
+
+-- Conversation et son compte, retrouvés par le serveur à partir de l'identifiant CRM de la conversation.
+create or replace function public.lemlist_conversation_get(p_id uuid)
+returns jsonb
+language sql
+stable
+as $$
+  select jsonb_build_object('id', c.id, 'account_id', c.account_id, 'company_id', c.company_id, 'company_name', co.name,
+    'team_name', a.team_name, 'account_status', a.status, 'contact_id', c.contact_id, 'contact_name', c.contact_name,
+    'contact_email', c.contact_email, 'channels', c.channels, 'last_channel', c.last_channel, 'sender_user_id', c.sender_user_id,
+    'last_activity_at', c.last_activity_at)
+    from public.lemlist_conversations c
+    join public.lemlist_accounts a on a.id = c.account_id and a.status <> 'disconnected'
+    join public.companies co on co.id = c.company_id
+   where c.id = p_id;
+$$;
+
+do $$
+declare f text;
+begin
+  foreach f in array array['public.lemlist_conversations_sync(uuid, jsonb)',
+    'public.lemlist_inbox(integer)', 'public.lemlist_conversation_seen(uuid)', 'public.lemlist_conversation_get(uuid)'] loop
+    execute format('revoke execute on function %s from public, anon', f);
+    execute format('grant execute on function %s to authenticated', f);
+  end loop;
+end $$;
+
+
+-- ===== 20261119000300_lemlist_reponses.sql =====
+-- Messages lemlist, lot M3 : réponses envoyées depuis le CRM (email et LinkedIn).
+-- Additive : une table et deux fonctions. Seul l'état de chaque envoi est gardé (anti-doublon, résultat) :
+-- jamais le texte de la réponse, qui reste chez lemlist comme le reste du fil.
+--  * Une clé d'idempotence par tentative (créée par le navigateur) : un double clic ou un renvoi de la même
+--    requête ne part qu'une fois. La clé est liée à UNE conversation.
+--  * États : sending → sent | failed (certain : rien n'est parti) | uncertain (lemlist n'a pas répondu : à vérifier
+--    dans le fil avant de renvoyer). Un échec certain se retente avec une nouvelle clé.
+--  * Le compte utilisé est celui de la conversation, retrouvé en base : jamais un identifiant venu du navigateur.
+
+create table public.lemlist_replies (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references public.lemlist_conversations (id) on delete cascade,
+  account_id uuid not null references public.lemlist_accounts (id) on delete cascade,
+  company_id uuid not null references public.companies (id) on delete cascade,
+  channel text not null check (channel in ('email', 'linkedin')),
+  dedupe_key text not null unique check (char_length(dedupe_key) between 8 and 100),
+  status text not null default 'sending' check (status in ('sending', 'sent', 'failed', 'uncertain')),
+  error text check (error is null or char_length(error) <= 300),
+  created_at timestamptz not null default now(),
+  finished_at timestamptz
+);
+create index lemlist_replies_conversation_idx on public.lemlist_replies (conversation_id, created_at desc);
+
+alter table public.lemlist_replies enable row level security;
+create policy owner_all on public.lemlist_replies for all to authenticated
+  using ((select public.is_app_owner()) and public.current_actor() = 'user')
+  with check ((select public.is_app_owner()) and public.current_actor() = 'user');
+revoke all on public.lemlist_replies from anon;
+select trash_private.hide('lemlist_replies', array['company_id:companies']);
+
+-- Réserve un envoi. Clé déjà utilisée pour cette conversation : renvoie l'envoi existant (duplicate = true),
+-- rien ne repart. Clé utilisée pour une autre conversation : refus.
+create or replace function public.lemlist_reply_claim(p_conversation uuid, p_channel text, p_key text)
+returns jsonb
+language plpgsql
+as $$
+declare c record; r public.lemlist_replies;
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Réponse lemlist');
+  if p_channel not in ('email', 'linkedin') then raise exception 'Canal inconnu.' using errcode = '22023'; end if;
+  if coalesce(char_length(p_key), 0) not between 8 and 100 then raise exception 'Clé d''envoi invalide.' using errcode = '22023'; end if;
+  select r2.* into r from public.lemlist_replies r2 where r2.dedupe_key = p_key;
+  if found then
+    if r.conversation_id <> p_conversation then raise exception 'Clé d''envoi déjà utilisée ailleurs.' using errcode = 'P0001'; end if;
+    return jsonb_build_object('id', r.id, 'status', r.status, 'error', r.error, 'duplicate', true);
+  end if;
+  select lc.id, lc.account_id, lc.company_id, lc.channels, a.status as account_status into c
+    from public.lemlist_conversations lc join public.lemlist_accounts a on a.id = lc.account_id
+   where lc.id = p_conversation;
+  if c.id is null then raise exception 'Conversation introuvable.' using errcode = 'P0001'; end if;
+  if c.account_status <> 'connected' then raise exception 'Compte lemlist à reconnecter : la réponse n''est pas partie.' using errcode = 'P0001'; end if;
+  if not (p_channel = any (c.channels)) then raise exception 'Cette conversation n''a pas lieu sur ce canal.' using errcode = 'P0001'; end if;
+  insert into public.lemlist_replies (conversation_id, account_id, company_id, channel, dedupe_key)
+  values (c.id, c.account_id, c.company_id, p_channel, p_key)
+  on conflict (dedupe_key) do nothing
+  returning * into r;
+  if r.id is null then
+    -- deux requêtes simultanées avec la même clé : la seconde voit l'envoi de la première
+    select r2.* into r from public.lemlist_replies r2 where r2.dedupe_key = p_key;
+    return jsonb_build_object('id', r.id, 'status', r.status, 'error', r.error, 'duplicate', true);
+  end if;
+  return jsonb_build_object('id', r.id, 'status', r.status, 'error', null, 'duplicate', false);
+end;
+$$;
+
+-- Résultat d'un envoi réservé (une seule fois : un envoi terminé ne change plus d'état).
+create or replace function public.lemlist_reply_finish(p_id uuid, p_status text, p_error text)
+returns void
+language plpgsql
+as $$
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Réponse lemlist');
+  if p_status not in ('sent', 'failed', 'uncertain') then raise exception 'État inconnu.' using errcode = '22023'; end if;
+  update public.lemlist_replies set status = p_status, error = left(p_error, 300), finished_at = now()
+   where id = p_id and status = 'sending';
+  if not found then raise exception 'Envoi introuvable ou déjà terminé.' using errcode = 'P0001'; end if;
+end;
+$$;
+
+do $$
+declare f text;
+begin
+  foreach f in array array['public.lemlist_reply_claim(uuid, text, text)', 'public.lemlist_reply_finish(uuid, text, text)'] loop
+    execute format('revoke execute on function %s from public, anon', f);
+    execute format('grant execute on function %s to authenticated', f);
+  end loop;
+end $$;
+
+
+-- ===== 20261119000400_lemlist_compteurs.sql =====
+-- Messages lemlist, lot M4 : compteurs pour la navigation et Aujourd'hui. Additive : une fonction, rien d'autre.
+--  * unread : conversations non lues (même règle que la liste de Messages).
+--  * awaiting : conversations dont le dernier événement est une réponse du contact, sans réponse partie du CRM depuis.
+--  * Comptes visibles et non déconnectés seulement ; propriétaire uniquement (ni portail, ni Claude).
+
+create or replace function public.lemlist_counts()
+returns jsonb
+language sql
+stable
+as $$
+  select jsonb_build_object(
+    'unread', count(*) filter (where c.lemlist_unread and (c.seen_at is null or c.seen_at < c.last_activity_at)),
+    'awaiting', count(*) filter (where c.last_reply_at is not null
+      and c.last_reply_at >= c.last_activity_at - interval '1 minute'
+      and not exists (select 1 from public.lemlist_replies r
+                       where r.conversation_id = c.id and r.status = 'sent' and r.finished_at > c.last_reply_at))
+  )
+    from public.lemlist_conversations c
+    join public.lemlist_accounts a on a.id = c.account_id and a.status <> 'disconnected'
+   where public.current_actor() = 'user';
+$$;
+
+revoke execute on function public.lemlist_counts() from public, anon;
+grant execute on function public.lemlist_counts() to authenticated;

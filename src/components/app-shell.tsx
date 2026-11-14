@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { CalendarDays, CheckSquare, FolderKanban, Columns3, LayoutGrid, Library, ListTodo, LogOut, Mail, PhoneCall, Plus, Search, Settings, Trash2, Trophy, Users, Wallet, X } from "lucide-react";
+import { CalendarDays, CheckSquare, FolderKanban, Columns3, LayoutGrid, Library, ListTodo, LogOut, Mail, MessagesSquare, PhoneCall, Plus, Search, Settings, Trash2, Trophy, Users, Wallet, X } from "lucide-react";
 import type { LeadSource, List, PipelineWithStages } from "@/lib/crm/types";
 import { signOutAction } from "@/app/actions";
 import { QueryProvider, apiGet, useFlushRouterOnNavigate } from "@/lib/client/query";
@@ -77,6 +77,7 @@ const NAV = [
   { href: "/finance", label: "Finance", icon: Wallet },
   { href: "/productivite", label: "Productivité", icon: ListTodo },
   { href: "/mail", label: "Mail", icon: Mail },
+  { href: "/messages", label: "Messages", icon: MessagesSquare },
   { href: "/appels", label: "Appels", icon: PhoneCall },
   { href: "/bibliotheque", label: "Bibliothèque", icon: Library },
   { href: "/corbeille", label: "Corbeille", icon: Trash2 },
@@ -119,12 +120,14 @@ function Shell({
   useFlushRouterOnNavigate();
   const { data: counters } = useQuery({
     queryKey: ["counters"],
-    queryFn: ({ signal }) => apiGet<{ todo: number; due: number; replies: number }>("/api/counters", signal),
+    queryFn: ({ signal }) => apiGet<{ todo: number; due: number; replies: number; messages?: number }>("/api/counters", signal),
     staleTime: 60_000,
+    refetchInterval: 5 * 60_000, // non-lus de Messages (lemlist) : relus en arrière-plan, page visible
   });
   const todoCount = counters?.todo ?? 0;
   const dueCount = counters?.due ?? 0;
   const repliesCount = counters?.replies ?? 0;
+  const messagesCount = counters?.messages ?? 0;
   const [searchOpen, setSearchOpen] = useState(false);
   const [createDefaults, setCreateDefaults] = useState<CreateDefaults | null>(null);
 
@@ -210,6 +213,9 @@ function Shell({
                     {href === "/" && todoCount > 0 && (
                       <span className="rounded-full bg-violet px-1.5 font-label text-[10px] text-white">{todoCount}</span>
                     )}
+                    {href === "/messages" && messagesCount > 0 && (
+                      <span className="rounded-full bg-violet px-1.5 font-label text-[10px] text-white" aria-label={`${messagesCount} non lu(s)`}>{messagesCount}</span>
+                    )}
                   </Link>
                   {href === "/prospection" && active && (
                     <div className="mt-0.5 mb-1 ml-[22px] border-l border-line pl-2">
@@ -278,7 +284,7 @@ function Shell({
             </button>
           </form>
         </aside>
-        <MobileNav pathname={pathname} todoCount={todoCount} onSignOut={() => qc.clear()} />
+        <MobileNav pathname={pathname} todoCount={todoCount} messagesCount={messagesCount} onSignOut={() => qc.clear()} />
         <main className="min-w-0 flex-1 px-4 pt-5 pb-36 md:px-8 md:pt-7 md:pb-24">{children}</main>
       </div>
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} onPick={(id) => { setSearchOpen(false); openCompany(id); }} onCreate={() => setCreateDefaults({})} />
@@ -297,7 +303,7 @@ function Shell({
 }
 
 /** Téléphone : cinq entrées en bas et « Plus », qui ouvre un panneau avec toutes les autres (dont Mail et Appels). */
-function MobileNav({ pathname, todoCount, onSignOut }: { pathname: string; todoCount: number; onSignOut: () => void }) {
+function MobileNav({ pathname, todoCount, messagesCount, onSignOut }: { pathname: string; todoCount: number; messagesCount: number; onSignOut: () => void }) {
   const [open, setOpen] = useState(false);
   const main = NAV.filter((n) => MOBILE_MAIN.includes(n.href));
   const more = NAV.filter((n) => !MOBILE_MAIN.includes(n.href));
@@ -328,6 +334,7 @@ function MobileNav({ pathname, todoCount, onSignOut }: { pathname: string; todoC
                       className={cn("flex flex-col items-center gap-1 rounded-xl border px-2 py-3 text-xs font-semibold", active ? "border-violet-line bg-violet-soft text-ink" : "border-line text-muted hover:text-ink")}>
                       <Icon size={19} className={active ? "text-violet-strong" : undefined} />
                       {label}
+                      {href === "/messages" && messagesCount > 0 && <span className="rounded-full bg-violet px-1.5 font-label text-[10px] text-white">{messagesCount} non lu(s)</span>}
                     </Link>
                   </li>
                 );
@@ -355,8 +362,9 @@ function MobileNav({ pathname, todoCount, onSignOut }: { pathname: string; todoC
           );
         })}
         <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="menu-plus"
-          className={cn(item, moreActive || open ? "bg-violet-soft text-ink" : "text-muted")}>
+          className={cn(item, "relative", moreActive || open ? "bg-violet-soft text-ink" : "text-muted")}>
           <LayoutGrid size={18} className={moreActive ? "text-violet-strong" : undefined} />
+          {messagesCount > 0 && <span className="absolute top-1 right-[calc(50%-0.9rem)] size-2 rounded-full bg-violet" aria-label="Messages non lus" />}
           <span>Plus</span>
         </button>
       </nav>
