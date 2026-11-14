@@ -28,6 +28,11 @@ Lire et répondre aux messages reçus sur les comptes lemlist des clients, depui
   texte seul, aucun HTML affiché).
 - Lecture : pour chaque compte, `GET /team` puis `GET /inbox?userId=…` pour chaque membre de l'équipe (2 pages de 100
   au plus) ; une conversation suivie par deux membres n'apparaît qu'une fois. WhatsApp et SMS sont ignorés.
+- Fil : `GET /inbox/{contactId}` lu deux fois et fusionné sans doublon — tel que l'équipe le voit, et tel que le voit
+  le membre qui suit la conversation (`userId`) : les messages LinkedIn reçus arrivent par la synchronisation de la boîte
+  LinkedIn de ce membre et manquaient sans cela. Jusqu'à 5 pages de 100 activités (messages anciens compris). Reçus :
+  types finissant par `Replied`/`Received` (`emailsReplied`, `linkedinReplied`…) ; envoyés : `…Sent`. Un message
+  échangé sans texte lisible est affiché quand même ; ouvertures, clics, invitations sont ignorés.
 - Actualisation : à l'ouverture, puis toutes les 2 minutes tant que la page est visible, chaque compte au plus une fois
   par minute ; **Actualiser** relit tout de suite. Aucune tâche planifiée (la seule tâche Vercel tourne une fois par jour).
 - Un compte limité en débit ou en panne est signalé par un bandeau ; ses conversations déjà connues restent affichées,
