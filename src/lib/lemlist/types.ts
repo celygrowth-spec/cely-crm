@@ -25,3 +25,58 @@ export const LEMLIST_STATUS_LABEL: Record<LemlistAccountStatus, string> = {
   needs_reconnect: "À reconnecter",
   disconnected: "Déconnecté",
 };
+
+// --- Messages (lot M2) ---
+export type MessageChannel = "email" | "linkedin";
+
+export type InboxConversation = {
+  id: string;
+  account_id: string;
+  company_id: string;
+  company_name: string;
+  contact_name: string | null;
+  contact_email: string | null;
+  channels: MessageChannel[];
+  last_channel: MessageChannel | null;
+  last_activity_at: string;
+  last_reply_at: string | null;
+  has_replies: boolean;
+  unread: boolean;
+};
+
+export type InboxAccount = {
+  id: string;
+  company_id: string;
+  company_name: string;
+  team_name: string;
+  status: LemlistAccountStatus;
+  last_synced_at: string | null;
+  last_error: string | null;
+};
+
+export type InboxData = { conversations: InboxConversation[]; accounts: InboxAccount[] };
+
+export type SyncResult = { account_id: string; company_name: string; ok: boolean; skipped: boolean; message: string | null; count?: number };
+
+export type ThreadMessage = {
+  id: string;
+  channel: MessageChannel;
+  direction: "in" | "out";
+  at: string;
+  subject: string | null;
+  text: string;
+  sender_name: string | null;
+  sender_email: string | null;
+};
+
+export type ThreadView = {
+  id: string;
+  company_name: string;
+  team_name: string;
+  contact_name: string | null;
+  contact_email: string | null;
+  channels: string[];
+  ok: boolean;
+  error: string | null;
+  messages: ThreadMessage[];
+};
