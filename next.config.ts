@@ -27,10 +27,15 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: [
-          { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "same-origin" },
         ],
+      },
+      {
+        // aucune page ne peut s'afficher dans un autre site, SAUF la page de réservation intégrable
+        // /rdv/<lien>/integre (widgets de réservation), seule exclue ici
+        source: "/:path((?!rdv/[^/]+/integre/?$).*)",
+        headers: [{ key: "X-Frame-Options", value: "DENY" }],
       },
     ];
   },
