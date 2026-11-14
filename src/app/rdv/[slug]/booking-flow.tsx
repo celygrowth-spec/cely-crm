@@ -9,6 +9,7 @@ import { ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
 import { cn } from "@/components/ui";
 import { AddToCalendar, BookingSummary, PrivateLink } from "@/components/rdv/confirmation";
 import { Brand, EventFacts } from "@/components/rdv/public-bits";
+import { notifyHost } from "@/components/rdv/embed-frame";
 import { SlotPicker, TimeZoneSelect } from "@/components/rdv/slot-picker";
 import { browserTimeZone, formatRange, formatTimeShort, formatLongDate, isValidTimeZone, timeZoneLabel } from "@/lib/appointments/time";
 import type { PublicBooking, PublicEvent, Question } from "@/lib/appointments/types";
@@ -21,6 +22,12 @@ type BookResponse =
   | { status: "unavailable"; alternatives: string[] }
   | { status: "error"; message: string; retryable: boolean }
   | { error: string };
+
+// changement d'étape : haut de page, et dans un site hôte, le calendrier intégré revient dans le champ de vision
+function toTop() {
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  notifyHost("step");
+}
 
 const newKey = () => (crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).replace(/[^A-Za-z0-9_-]/g, "");
 
@@ -55,7 +62,7 @@ export function BookingFlow({ event }: { event: PublicEvent }) {
     setError(null);
     attemptKey.current = null; // nouveau créneau = nouvelle tentative
     setStep("form");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    toTop();
   }
 
   async function submit(e: FormEvent) {
@@ -81,7 +88,7 @@ export function BookingFlow({ event }: { event: PublicEvent }) {
       if ("status" in body && body.status === "confirmed") {
         setDone({ ref: body.ref, booking: body.booking });
         setStep("done");
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        toTop();
         return;
       }
       attemptKey.current = null;

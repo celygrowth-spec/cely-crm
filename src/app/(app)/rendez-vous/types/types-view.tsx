@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Check, Copy, CopyPlus, ExternalLink, Pencil, Trash2 } from "lucide-react";
+import { Check, Code2, Copy, CopyPlus, ExternalLink, Pencil, Trash2 } from "lucide-react";
 import { deleteEventTypeAction, duplicateEventTypeAction, saveSettingsAction, setEventTypeActiveAction, setRemindersPausedAction } from "@/app/rendez-vous-actions";
 import { MailStatusNotice } from "@/components/rdv/reminder-rules";
 import { Badge, Button, Card, EmptyState, Field, Input, Textarea } from "@/components/ui";
 import { attempt, useSync } from "@/lib/client/query";
 import { LOCATION_LABELS, type EventType } from "@/lib/appointments/types";
 import { formatDuration } from "@/components/rdv/public-bits";
+import { EmbedDialog } from "@/components/rdv/embed-dialog";
 
 export function TypesView({ types, schedules, baseUrl, settings, reminders }: {
   types: EventType[]; schedules: { id: string; name: string }[]; baseUrl: string; settings: { display_name: string; intro: string | null };
@@ -18,6 +19,7 @@ export function TypesView({ types, schedules, baseUrl, settings, reminders }: {
   const sync = useSync();
   const [busy, setBusy] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [embed, setEmbed] = useState<EventType | null>(null);
 
   async function act(id: string, fn: () => Promise<{ ok: boolean; error?: string }>, msg: string) {
     setBusy(id);
@@ -56,6 +58,7 @@ export function TypesView({ types, schedules, baseUrl, settings, reminders }: {
                       {copied === t.id ? <Check size={13} /> : <Copy size={13} />} Copier le lien
                     </Button>
                     {t.active && <a href={`/rdv/${t.slug}`} target="_blank" rel="noopener noreferrer" className="inline-flex h-7 items-center gap-1 rounded-lg border border-line px-2.5 text-xs font-semibold hover:border-violet"><ExternalLink size={13} /> Prévisualiser</a>}
+                    <Button size="sm" onClick={() => setEmbed(t)}><Code2 size={13} /> Intégrer</Button>
                     <Link href={`/rendez-vous/types/${t.id}`} className="inline-flex h-7 items-center gap-1 rounded-lg border border-line px-2.5 text-xs font-semibold hover:border-violet"><Pencil size={13} /> Modifier</Link>
                     <Button size="sm" variant="ghost" disabled={busy === t.id} onClick={() => act(t.id, () => duplicateEventTypeAction(t.id), "Type dupliqué (désactivé)")}><CopyPlus size={13} /> Dupliquer</Button>
                     <Button size="sm" variant="ghost" disabled={busy === t.id} onClick={() => act(t.id, () => setEventTypeActiveAction(t.id, !t.active), t.active ? "Type désactivé" : "Type activé")}>
@@ -72,6 +75,9 @@ export function TypesView({ types, schedules, baseUrl, settings, reminders }: {
             );
           })}
         </ul>
+      )}
+      {embed && (
+        <EmbedDialog open onClose={() => setEmbed(null)} name={embed.name} slug={embed.slug} active={embed.active} baseUrl={baseUrl} />
       )}
       <RemindersGlobal reminders={reminders} />
       <PublicIdentity settings={settings} />
