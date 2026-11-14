@@ -54,7 +54,20 @@ export type InboxAccount = {
   last_error: string | null;
 };
 
-export type InboxData = { conversations: InboxConversation[]; accounts: InboxAccount[] };
+/** Case de la grille Messages : un client ayant un compte lemlist Connecté ou À reconnecter. */
+export type InboxClient = {
+  company_id: string;
+  company_name: string;
+  /** « needs_reconnect » dès qu'un de ses comptes est à reconnecter */
+  status: "connected" | "needs_reconnect";
+  /** conversations non lues (même règle que le compteur de la navigation) */
+  unread: number;
+  last_reply_at: string | null;
+  last_activity_at: string | null;
+};
+
+/** Avec un client choisi, `conversations` et `accounts` sont limités à ce client ; `clients` est toujours la grille complète. */
+export type InboxData = { conversations: InboxConversation[]; accounts: InboxAccount[]; clients: InboxClient[] };
 
 export type SyncResult = { account_id: string; company_name: string; ok: boolean; skipped: boolean; message: string | null; count?: number };
 

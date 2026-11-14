@@ -1,7 +1,7 @@
 "use client";
 
-// Messages : à gauche les conversations de tous les comptes lemlist connectés (la plus récente en haut), à droite le
-// fil complet, lu chez lemlist à l'ouverture. Actualisation automatique toutes les 2 minutes tant que la page est
+// Messages : s'ouvre sur une grille des clients actifs (pastille rouge = nouvelles réponses). Dans un client : à gauche
+// ses conversations (la plus récente en haut), à droite le fil complet, lu chez lemlist à l'ouverture. Actualisation automatique toutes les 2 minutes tant que la page est
 // visible (chaque compte au plus une fois par minute), et bouton « Actualiser ». Un compte en erreur est signalé
 // sans masquer les autres.
 import Link from "next/link";
@@ -11,10 +11,11 @@ import { toast } from "sonner";
 import { AlertTriangle, ArrowLeft, Mail, RefreshCw, Send } from "lucide-react";
 import { Badge, Button, EmptyState, PageHeader, Select, Spinner, Textarea, cn } from "@/components/ui";
 import { apiGet } from "@/lib/client/query";
-import type { InboxConversation, InboxData, MessageChannel, ReplyResult, SyncResult, ThreadMessage, ThreadView } from "@/lib/lemlist/types";
+import type { InboxClient, InboxConversation, InboxData, MessageChannel, ReplyResult, SyncResult, ThreadMessage, ThreadView } from "@/lib/lemlist/types";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 const INBOX = ["lemlist-inbox"];
+const inboxKey = (client: string | null) => ["lemlist-inbox", client ?? "all"];
 const AUTO_REFRESH_MS = 120_000;
 
 async function post<T>(url: string, body: unknown): Promise<T> {
@@ -49,15 +50,16 @@ const when = (iso: string) => {
 };
 const full = (iso: string) => new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" }).format(new Date(iso));
 
-export function MessagesView() {
+export function MessagesView({ client, conversation }: { client: string | null; conversation: string | null }) {
   const qc = useQueryClient();
-  const inbox = useQuery({ queryKey: INBOX, queryFn: ({ signal }) => apiGet<InboxData>("/api/lemlist/inbox", signal) });
+  const key = inboxKey(client);
+  const inbox = useQuery({ queryKey: key, queryFn: ({ signal }) => apiGet<InboxData>(`/api/lemlist/inbox${client ? `?company=${client}` : ""}`, signal) });
   // actualisation chez lemlist : à l'ouverture puis toutes les 2 minutes, page visible seulement
   const sync = useQuery({
-    queryKey: ["lemlist-sync"],
+    queryKey: ["lemlist-sync", client],
     queryFn: async () => {
-      const r = await post<{ results: SyncResult[]; inbox: InboxData }>("/api/lemlist/inbox", { force: false });
-      qc.setQueryData(INBOX, r.inbox);
+      const r = await post<{ results: SyncResult[]; inbox: InboxData }>("/api/lemlist/inbox", { force: false, company: client });
+      qc.setQueryData(key, r.inbox);
       qc.invalidateQueries({ queryKey: ["counters"] }); // compteur du menu
       return r.results;
     },
@@ -67,18 +69,18 @@ export function MessagesView() {
     retry: false,
   });
   const [refreshing, setRefreshing] = useState(false);
-  const [client, setClient] = useState("");
   const [channel, setChannel] = useState<"" | MessageChannel>("");
   const [unreadOnly, setUnreadOnly] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(conversation);
 
   async function refresh() {
     setRefreshing(true);
     try {
-      const r = await post<{ results: SyncResult[]; inbox: InboxData }>("/api/lemlist/inbox", { force: true });
-      qc.setQueryData(INBOX, r.inbox);
+      const r = await post<{ results: SyncResult[]; inbox: InboxData }>("/api/lemlist/inbox", { force: true, company: client });
+      qc.setQueryData(key, r.inbox);
+      qc.invalidateQueries({ queryKey: INBOX, predicate: (q) => q.queryKey[1] !== key[1] }); // grille ou autres clients
       qc.invalidateQueries({ queryKey: ["counters"] }); // compteur du menu
-      qc.setQueryData(["lemlist-sync"], r.results);
+      qc.setQueryData(["lemlist-sync", client], r.results);
       const failed = r.results.filter((x) => !x.ok);
       if (failed.length) toast.error(failed.length === 1 ? `Compte de ${failed[0].company_name} non actualisé.` : `${failed.length} comptes non actualisés.`);
       else toast.success("Messages actualisés.");
@@ -93,28 +95,30 @@ export function MessagesView() {
   const data = inbox.data;
   const list = useMemo(() => (data?.conversations ?? []).filter((c) =>
     (!client || c.company_id === client) && (!channel || c.channels.includes(channel)) && (!unreadOnly || c.unread)), [data, client, channel, unreadOnly]);
-  const clients = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const a of data?.accounts ?? []) m.set(a.company_id, a.company_name);
-    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], "fr"));
-  }, [data]);
-  // comptes à signaler : à reconnecter, ou dernière lecture en échec (résultat de l'actualisation ou état enregistré)
+  // comptes à signaler : à reconnecter, ou dernière lecture en échec (résultat de l'actualisation ou état enregistré).
+  // Sur la grille, un compte à reconnecter est indiqué sur sa case : seul l'échec de lecture fait un bandeau.
   const problems = useMemo(() => {
-    const failed = new Map((sync.data ?? []).filter((r) => !r.ok).map((r) => [r.account_id, r.message]));
+    const failed = new Map((sync.data ?? []).filter((r) => !r.ok && !r.skipped).map((r) => [r.account_id, r.message]));
     return (data?.accounts ?? []).flatMap((a) => {
-      if (a.status === "needs_reconnect") return [{ id: a.id, text: `Compte lemlist de ${a.company_name} à reconnecter : ses conversations ne sont plus actualisées.`, reconnect: true }];
+      if (a.status === "needs_reconnect") return client ? [{ id: a.id, text: `Compte lemlist de ${a.company_name} à reconnecter : ses conversations ne sont plus actualisées.`, reconnect: true }] : [];
       const msg = failed.get(a.id) ?? (a.last_error && !sync.data?.some((r) => r.account_id === a.id && r.ok && !r.skipped) ? a.last_error : null);
       return msg ? [{ id: a.id, text: `Compte lemlist de ${a.company_name} : ${msg}`, reconnect: false }] : [];
     });
-  }, [data, sync.data]);
+  }, [data, sync.data, client]);
   const current = data?.conversations.find((c) => c.id === selected) ?? null;
   const unreadCount = data?.conversations.filter((c) => c.unread).length ?? 0;
+  const company = data?.clients.find((x) => x.company_id === client) ?? null;
 
   return (
     <div className="flex h-[calc(100dvh-10rem)] min-h-[480px] flex-col md:h-[calc(100dvh-8rem)]">
+      {client && (
+        <Link href="/messages" className="mb-1 inline-flex w-fit items-center gap-1 text-sm font-semibold text-violet-strong hover:underline" data-all-clients>
+          <ArrowLeft size={14} aria-hidden /> Tous les clients
+        </Link>
+      )}
       <PageHeader
-        title="Messages"
-        description="Conversations email et LinkedIn des comptes lemlist de vos clients."
+        title={client ? company?.company_name ?? "Messages" : "Messages"}
+        description={client ? "Conversations email et LinkedIn du compte lemlist de ce client." : "Vos clients actifs sur lemlist : ouvrez un client pour lire ses conversations."}
         actions={<Button size="sm" onClick={refresh} disabled={refreshing}>{refreshing ? <Spinner /> : <RefreshCw size={13} />} Actualiser</Button>}
       />
       {problems.length > 0 && (
@@ -132,17 +136,18 @@ export function MessagesView() {
         <div className="p-6"><Spinner /></div>
       ) : inbox.error || !data ? (
         <p className="rounded-2xl border border-line bg-white p-4 text-sm font-semibold text-danger">Lecture des messages impossible. Rechargez la page.</p>
-      ) : !data.accounts.length ? (
-        <EmptyState title="Aucun compte lemlist connecté" description="Ajoutez le compte lemlist d'un client dans Paramètres › Connecteurs › lemlist clients."
+      ) : !data.clients.length ? (
+        <EmptyState title="Aucun client actif sur lemlist" description="Connectez le compte lemlist d'un client dans Paramètres › Connecteurs › lemlist clients."
           action={<Link href="/parametres/connecteurs" className="text-sm font-semibold text-violet-strong underline">Ouvrir Connecteurs</Link>} />
+      ) : !client ? (
+        <ClientGrid clients={data.clients} />
+      ) : !company ? (
+        <EmptyState title="Ce client n'a plus de compte lemlist actif" description="Son compte a pu être déconnecté."
+          action={<Link href="/messages" className="text-sm font-semibold text-violet-strong underline">Tous les clients</Link>} />
       ) : (
         <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[minmax(280px,380px)_1fr]">
           <section aria-label="Conversations" className={cn("flex min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-white", selected && "hidden md:flex")}>
             <div className="flex flex-wrap items-center gap-2 border-b border-line p-2">
-              <Select aria-label="Client" value={client} onChange={(e) => setClient(e.target.value)} className="h-8 w-auto flex-1 text-xs">
-                <option value="">Tous les clients</option>
-                {clients.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-              </Select>
               <Select aria-label="Canal" value={channel} onChange={(e) => setChannel(e.target.value as "" | MessageChannel)} className="h-8 w-auto text-xs">
                 <option value="">Tous canaux</option>
                 <option value="email">Email</option>
@@ -153,7 +158,7 @@ export function MessagesView() {
               </label>
             </div>
             {!list.length ? (
-              <p className="p-4 text-sm text-muted">{data.conversations.length ? "Aucune conversation pour ces filtres." : sync.isFetching ? "Lecture des comptes lemlist…" : "Aucune conversation pour le moment."}</p>
+              <p className="p-4 text-sm text-muted">{data.conversations.length ? "Aucune conversation pour ces filtres." : sync.isFetching ? "Lecture du compte lemlist…" : "Aucune conversation pour le moment."}</p>
             ) : (
               <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
                 {list.map((c) => (
@@ -169,8 +174,6 @@ export function MessagesView() {
                         <span className="flex items-center gap-1.5 text-xs text-muted">
                           <ChannelIcon c={mainChannel(c)} />
                           <span>{c.channels.map((x) => CHANNEL_LABEL[x]).join(" · ")}</span>
-                          <span aria-hidden>·</span>
-                          <span className="truncate">{c.company_name}</span>
                         </span>
                       </span>
                     </button>
@@ -189,6 +192,36 @@ export function MessagesView() {
   );
 }
 
+/** Grille des clients actifs : ceux qui ont de nouvelles réponses d'abord (ordre calculé par la base). */
+function ClientGrid({ clients }: { clients: InboxClient[] }) {
+  return (
+    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-label="Clients">
+      {clients.map((x) => (
+        <li key={x.company_id}>
+          <Link href={`/messages?client=${x.company_id}`} data-client={x.company_id}
+            className={cn("flex h-full items-start gap-3 rounded-2xl border bg-white p-4 hover:border-violet", x.unread ? "border-red-200" : "border-line")}>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-semibold text-ink">{x.company_name}</span>
+              <span className="mt-1 block text-xs text-muted">
+                {x.last_reply_at ? `Dernière réponse : ${when(x.last_reply_at)}` : x.last_activity_at ? "Aucune réponse reçue" : "Aucune conversation"}
+              </span>
+              {x.status === "needs_reconnect" && (
+                <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900" data-client-reconnect>
+                  <AlertTriangle size={11} aria-hidden /> À reconnecter
+                </span>
+              )}
+            </span>
+            {x.unread > 0 && (
+              <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white" data-client-unread={x.unread}
+                aria-label={`${x.unread} nouvelle(s) réponse(s)`}>{x.unread}</span>
+            )}
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Thread({ c, onBack }: { c: InboxConversation; onBack: () => void }) {
   const qc = useQueryClient();
   // réponses envoyées depuis le CRM, affichées tant que lemlist ne les renvoie pas encore dans le fil
@@ -199,7 +232,13 @@ function Thread({ c, onBack }: { c: InboxConversation; onBack: () => void }) {
       const v = await post<ThreadView>(`/api/lemlist/conversations/${c.id}`, { op: "open" });
       // ouverte dans le CRM : n'est plus « non lue » ici (rien n'est changé chez lemlist)
       if (v.ok) {
-        qc.setQueryData<InboxData>(INBOX, (d) => d && { ...d, conversations: d.conversations.map((x) => (x.id === c.id ? { ...x, unread: false } : x)) });
+        // tout de suite à l'écran (liste et pastille du client), puis relu au CRM (grille comprise)
+        qc.setQueriesData<InboxData>({ queryKey: INBOX }, (d) => d && {
+          ...d,
+          conversations: d.conversations.map((x) => (x.id === c.id ? { ...x, unread: false } : x)),
+          clients: d.clients.map((x) => (x.company_id === c.company_id && c.unread ? { ...x, unread: Math.max(0, x.unread - 1) } : x)),
+        });
+        qc.invalidateQueries({ queryKey: INBOX });
         qc.invalidateQueries({ queryKey: ["counters"] });
       }
       return v;

@@ -9,7 +9,7 @@ import { CrmError } from "@/lib/crm/service";
 import { htmlToText, textToHtml } from "@/lib/mail/render";
 import { withLemlistAccount } from "./accounts";
 import { getTeam, lemlistRequest } from "./client";
-import type { InboxData, ReplyResult, SyncResult, ThreadMessage, ThreadView } from "./types";
+import type { InboxClient, InboxData, ReplyResult, SyncResult, ThreadMessage, ThreadView } from "./types";
 
 /** Pages lues par membre de l'équipe à chaque actualisation (100 conversations par page, les plus récentes d'abord). */
 const PAGES_PER_USER = 2;
@@ -86,7 +86,19 @@ async function rpc<T>(sb: SupabaseClient, fn: string, args: Record<string, unkno
   return data as T;
 }
 
-export const loadInbox = (sb: SupabaseClient) => rpc<InboxData>(sb, "lemlist_inbox", { p_limit: 500 });
+/**
+ * Données de Messages : la grille des clients (une case par client) et, sans client choisi, les conversations et
+ * comptes de tous les clients ; avec un client, seulement les siens.
+ */
+export async function loadInbox(sb: SupabaseClient, company?: string | null): Promise<InboxData> {
+  const [clients, inbox] = await Promise.all([
+    rpc<InboxClient[]>(sb, "lemlist_clients", {}),
+    company
+      ? rpc<Omit<InboxData, "clients">>(sb, "lemlist_company_inbox", { p_company: z.uuid().parse(company), p_limit: 2000 })
+      : rpc<Omit<InboxData, "clients">>(sb, "lemlist_inbox", { p_limit: 500 }),
+  ]);
+  return { ...inbox, clients: clients ?? [] };
+}
 
 /**
  * Actualise la liste de chaque compte connecté, en parallèle et indépendamment. `force` (bouton Actualiser) relit
