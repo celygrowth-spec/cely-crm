@@ -81,7 +81,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
         ))}
       </nav>
 
-      {((c.replies ?? 0) > 0 || (c.calls ?? 0) > 0 || (c.emails ?? 0) > 0 || lemlist.awaiting > 0) && (
+      {((c.replies ?? 0) > 0 || (c.calls ?? 0) > 0 || (c.emails ?? 0) > 0 || lemlist.unread > 0) && (
         <div className="mb-4 grid gap-2 sm:grid-cols-2">
           {(c.replies ?? 0) > 0 && (
             <Link href="/prospection/reponses" className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm hover:border-amber-300" data-today-replies>
@@ -89,9 +89,9 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
               <span className="shrink-0 pl-2 font-semibold whitespace-nowrap">Ouvrir →</span>
             </Link>
           )}
-          {lemlist.awaiting > 0 && (
+          {lemlist.unread > 0 && (
             <Link href="/messages" className="flex items-center justify-between rounded-xl border border-violet/30 bg-violet-soft px-4 py-2.5 text-sm hover:border-violet" data-today-messages>
-              <span><strong>{lemlist.awaiting} message(s) lemlist attendent une réponse</strong> sur les comptes de vos clients.</span>
+              <span><strong>{lemlist.unread} nouvelle(s) réponse(s) lemlist</strong> sur les comptes de vos clients.</span>
               <span className="shrink-0 pl-2 font-semibold whitespace-nowrap">Ouvrir →</span>
             </Link>
           )}

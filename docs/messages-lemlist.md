@@ -15,12 +15,24 @@ Lire et répondre aux messages reçus sur les comptes lemlist des clients, depui
   Fusion : le compte suit la fiche conservée. Fiche archivée : le compte reste actif (mention « fiche archivée »).
 
 ## Onglet Messages (M2)
-- Entrée **Messages** dans la navigation. À gauche, les conversations de tous les comptes connectés, la plus récente en
-  haut : contact, client, canal (email, LinkedIn), point violet si non lu. Filtres **Client**, **Canal**, **Non lus**.
+- Entrée **Messages** dans la navigation. Elle s'ouvre sur une **grille des clients actifs** (client ayant un compte
+  lemlist Connecté ou À reconnecter) : nom du client et, s'il a de nouvelles réponses, une pastille rouge avec leur
+  nombre (conversations non lues, même règle que le compteur du menu : la somme des pastilles lui est égale). Les cases
+  avec de nouvelles réponses d'abord, puis par réponse la plus récente. Un compte à reconnecter garde sa case, avec cet état.
+  Aucun client actif : renvoi vers Connecteurs.
+- Clic sur une case (`/messages?client=…`) : à gauche les conversations de ce client, la plus récente en haut (contact,
+  canal, point violet si non lu), filtres **Canal** et **Non lus** ; lien **Tous les clients** pour revenir à la grille.
+  Ouvrir une conversation non lue fait baisser la pastille. Lien direct `/messages?conversation=…` : le serveur
+  retrouve le client de la conversation et ouvre son fil.
   À droite, le fil complet, lu chez lemlist à l'ouverture (citations des réponses précédentes, images et suivi retirés ;
   texte seul, aucun HTML affiché).
 - Lecture : pour chaque compte, `GET /team` puis `GET /inbox?userId=…` pour chaque membre de l'équipe (2 pages de 100
   au plus) ; une conversation suivie par deux membres n'apparaît qu'une fois. WhatsApp et SMS sont ignorés.
+- Fil : `GET /inbox/{contactId}` lu deux fois et fusionné sans doublon — tel que l'équipe le voit, et tel que le voit
+  le membre qui suit la conversation (`userId`) : les messages LinkedIn reçus arrivent par la synchronisation de la boîte
+  LinkedIn de ce membre et manquaient sans cela. Jusqu'à 5 pages de 100 activités (messages anciens compris). Reçus :
+  types finissant par `Replied`/`Received` (`emailsReplied`, `linkedinReplied`…) ; envoyés : `…Sent`. Un message
+  échangé sans texte lisible est affiché quand même ; ouvertures, clics, invitations sont ignorés.
 - Actualisation : à l'ouverture, puis toutes les 2 minutes tant que la page est visible, chaque compte au plus une fois
   par minute ; **Actualiser** relit tout de suite. Aucune tâche planifiée (la seule tâche Vercel tourne une fois par jour).
 - Un compte limité en débit ou en panne est signalé par un bandeau ; ses conversations déjà connues restent affichées,
@@ -51,8 +63,9 @@ Lire et répondre aux messages reçus sur les comptes lemlist des clients, depui
 - Compteur de non-lus sur **Messages** dans le menu (point sur « Plus » et nombre dans son panneau sur téléphone).
   Les compteurs du menu sont relus toutes les 5 minutes, page visible ; à cette occasion, les comptes lemlist lus il y a
   plus de 5 minutes sont relus (3 secondes au plus : une lenteur de lemlist ne retarde jamais les autres compteurs).
-- **Aujourd'hui** : une ligne « N message(s) lemlist attendent une réponse » quand le dernier événement d'une conversation
-  est une réponse du contact et qu'aucune réponse n'est partie du CRM depuis. Lue au CRM : Aujourd'hui n'appelle pas lemlist.
+- **Aujourd'hui** : une ligne « N nouvelle(s) réponse(s) lemlist », N = le même nombre de non-lus que le menu et que la
+  somme des pastilles de la grille. Lue au CRM : Aujourd'hui n'appelle pas lemlist. (`lemlist_counts` renvoie toujours
+  aussi `awaiting`, qui n'est plus affiché.)
 
 ## Sécurité
 - La clé est chiffrée par le serveur (AES-256-GCM, `src/lib/mail/crypto.ts`) avant d'être enregistrée, dans une table
@@ -69,6 +82,7 @@ Lire et répondre aux messages reçus sur les comptes lemlist des clients, depui
 - `20261119000200_lemlist_conversations.sql` (additive), à appliquer après la précédente.
 - `20261119000300_lemlist_reponses.sql` (additive), à appliquer après la précédente.
 - `20261119000400_lemlist_compteurs.sql` (additive), à appliquer après la précédente.
+- `20261119000500_lemlist_messages_clients.sql` (additive : deux fonctions de lecture pour la grille par client), à appliquer après la précédente.
 
 ## Limites lemlist (documentation officielle)
 - 20 requêtes par 2 secondes, par clé : un compte limité ne ralentit pas les autres.

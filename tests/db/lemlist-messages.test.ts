@@ -174,7 +174,12 @@ describe("fil et non-lus", () => {
     const conv = (await loadInbox(sb)).conversations.find((c) => c.company_name.includes("Alpha") && c.contact_name === "Camille Martin")!;
     calls = [];
     const t = await openThread(sb, conv.id);
-    expect(calls).toEqual([{ url: "https://api.lemlist.com/api/inbox/ctc_A1?limit=100", key: KEY_A }]);
+    // fil vu par l'équipe et par le membre qui suit la conversation (messages LinkedIn reçus), toujours avec la clé du compte
+    expect(calls).toEqual(expect.arrayContaining([
+      { url: "https://api.lemlist.com/api/inbox/ctc_A1?limit=100&skip=0", key: KEY_A },
+      { url: "https://api.lemlist.com/api/inbox/ctc_A1?limit=100&skip=0&userId=usr_a1", key: KEY_A },
+    ]));
+    expect(calls).toHaveLength(2);
     expect(t).toMatchObject({ ok: true, company_name: "[TEST] Client Alpha" });
     expect(t.messages.map((m) => [m.direction, m.channel, m.subject, m.text])).toEqual([
       ["out", "email", "Offre", "Bonjour Camille,\n\nNotre offre."],

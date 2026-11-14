@@ -8,8 +8,8 @@ import { z } from "zod";
 import { CrmError } from "@/lib/crm/service";
 import { htmlToText, textToHtml } from "@/lib/mail/render";
 import { withLemlistAccount } from "./accounts";
-import { getTeam, lemlistRequest } from "./client";
-import type { InboxData, ReplyResult, SyncResult, ThreadMessage, ThreadView } from "./types";
+import { getTeam, LemlistError, lemlistRequest } from "./client";
+import type { InboxClient, InboxData, ReplyResult, SyncResult, ThreadMessage, ThreadView } from "./types";
 
 /** Pages lues par membre de l'équipe à chaque actualisation (100 conversations par page, les plus récentes d'abord). */
 const PAGES_PER_USER = 2;
@@ -86,7 +86,19 @@ async function rpc<T>(sb: SupabaseClient, fn: string, args: Record<string, unkno
   return data as T;
 }
 
-export const loadInbox = (sb: SupabaseClient) => rpc<InboxData>(sb, "lemlist_inbox", { p_limit: 500 });
+/**
+ * Données de Messages : la grille des clients (une case par client) et, sans client choisi, les conversations et
+ * comptes de tous les clients ; avec un client, seulement les siens.
+ */
+export async function loadInbox(sb: SupabaseClient, company?: string | null): Promise<InboxData> {
+  const [clients, inbox] = await Promise.all([
+    rpc<InboxClient[]>(sb, "lemlist_clients", {}),
+    company
+      ? rpc<Omit<InboxData, "clients">>(sb, "lemlist_company_inbox", { p_company: z.uuid().parse(company), p_limit: 2000 })
+      : rpc<Omit<InboxData, "clients">>(sb, "lemlist_inbox", { p_limit: 500 }),
+  ]);
+  return { ...inbox, clients: clients ?? [] };
+}
 
 /**
  * Actualise la liste de chaque compte connecté, en parallèle et indépendamment. `force` (bouton Actualiser) relit
@@ -115,9 +127,23 @@ export async function syncInbox(sb: SupabaseClient, opts: { force?: boolean } = 
 // ---------------------------------------------------------------------------
 
 type RawMessage = {
-  _id?: unknown; type?: unknown; createdAt?: unknown; subject?: unknown; message?: unknown; body?: unknown;
+  _id?: unknown; id?: unknown; type?: unknown; createdAt?: unknown; sentAt?: unknown; date?: unknown; subject?: unknown;
+  message?: unknown; body?: unknown; text?: unknown; content?: unknown;
   sendUserId?: unknown; sendUserName?: unknown; sendUserEmail?: unknown; sendUserMailboxId?: unknown; fromEmail?: unknown; leadId?: unknown;
 };
+
+/** Identifiant d'un message : `_id` (API publique) ou `id`. */
+const messageId = (m: RawMessage) => str(m._id) ?? str(m.id);
+/** Date d'un message : `createdAt`, à défaut `sentAt` ou `date`. */
+const messageAt = (m: RawMessage) => date(m.createdAt) ?? date(m.sentAt) ?? date(m.date);
+/** Contenu d'un message : le premier champ texte trouvé (`message`, `body`, `text`, `content`) ; vide si aucun. */
+const messageContent = (m: RawMessage) => [m.message, m.body, m.text, m.content].find((v): v is string => typeof v === "string") ?? "";
+/**
+ * Sens d'un message d'après son type lemlist : reçu (`emailsReplied`, `linkedinReplied`, `linkedinVoiceNoteReplied`,
+ * `…Received`…), envoyé (`emailsSent`, `linkedinSent`, `linkedinInMailSent`…). Le reste (ouvertures, clics,
+ * invitations, échecs…) n'est pas un message échangé.
+ */
+const messageDirection = (type: string): "in" | "out" | null => (/Replied$|Received$|Reply$/.test(type) ? "in" : /Sent$/.test(type) ? "out" : null);
 
 /** Texte lisible d'un message : citations des réponses précédentes, images et suivi retirés ; aucun HTML renvoyé au navigateur. */
 export function messageText(content: string): string {
@@ -135,11 +161,12 @@ export function messageText(content: string): string {
 export function toThreadMessage(m: RawMessage): ThreadMessage | null {
   const type = str(m.type) ?? "";
   const channel = type.startsWith("email") ? "email" : type.startsWith("linkedin") ? "linkedin" : null;
-  const direction = /Replied$|Received$/.test(type) ? "in" : /Sent$/.test(type) ? "out" : null;
-  const content = typeof m.message === "string" ? m.message : typeof m.body === "string" ? m.body : null;
-  const id = str(m._id);
-  const at = date(m.createdAt);
-  if (!channel || !direction || content === null || !id || !at) return null;
+  const direction = messageDirection(type);
+  const id = messageId(m);
+  const at = messageAt(m);
+  // un message échangé sans texte lisible (pièce jointe seule…) reste affiché : il n'est jamais écarté en silence
+  const content = messageContent(m);
+  if (!channel || !direction || !id || !at) return null;
   return {
     id, channel, direction, at,
     subject: channel === "email" ? str(m.subject) : null,
@@ -163,12 +190,48 @@ export async function getConversation(sb: SupabaseClient, id: string): Promise<C
 
 const THREAD_PATH = (contactId: string) => `/inbox/${encodeURIComponent(contactId)}`;
 
-async function rawThread(apiKey: string, contactId: string): Promise<RawMessage[]> {
-  const res = await lemlistRequest<{ data?: unknown }>(apiKey, THREAD_PATH(contactId), { query: { limit: 100 } });
-  return (Array.isArray(res.data) ? res.data : []) as RawMessage[];
+const THREAD_PAGE = 100;
+const THREAD_MAX_PAGES = 5;
+
+/** Toutes les pages d'un fil (100 activités par page, 500 au plus), vu par `userId` s'il est donné. */
+async function threadPages(apiKey: string, contactId: string, userId: string | null): Promise<RawMessage[]> {
+  const out: RawMessage[] = [];
+  for (let page = 0; page < THREAD_MAX_PAGES; page++) {
+    const res = await lemlistRequest<{ data?: unknown }>(apiKey, THREAD_PATH(contactId), { query: { limit: THREAD_PAGE, skip: page * THREAD_PAGE, userId: userId ?? undefined } });
+    const rows = (Array.isArray(res.data) ? res.data : []) as RawMessage[];
+    out.push(...rows);
+    if (rows.length < THREAD_PAGE) break;
+  }
+  return out;
 }
 
-const byDateDesc = (list: RawMessage[]) => [...list].sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
+/**
+ * Fil complet chez lemlist. Il est lu tel que l'équipe le voit, et aussi tel que le voit le membre qui suit la
+ * conversation (`userId`) : les messages LinkedIn reçus arrivent par la synchronisation de la boîte LinkedIn de ce
+ * membre. Les deux lectures sont fusionnées sans doublon. Si la lecture par membre est refusée (hors clé refusée ou
+ * limite de débit, qui s'appliquent au compte), la lecture de l'équipe suffit.
+ */
+async function rawThread(apiKey: string, contactId: string, userId: string | null = null): Promise<RawMessage[]> {
+  const [team, member] = await Promise.all([
+    threadPages(apiKey, contactId, null),
+    userId
+      ? threadPages(apiKey, contactId, userId).catch((e) => {
+        if (e instanceof LemlistError && (e.code === "auth" || e.code === "rate")) throw e;
+        return [] as RawMessage[];
+      })
+      : Promise.resolve([] as RawMessage[]),
+  ]);
+  const seen = new Set<string>();
+  return [...team, ...member].filter((m) => {
+    const id = messageId(m);
+    if (!id) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+const byDateDesc = (list: RawMessage[]) => [...list].sort((a, b) => (messageAt(b) ?? "").localeCompare(messageAt(a) ?? ""));
 
 export type EmailTarget = { sendUserId: string; sendUserEmail: string; sendUserMailboxId: string; senderName: string | null; replyToActivityId: string | null };
 export type LinkedinTarget = { sendUserId: string; leadId: string; senderName: string | null };
@@ -180,14 +243,14 @@ export type LinkedinTarget = { sendUserId: string; leadId: string; senderName: s
 export function replyTargets(list: RawMessage[], fallbackUserId: string | null): { email: EmailTarget | null; linkedin: LinkedinTarget | null } {
   const sorted = byDateDesc(list);
   const outEmail = sorted.find((m) => str(m.type)?.startsWith("email") && /Sent$/.test(String(m.type)) && str(m.sendUserId) && str(m.sendUserEmail) && str(m.sendUserMailboxId));
-  const lastEmail = sorted.find((m) => /^emails(Sent|Replied)$/.test(String(m.type)) && str(m._id));
+  const lastEmail = sorted.find((m) => /^emails(Sent|Replied)$/.test(String(m.type)) && messageId(m));
   const outLinkedin = sorted.find((m) => str(m.type)?.startsWith("linkedin") && /Sent$/.test(String(m.type)) && str(m.sendUserId));
   const lead = sorted.find((m) => str(m.type)?.startsWith("linkedin") && str(m.leadId)) ?? sorted.find((m) => str(m.leadId));
   const linkedinUser = str(outLinkedin?.sendUserId) ?? fallbackUserId;
   return {
     email: outEmail ? {
       sendUserId: str(outEmail.sendUserId)!, sendUserEmail: str(outEmail.sendUserEmail)!, sendUserMailboxId: str(outEmail.sendUserMailboxId)!,
-      senderName: str(outEmail.sendUserName), replyToActivityId: str(lastEmail?._id),
+      senderName: str(outEmail.sendUserName), replyToActivityId: lastEmail ? messageId(lastEmail) : null,
     } : null,
     linkedin: linkedinUser && lead ? { sendUserId: linkedinUser, leadId: str(lead.leadId)!, senderName: str(outLinkedin?.sendUserName) } : null,
   };
@@ -198,7 +261,7 @@ export async function openThread(sb: SupabaseClient, id: string): Promise<Thread
   const c = await getConversation(sb, id);
   const head = { id: c.id, company_name: c.company_name, team_name: c.team_name, contact_name: c.contact_name, contact_email: c.contact_email, channels: c.channels, reply_from: { email: null, linkedin: null } };
   if (c.account_status !== "connected") return { ...head, ok: false, error: "Compte lemlist à reconnecter (Paramètres › Connecteurs) : le fil ne peut pas être lu.", messages: [] };
-  const r = await withLemlistAccount(sb, c.account_id, (key) => rawThread(key, c.contact_id));
+  const r = await withLemlistAccount(sb, c.account_id, (key) => rawThread(key, c.contact_id, c.sender_user_id));
   if (!r.ok) return { ...head, ok: false, error: r.message, messages: [] };
   await rpc(sb, "lemlist_conversation_seen", { p_id: c.id });
   const t = replyTargets(r.data, c.sender_user_id);
@@ -242,7 +305,7 @@ export async function sendReply(sb: SupabaseClient, id: string, input: { channel
   // 1. expéditeur : lu dans le fil chez lemlist (un échec ici est certain : rien n'est parti)
   let fresh: Awaited<ReturnType<typeof withLemlistAccount<RawMessage[]>>>;
   try {
-    fresh = await withLemlistAccount(sb, c.account_id, (k) => rawThread(k, c.contact_id));
+    fresh = await withLemlistAccount(sb, c.account_id, (k) => rawThread(k, c.contact_id, c.sender_user_id));
   } catch (e) {
     return finish("failed", `${e instanceof CrmError ? e.message : "Préparation de l'envoi impossible."} La réponse n'est pas partie.`);
   }
