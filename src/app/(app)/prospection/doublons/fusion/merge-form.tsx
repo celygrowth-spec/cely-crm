@@ -79,7 +79,7 @@ export function MergeForm({ a, b }: { a: CompanyDetail; b: CompanyDetail }) {
         <input type="radio" checked={isA ? keepA : !keepA} onChange={() => setKeepA(isA)} />
         {d.company.name}
       </label>
-      <p className="mt-1 text-xs text-muted">Créée le {formatDate(d.company.created_at)} · {d.people.length} personne(s) · {d.interactions.length} entrée(s) d&apos;historique · {d.tasks.length} tâche(s)</p>
+      <p className="mt-1 text-xs text-muted">Créée le {formatDate(d.company.created_at)} · {d.people.length} personne(s) · {d.interactions.length} entrée(s) d&apos;historique</p>
       <p className="text-xs text-muted">Listes : {d.lists.map((l) => l.name).join(", ") || "—"} · Campagnes : {d.participants.length}</p>
       <p className="text-xs text-muted">Pipeline : {d.company.pipeline ? `${d.company.pipeline.name} › ${d.company.stage?.name}` : "—"}</p>
       <p className="mt-2 text-xs">{d.people.map((p) => personName(p)).join(", ")}</p>

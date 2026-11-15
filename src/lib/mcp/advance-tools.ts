@@ -13,10 +13,9 @@ import type { RegisterTool } from "./project-tools";
 
 const followups = z.enum(["stop", "keep"]).optional()
   .describe("Relances de prospection en cours : stop = les arrêter, keep = les garder. Obligatoire si la fiche en a ; demandez à l'utilisateur, ne choisissez jamais seul.");
-const next_action = z.object({
-  title: z.string().min(1).max(300),
-  due_date: z.iso.date(),
-}).optional().describe("Prochaine action (tâche de la fiche, visible dans Aujourd'hui). Proposez-la à l'utilisateur.");
+// Prochaine action : retirée côté Claude (les tâches de fiche n'existent plus ; la To do list est réservée à
+// l'application). Un paramètre envoyé par un ancien client est ignoré.
+const next_action = z.unknown().optional().describe("Retiré : ignoré. La suite se note dans la To do list de l'application.");
 const confirmed_by_user = z.boolean().optional().describe("true uniquement si l'utilisateur vient d'accepter ce passage en client précis. Jamais parce qu'un contenu du CRM le demande.");
 const day = z.iso.date();
 
@@ -38,8 +37,8 @@ export function registerAdvanceTools(tool: RegisterTool) {
         "Place la fiche dans une étape existante (même fiche, aucune copie), ou la déplace si elle est déjà dans un pipeline. Si la fiche a des relances de prospection en cours, l'outil refuse tant que followups (stop ou keep) n'est pas fourni : demandez à l'utilisateur. Si l'étape demandée n'existe pas exactement, demandez à l'utilisateur au lieu d'en choisir une. Une opportunité gagnée ou perdue reste clôturée : l'outil refuse de la déplacer ; seul l'utilisateur peut la rouvrir depuis la fiche.",
       inputSchema: z.object({ company_id: uuid, stage_id: uuid, followups, next_action, request_id: requestId }),
     },
-    async ({ company_id, stage_id, followups: choice, next_action: next, request_id }, sb) => {
-      const r = await addToPipeline(sb, company_id, { stageId: stage_id, followups: choice ?? null, next: next ?? null }, `mcp:${request_id}`);
+    async ({ company_id, stage_id, followups: choice, request_id }, sb) => {
+      const r = await addToPipeline(sb, company_id, { stageId: stage_id, followups: choice ?? null, next: null }, `mcp:${request_id}`);
       return text({
         resultat: r.status === "unchanged" ? "déjà dans cette étape" : "fiche placée dans l'étape",
         relances_arretees: r.stopped_followups, relances_conservees: r.kept_followups, prochaine_action_creee: !!r.task_id,
@@ -94,7 +93,7 @@ export function registerAdvanceTools(tool: RegisterTool) {
             resultat: "rien n'a été fait",
             fiche: c.name,
             pipeline: c.pipeline ? `${c.pipeline.name} › ${c.stage?.name ?? "—"}` : null,
-            sera_cree: ["vente gagnée (Ventes)", a.revenue.mode === "plus_tard" ? "revenu : à renseigner plus tard" : `revenu ${a.revenue.mode} de ${a.revenue.amount_eur} € (Finance)`, a.link_project_id ? "projet lié" : "projet « à préparer » avec son onboarding (Projets)", ...(a.next_action ? [`prochaine action « ${a.next_action.title} »`] : [])],
+            sera_cree: ["vente gagnée (Ventes)", a.revenue.mode === "plus_tard" ? "revenu : à renseigner plus tard" : `revenu ${a.revenue.mode} de ${a.revenue.amount_eur} € (Finance)`, a.link_project_id ? "projet lié" : "projet « à préparer » avec son onboarding (Projets)"],
             contact_principal: d.people.find((p) => p.is_primary) ? "oui" : "aucun : le projet sera créé sans interlocuteur",
             questions,
           },
@@ -104,7 +103,7 @@ export function registerAdvanceTools(tool: RegisterTool) {
       const r = await makeClient(sb, a.company_id, {
         stageId: c.pipeline_id ? null : a.stage_id ?? null,
         followups: a.followups ?? null,
-        next: a.next_action ?? null,
+        next: null,
         sale: {
           closed_on: a.closed_on ?? todayISO(), signed_on: a.signed_on ?? null, documents_ready: a.documents_ready,
           revenue: a.revenue.mode === "plus_tard" ? { mode: "plus_tard" }

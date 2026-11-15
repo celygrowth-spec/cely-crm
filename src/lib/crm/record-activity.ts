@@ -4,7 +4,7 @@ import type { Booking } from "@/lib/appointments/types";
 import { shortDescription } from "@/lib/fireflies/transcript-view";
 import type { Call } from "@/lib/fireflies/types";
 import type { MailMessage } from "@/lib/mail/types";
-import type { ClaudeLogEntry, Interaction, Task } from "./types";
+import type { ClaudeLogEntry, Interaction } from "./types";
 
 /** `deal` : jalon de clôture (gagnée, perdue, rouverte), visible dans « Tout » ; ce n'est pas un échange. */
 export type ActivityType = "note" | "email" | "call" | "meeting" | "task" | "deal";
@@ -16,7 +16,6 @@ export const ACTIVITY_FILTERS: { key: ActivityFilter; label: string }[] = [
   { key: "email", label: "Emails" },
   { key: "call", label: "Appels" },
   { key: "meeting", label: "Rendez-vous" },
-  { key: "task", label: "Tâches" },
 ];
 
 export type ActivityEntry = {
@@ -30,7 +29,6 @@ export type ActivityEntry = {
   call?: Call;
   booking?: Booking;
   mail?: MailMessage;
-  task?: Task;
 };
 
 const EXCHANGE_KINDS: Partial<Record<Interaction["kind"], ActivityType>> = {
@@ -88,7 +86,7 @@ function fromInteraction(i: Interaction, type: ActivityType, call?: Call, bookin
  * - un compte rendu sans activité reliée garde sa propre entrée, et deux appels distincts restent distincts ;
  * - un email envoyé (meta.mail_id) et un rendez-vous (meta.appointment_id) suivent le même principe.
  */
-export function buildActivity(src: { interactions: Interaction[]; calls?: Call[]; mails?: MailMessage[]; bookings?: Booking[]; tasks?: Task[] }): ActivityEntry[] {
+export function buildActivity(src: { interactions: Interaction[]; calls?: Call[]; mails?: MailMessage[]; bookings?: Booking[] }): ActivityEntry[] {
   const calls = new Map((src.calls ?? []).map((c) => [c.id, c]));
   const mails = new Map((src.mails ?? []).map((m) => [m.id, m]));
   const bookings = new Map((src.bookings ?? []).map((b) => [b.id, b]));
@@ -124,10 +122,6 @@ export function buildActivity(src: { interactions: Interaction[]; calls?: Call[]
     if (usedBookings.has(b.id)) continue;
     out.push({ key: `booking-${b.id}`, type: "meeting", at: b.starts_at, title: b.event_snapshot.name, preview: null, personId: b.person_id, booking: b });
   }
-  // les tâches à faire restent groupées en tête de l'onglet : seules les terminées prennent place dans le fil
-  for (const t of src.tasks ?? []) {
-    if (t.done_at) out.push({ key: `task-${t.id}`, type: "task", at: t.done_at, title: t.title, preview: null, personId: t.person_id, task: t });
-  }
   return out.sort((a, b) => ms(b.at) - ms(a.at));
 }
 
@@ -137,9 +131,6 @@ export function matchesFilter(e: ActivityEntry, f: ActivityFilter) {
   if (f === "call") return e.type === "call" || !!e.call;
   return e.type === f;
 }
-
-export const openTasks = (tasks: Task[]) =>
-  tasks.filter((t) => !t.done_at).sort((a, b) => a.due_date.localeCompare(b.due_date) || a.created_at.localeCompare(b.created_at));
 
 const MAIL_NOT_SENT: MailMessage["status"][] = ["draft", "cancelled", "failed", "pending", "sending", "uncertain"];
 

@@ -2,16 +2,12 @@
 
 // Onglet Activité : une seule timeline filtrable. Les traces techniques restent dans le journal des modifications.
 import { useState } from "react";
-import { History, Plus, RotateCcw } from "lucide-react";
-import { toast } from "sonner";
-import { setTaskDoneAction } from "@/app/actions";
-import { attempt } from "@/lib/client/query";
-import { ACTIVITY_FILTERS, buildJournal, matchesFilter, openTasks, type ActivityEntry, type ActivityFilter } from "@/lib/crm/record-activity";
-import { CHANNEL_LABELS, KIND_LABELS, formatDateTime, personName } from "@/lib/format";
+import { History } from "lucide-react";
+import { ACTIVITY_FILTERS, buildJournal, matchesFilter, type ActivityEntry, type ActivityFilter } from "@/lib/crm/record-activity";
+import { CHANNEL_LABELS, KIND_LABELS, formatDateTime } from "@/lib/format";
 import type { RecordCtx } from "./company-record";
 import { EntryRow, Provenance, useActivityEntries } from "./record-entry";
-import { TaskRow } from "./record-tasks";
-import { Badge, Button, Modal, Skeleton, cn } from "./ui";
+import { Modal, Skeleton, cn } from "./ui";
 
 const EMPTY: Record<ActivityFilter, string> = {
   all: "Rien pour l'instant.",
@@ -27,7 +23,6 @@ export function RecordActivity({ ctx }: { ctx: RecordCtx }) {
   const { entries, loading, failed, retry } = useActivityEntries(ctx, true);
   const [journal, setJournal] = useState(false);
   const filter = ctx.filter;
-  const tasks = filter === "all" || filter === "task" ? openTasks(ctx.detail.tasks) : [];
   const shown = entries.filter((e) => matchesFilter(e, filter));
 
   return (
@@ -55,23 +50,12 @@ export function RecordActivity({ ctx }: { ctx: RecordCtx }) {
         </p>
       )}
 
-      {tasks.length > 0 && (
-        <section className="mt-4">
-          <h3 className="mb-2 font-label text-xs font-bold tracking-wide text-muted uppercase">À faire</h3>
-          <div className="space-y-2">
-            {tasks.map((t) => <TaskRow key={t.id} task={t} personLabel={personName(ctx.detail.people.find((p) => p.id === t.person_id))} onChanged={ctx.reload} />)}
-          </div>
-        </section>
-      )}
-      {filter === "task" && (
-        <Button size="sm" variant="ghost" className="mt-2" onClick={ctx.newTask}><Plus size={14} /> Créer une tâche</Button>
-      )}
 
       <ol className="mt-3 -mx-2 divide-y divide-line/60">
         {shown.map((e) => <li key={e.key}><Row entry={e} ctx={ctx} /></li>)}
         {loading && [0, 1, 2].map((i) => <li key={i} className="px-2 py-2"><Skeleton className="h-12 w-full" /></li>)}
       </ol>
-      {!shown.length && !loading && !tasks.length && <p className="mt-3 text-sm text-muted">{EMPTY[filter]}</p>}
+      {!shown.length && !loading && <p className="mt-3 text-sm text-muted">{EMPTY[filter]}</p>}
 
       {journal && <Journal ctx={ctx} onClose={() => setJournal(false)} />}
     </div>
@@ -79,28 +63,7 @@ export function RecordActivity({ ctx }: { ctx: RecordCtx }) {
 }
 
 function Row({ entry, ctx }: { entry: ActivityEntry; ctx: RecordCtx }) {
-  if (entry.task) return <DoneTask entry={entry} ctx={ctx} />;
   return <EntryRow entry={entry} ctx={ctx} />;
-}
-
-function DoneTask({ entry, ctx }: { entry: ActivityEntry; ctx: RecordCtx }) {
-  const task = entry.task!;
-  const person = personName(ctx.detail.people.find((p) => p.id === task.person_id));
-  async function reopen() {
-    const r = await attempt(() => setTaskDoneAction(task.id, false));
-    if (!r.ok) return toast.error(r.error);
-    await ctx.reload();
-  }
-  return (
-    <div className="flex flex-wrap items-center gap-2 px-2 py-2">
-      <div className="min-w-0 flex-1">
-        <p className="text-sm text-muted line-through">{task.title}</p>
-        <p className="text-xs text-muted">Terminée le {formatDateTime(task.done_at)}{person && ` · ${person}`}</p>
-      </div>
-      <Badge tone="success">Terminée</Badge>
-      <Button size="sm" variant="ghost" onClick={reopen}><RotateCcw size={12} /> Rouvrir</Button>
-    </div>
-  );
 }
 
 const TABLE_LABELS: Record<string, string> = {

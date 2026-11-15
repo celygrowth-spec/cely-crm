@@ -1,9 +1,9 @@
 "use client";
 
 // File « Appels à rattacher » : les candidates aident, le choix reste le vôtre et il est conservé.
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
 import { post } from "@/components/fireflies/api";
@@ -67,16 +67,24 @@ export function ToLinkView() {
   );
 }
 
-function LinkActions({ call, ignored }: { call: Call; ignored: boolean }) {
+/** Actions d'un appel à rattacher (page Appels et Accueil). Un seul envoi à la fois, même en double-cliquant ;
+ *  l'appel traité quitte aussitôt la liste affichée. */
+export function LinkActions({ call, ignored }: { call: Call; ignored: boolean }) {
   const sync = useSync();
+  const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
+  const sending = useRef(false);
   const [searching, setSearching] = useState(false);
   async function act(body: object, done: string) {
+    if (sending.current) return;
+    sending.current = true;
     setBusy(true);
     const r = await post(`/api/fireflies/calls/${call.id}/link`, body);
+    sending.current = false;
     setBusy(false);
     if (!r.ok) return toast.error(r.error);
     toast.success(done);
+    qc.setQueryData<Call[]>(["fireflies-to-link", ignored ? "ignored" : "to_link"], (old) => old?.filter((x) => x.id !== call.id));
     sync(...KEYS);
   }
   if (ignored) {

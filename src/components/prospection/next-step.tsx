@@ -1,28 +1,27 @@
 "use client";
 
 // Suite après « Intéressé » ou « RDV obtenu » (Q04) : la fiche ne doit jamais sortir de toutes les listes.
-// Trois choix : une tâche de suivi (par défaut), une étape du pipeline, ou un rendez-vous déjà planifié (la base
-// vérifie alors qu'il existe un rendez-vous à venir ou une tâche ouverte, sinon elle refuse avec une explication).
-import { addDaysISO, todayISO } from "@/lib/format";
+// Trois choix : un élément de la To do list relié à la fiche (par défaut), une étape du pipeline, ou un rendez-vous déjà
+// planifié (la base vérifie alors qu'il existe un rendez-vous à venir ou une To do ouverte, sinon elle refuse en expliquant).
 import type { NextStep } from "@/lib/prospection/service";
 import { useCrm } from "../app-shell";
 import { Field, Input, Select, cn } from "../ui";
 
-export type NextChoice = { mode: "task" | "stage" | "existing"; stage: string; title: string; due: string };
+export type NextChoice = { mode: "task" | "stage" | "existing"; stage: string; title: string };
 
 export function defaultNext(outcome: "interested" | "meeting", companyName: string): NextChoice {
   return outcome === "meeting"
-    ? { mode: "task", stage: "", title: `Préparer le rendez-vous avec ${companyName}`, due: addDaysISO(todayISO(), 1) }
-    : { mode: "task", stage: "", title: `Relancer ${companyName}`, due: addDaysISO(todayISO(), 3) };
+    ? { mode: "task", stage: "", title: `Préparer le rendez-vous avec ${companyName}` }
+    : { mode: "task", stage: "", title: `Relancer ${companyName}` };
 }
 
 export const toNextStep = (c: NextChoice): NextStep | null =>
-  c.mode === "task" ? { task: { title: c.title, due_date: c.due } } : c.mode === "stage" && c.stage ? { stage_id: c.stage } : null;
+  c.mode === "task" ? { task: { title: c.title } } : c.mode === "stage" && c.stage ? { stage_id: c.stage } : null;
 
 export function NextStepFields({ value, onChange, outcome }: { value: NextChoice; onChange: (c: NextChoice) => void; outcome: "interested" | "meeting" }) {
   const { pipelines } = useCrm();
   const modes = [
-    ["task", "Tâche de suivi"],
+    ["task", "To do list"],
     ["stage", "Étape du pipeline"],
     ["existing", outcome === "meeting" ? "Rendez-vous déjà planifié" : "Suite déjà prévue"],
   ] as const;
@@ -36,10 +35,7 @@ export function NextStepFields({ value, onChange, outcome }: { value: NextChoice
         ))}
       </div>
       {value.mode === "task" && (
-        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-          <Field label="Tâche"><Input value={value.title} onChange={(e) => onChange({ ...value, title: e.target.value })} maxLength={300} aria-label="Tâche de suivi" /></Field>
-          <Field label="Pour le"><Input type="date" value={value.due} onChange={(e) => onChange({ ...value, due: e.target.value })} aria-label="Échéance de la tâche" /></Field>
-        </div>
+        <Field label="À ajouter à la To do list"><Input value={value.title} onChange={(e) => onChange({ ...value, title: e.target.value })} maxLength={300} aria-label="Élément de To do list" /></Field>
       )}
       {value.mode === "stage" && (
         <Select value={value.stage} onChange={(e) => onChange({ ...value, stage: e.target.value })} className="h-8 text-xs" aria-label="Pipeline et étape">
@@ -52,7 +48,7 @@ export function NextStepFields({ value, onChange, outcome }: { value: NextChoice
         </Select>
       )}
       {value.mode === "existing" && (
-        <p className="text-xs text-muted">Accepté seulement si la fiche a déjà un rendez-vous à venir, une tâche ouverte ou une étape de pipeline.</p>
+        <p className="text-xs text-muted">Accepté seulement si la fiche a déjà un rendez-vous à venir, une To do ouverte ou une étape de pipeline.</p>
       )}
     </fieldset>
   );

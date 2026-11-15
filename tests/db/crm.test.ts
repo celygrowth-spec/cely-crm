@@ -482,19 +482,14 @@ describe("modèles, tâches et À faire", () => {
     await expect(db.rpc("save_template", { p_id: id, p_name: "X", p_steps: [] })).rejects.toThrow(/au moins une étape/);
   });
 
-  test("création de tâche idempotente et vue À faire sans doublon", async () => {
+  test("vue À faire : relances seulement, une ancienne tâche de fiche n'y figure plus (donnée conservée)", async () => {
     const r = await company("Acme", null);
-    const args = { p_company: r.id, p_title: "Relancer Paul", p_due: "2026-11-06", p_person: null, p_idempotency_key: "mcp:task-12345678" };
-    await db.rpc("create_task", args);
-    await db.rpc("create_task", args);
-    expect(await count("tasks")).toBe(1);
+    await db.query(`insert into tasks (company_id, title, due_date) values ($1, 'Relancer Paul', '2026-11-06')`, [r.id]);
     const tpl = await db.rpc<string>("save_template", { p_id: null, p_name: "T", p_steps: [{ name: "Msg", channel: "email", delay_days: 0 }] });
     const camp = await db.rpc<{ id: string }>("create_campaign", { p_name: "C", p_template: tpl, p_list_ids: [] });
     await db.rpc("add_companies_to_campaign", { p_campaign: camp.id, p_company_ids: [r.id] });
     const items = await db.query<{ item_type: string }>(`select item_type from todo_items`);
-    expect(items.rows.map((i) => i.item_type).sort()).toEqual(["followup", "task"]);
-    await db.query(`update tasks set done_at = now()`);
-    expect(await count("interactions", "kind = 'task_done'")).toBe(1);
-    expect(await count("todo_items")).toBe(1);
+    expect(items.rows.map((i) => i.item_type)).toEqual(["followup"]);
+    expect(await count("tasks")).toBe(1);
   });
 });

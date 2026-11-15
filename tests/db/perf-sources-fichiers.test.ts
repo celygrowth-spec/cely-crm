@@ -39,7 +39,8 @@ describe("companies_page", () => {
     const a = await make("Acme", {}, [{ first_name: "Léa", last_name: "Durand" }]);
     const l = await db.one<{ id: string }>(`insert into lists (name) values ('L') returning id`);
     await db.query(`insert into list_members (list_id, company_id) values ($1, $2)`, [l.id, a]);
-    await db.query(`insert into tasks (company_id, title, due_date) values ($1, 'Relancer', current_date)`, [a]);
+    const pr = await db.one<{ id: string }>(`insert into projects (company_id, name, status) values ($1, 'Refonte', 'en_cours') returning id`, [a]);
+    await db.query(`insert into project_tasks (project_id, title, due_date) values ($1, 'Relancer', current_date)`, [pr.id]);
     const r = (await db.rpc<Page>("companies_page", { p_filters: { list: l.id } })).rows[0];
     expect(r).toMatchObject({ primary_person_name: "Léa Durand", list_ids: [l.id], next_action_title: "Relancer" });
     const ids = await db.rpc<string[]>("companies_page", { p_filters: { list: l.id }, p_ids_only: true });

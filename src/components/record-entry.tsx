@@ -25,14 +25,14 @@ export const useCompanyBookings = (companyId: string) =>
 
 /** `full` : aussi les emails et tous les appels. L'Aperçu ne charge les appels que si une activité y renvoie. */
 export function useActivityEntries(ctx: RecordCtx, full: boolean) {
-  const { company, interactions, tasks } = ctx.detail;
+  const { company, interactions } = ctx.detail;
   const hasLinkedCall = interactions.some((i) => linkedCallId(i));
   const calls = useCompanyCalls(company.id, full || hasLinkedCall);
   const mails = useCompanyMails(company.id, full);
   const bookings = useCompanyBookings(company.id);
   const entries = useMemo(
-    () => buildActivity({ interactions, tasks, calls: calls.data, mails: mails.data, bookings: bookings.data }),
-    [interactions, tasks, calls.data, mails.data, bookings.data],
+    () => buildActivity({ interactions, calls: calls.data, mails: mails.data, bookings: bookings.data }),
+    [interactions, calls.data, mails.data, bookings.data],
   );
   const failed = [calls, mails, bookings].filter((q) => q.isError);
   return {

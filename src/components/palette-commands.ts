@@ -2,12 +2,14 @@
 export type PaletteCommand = { id: string; group: "Aller à…" | "Créer…"; label: string; keywords?: string; href?: string; create?: true };
 
 export const PALETTE_COMMANDS: PaletteCommand[] = [
-  { id: "go-today", group: "Aller à…", label: "Aujourd'hui", keywords: "accueil taches relances", href: "/" },
+  { id: "go-today", group: "Aller à…", label: "Accueil", keywords: "aujourd'hui finance clients a traiter", href: "/" },
+  { id: "go-fiches", group: "Aller à…", label: "Fiches", keywords: "entreprises personnes contacts prospects", href: "/fiches" },
   { id: "go-sales", group: "Aller à…", label: "Ventes", keywords: "gagne", href: "/ventes" },
   { id: "go-projects", group: "Aller à…", label: "Projets", keywords: "clients onboarding", href: "/projets" },
-  { id: "go-rdv", group: "Aller à…", label: "Rendez-vous", keywords: "agenda rdv", href: "/rendez-vous" },
+  { id: "go-portal", group: "Aller à…", label: "Portail client", keywords: "acces apercu publication", href: "/clients/portail" },
+  { id: "go-rdv", group: "Aller à…", label: "Rendez-vous", keywords: "agenda rdv", href: "/rendez-vous/agenda" },
   { id: "go-revenue", group: "Aller à…", label: "Finance › Revenus", keywords: "factures argent", href: "/finance/revenus" },
-  { id: "go-time", group: "Aller à…", label: "Temps", keywords: "chrono heures", href: "/temps" },
+  { id: "go-time", group: "Aller à…", label: "Suivi du temps", keywords: "chrono heures temps", href: "/productivite/temps" },
   { id: "go-mail", group: "Aller à…", label: "Mail", keywords: "email gmail", href: "/mail" },
   { id: "go-calls", group: "Aller à…", label: "Appels", keywords: "fireflies", href: "/appels" },
   { id: "go-library", group: "Aller à…", label: "Bibliothèque", keywords: "prompts documents dossiers modeles", href: "/bibliotheque" },

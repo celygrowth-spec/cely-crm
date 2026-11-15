@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-// Ancienne adresse : « À faire » est regroupé dans « Aujourd'hui » (vue complète, échéances futures comprises).
+// Ancienne adresse : « À faire » puis « Aujourd'hui » sont remplacés par l'Accueil.
 export default function AFairePage() {
-  redirect("/?vue=tout");
+  redirect("/");
 }

@@ -28,7 +28,7 @@ const statusTone: Record<ProspectStatus, "neutral" | "violet" | "success" | "war
   pas_interesse: "danger",
 };
 
-export function ProspectTable({ campaigns }: { campaigns: { id: string; name: string }[] }) {
+export function ProspectTable({ campaigns, title = "Base de prospects" }: { campaigns: { id: string; name: string }[]; title?: string }) {
   const { sources, lists, pipelines, openCompany, openCreate, prefetchCompany } = useCrm();
   const sync = useSync();
   const qc = useQueryClient();
@@ -142,7 +142,7 @@ export function ProspectTable({ campaigns }: { campaigns: { id: string; name: st
 
   const header = (
     <PageHeader
-      title={showArchived ? "Fiches archivées" : "Base de prospects"}
+      title={showArchived ? "Fiches archivées" : title}
       description={data ? `${total} fiche(s)` : " "}
       actions={
         <>

@@ -16,6 +16,8 @@ import { registerOnboardingTools } from "./onboarding-tools";
 import { registerTrashTools } from "./trash-tools";
 import { registerAdvanceTools } from "./advance-tools";
 
+const TASKS_REMOVED = "Les tâches de fiche ont été retirées de Cely Growth. Pour noter une suite, l'utilisateur ajoute un élément à sa To do list dans l'application (Autres › To do list).";
+
 export const MCP_INSTRUCTIONS = `CRM personnel de Cely Growth (prospection, pipelines et espaces client).
 Règles :
 - Une entreprise = une fiche unique. Cherchez toujours la fiche (search_companies) avant d'écrire ; si plusieurs fiches ou personnes correspondent, demandez à l'utilisateur laquelle utiliser.
@@ -81,7 +83,7 @@ export function registerTools(server: McpServer, client: GetClient) {
     "get_company",
     {
       title: "Consulter une fiche",
-      description: "Renvoie la fiche complète : informations, personnes (avec leurs identifiants), suivi commercial, prospection, tâches ouvertes et derniers échanges.",
+      description: "Renvoie la fiche complète : informations, personnes (avec leurs identifiants), suivi commercial, prospection et derniers échanges.",
       inputSchema: z.object({ company_id: uuid }),
       readOnly: true,
     },
@@ -108,7 +110,6 @@ export function registerTools(server: McpServer, client: GetClient) {
           personnes: d.people.map((p) => ({ id: p.id, prenom: p.first_name, nom: p.last_name, poste: p.title, email: p.email, telephone: p.phone, linkedin: p.linkedin_url, principal: p.is_primary })),
           listes: d.lists.map((l) => l.name),
           campagnes: d.participants.map((p) => ({ participant_id: p.id, campagne: p.campaign.name, statut: p.status, etape: p.current_step, relance: p.next_due_date })),
-          taches_ouvertes: d.tasks.filter((t) => !t.done_at).map((t) => ({ id: t.id, intitule: t.title, echeance: t.due_date })),
           historique_recent: d.interactions.slice(0, 20).map((i) => ({ date: i.occurred_at, type: i.kind, canal: i.channel, contenu: i.content, origine: i.source })),
         },
         DATA_NOTE,
@@ -207,27 +208,23 @@ export function registerTools(server: McpServer, client: GetClient) {
   tool(
     "create_task",
     {
-      title: "Créer une tâche ou une relance",
-      description: "Crée une tâche sur une fiche (ex. « Relancer Paul ») avec une échéance AAAA-MM-JJ.",
-      inputSchema: z.object({ company_id: uuid, title: z.string().min(1).max(300), due_date: z.iso.date(), person_id: uuid.optional(), request_id: requestId }),
+      title: "Créer une tâche (retiré)",
+      description: "Retiré : les tâches de fiche n'existent plus. Ne crée rien et l'explique. La suite d'une fiche se note dans la To do list de l'application.",
+      inputSchema: z.object({ company_id: uuid.optional(), title: z.string().max(300).optional(), due_date: z.string().optional(), person_id: uuid.optional(), request_id: requestId.optional() }),
+      readOnly: true,
     },
-    async (a, sb) => {
-      const res = await crm.createTask(sb, { company_id: a.company_id, title: a.title, due_date: a.due_date, person_id: a.person_id }, `mcp:${a.request_id}`);
-      return text({ resultat: "tâche créée", id: res.id });
-    },
+    async () => text({ resultat: "non disponible", message: TASKS_REMOVED }),
   );
 
   tool(
     "postpone_task",
     {
-      title: "Reporter une tâche",
-      description: "Change l'échéance d'une tâche ouverte (identifiant fourni par get_company ou list_followups).",
-      inputSchema: z.object({ task_id: uuid, due_date: z.iso.date() }),
+      title: "Reporter une tâche (retiré)",
+      description: "Retiré : les tâches de fiche n'existent plus. Ne modifie rien et l'explique.",
+      inputSchema: z.object({ task_id: z.string().optional(), due_date: z.string().optional() }),
+      readOnly: true,
     },
-    async ({ task_id, due_date }, sb) => {
-      await crm.postponeTask(sb, task_id, due_date);
-      return text({ resultat: "tâche reportée", echeance: due_date });
-    },
+    async () => text({ resultat: "non disponible", message: TASKS_REMOVED }),
   );
 
   tool(
@@ -248,7 +245,7 @@ export function registerTools(server: McpServer, client: GetClient) {
     "list_followups",
     {
       title: "Lister les relances et actions",
-      description: "Actions à faire : tâches et étapes de prospection. scope = overdue (en retard), today (aujourd'hui, retards inclus), upcoming (à venir) ou all.",
+      description: "Actions à faire : étapes de prospection et tâches de projet qui me sont attribuées. scope = overdue (en retard), today (aujourd'hui, retards inclus), upcoming (à venir) ou all.",
       inputSchema: z.object({ scope: z.enum(["overdue", "today", "upcoming", "all"]).default("today") }),
       readOnly: true,
     },
@@ -260,7 +257,7 @@ export function registerTools(server: McpServer, client: GetClient) {
       return text(
         items.length
           ? items.map((i) => ({
-              type: i.item_type === "task" ? "tâche" : "étape de prospection",
+              type: i.item_type === "project_task" ? "tâche de projet" : "étape de prospection",
               id: i.id,
               fiche: i.company_name,
               company_id: i.company_id,

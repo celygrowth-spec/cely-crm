@@ -50,13 +50,14 @@ describe("Q01 — une tâche de projet attribuée à moi est dans la file du jou
 });
 
 describe("Q04 — « RDV obtenu » et « Intéressé » laissent toujours une suite", () => {
-  test("sans étape, rendez-vous ni tâche : refus explicite ; avec une tâche de suivi : la fiche reste dans la file", async () => {
+  test("sans étape, rendez-vous ni To do : refus explicite ; avec une suite : un élément de To do list relié à la fiche", async () => {
     const { co, p } = await participant();
     await db.rpc("record_reply", { p_participant: p, p_content: "Oui, parlons-en" });
     await expect(db.rpc("set_participant_outcome", { p_participant: p, p_outcome: "meeting" })).rejects.toThrow(/Choisissez la suite/);
     expect(await db.one(`select outcome from campaign_participants where id = $1`, [p])).toEqual({ outcome: "replied" }); // inchangé : rien n'est enregistré sans suite
     await db.rpc("set_participant_outcome", { p_participant: p, p_outcome: "meeting", p_next: { task: { title: "Préparer le rendez-vous", due_date: today() } } });
-    expect(await db.query(`select item_type, title from todo_items where company_id = $1`, [co]).then((r) => r.rows)).toEqual([{ item_type: "task", title: "Préparer le rendez-vous" }]);
+    expect(await db.query(`select title, urgency from todo_list_items where company_id = $1`, [co]).then((r) => r.rows)).toEqual([{ title: "Préparer le rendez-vous", urgency: "moyen" }]);
+    expect(await n(`select count(*)::int n from tasks`)).toBe(0); // plus aucune tâche de fiche créée
   });
 
   test("intéressé avec une étape : placé dans le pipeline, aucune tâche imposée", async () => {
@@ -70,7 +71,7 @@ describe("Q04 — « RDV obtenu » et « Intéressé » laissent toujours une su
 });
 
 describe("K06 — réponse et résultat en une opération, sans doublon", () => {
-  test("double clic ou reprise réseau : une seule réponse dans l'historique, une seule tâche", async () => {
+  test("double clic ou reprise réseau : une seule réponse dans l'historique, une seule suite", async () => {
     const { co, p } = await participant();
     const args = { p_participant: p, p_content: "Intéressé, rappelez-moi", p_outcome: "interested",
       p_next: { task: { title: "Rappeler Paul", due_date: today() } }, p_idempotency_key: "reponse-abcdef12" };
@@ -78,23 +79,31 @@ describe("K06 — réponse et résultat en une opération, sans doublon", () => 
     const b = await db.rpc("record_reply", args);
     expect(b).toEqual(a);
     expect(await n(`select count(*)::int n from interactions where company_id = $1 and kind = 'message_in'`, [co])).toBe(1);
-    expect(await n(`select count(*)::int n from tasks where company_id = $1`, [co])).toBe(1);
+    expect(await n(`select count(*)::int n from todo_list_items where company_id = $1`, [co])).toBe(1);
     expect(await db.one(`select status, outcome from campaign_participants where id = $1`, [p])).toEqual({ status: "a_repondu", outcome: "interested" });
     // même clé, autre contenu : erreur explicite (jamais un résultat d'une autre saisie)
     await expect(db.rpc("record_reply", { ...args, p_content: "Autre" })).rejects.toThrow(/d'autres informations/);
     // le résultat échoue (pas de suite) : la réponse n'est pas enregistrée non plus (tout ou rien)
     const before = await n(`select count(*)::int n from interactions where kind = 'message_in'`);
-    await expect(db.rpc("record_reply", { p_participant: p, p_content: "RDV ok", p_outcome: "meeting", p_next: {} })).resolves.toBeTruthy(); // tâche ouverte existante = suite
-    await db.exec(`update tasks set done_at = now()`);
+    await expect(db.rpc("record_reply", { p_participant: p, p_content: "RDV ok", p_outcome: "meeting", p_next: {} })).resolves.toBeTruthy(); // To do ouverte existante = suite
+    await db.exec(`update todo_list_items set done_at = now()`);
     await expect(db.rpc("record_reply", { p_participant: p, p_content: "RDV ok bis", p_outcome: "meeting" })).rejects.toThrow(/Choisissez la suite/);
     expect(await n(`select count(*)::int n from interactions where kind = 'message_in'`)).toBe(before + 1);
   });
 
-  test("création de tâche avec clé : une seule tâche malgré deux envois", async () => {
+  test("tâches de fiche retirées : create_task refuse avec un message clair, sans rien créer", async () => {
     const co = (await db.rpc<{ id: string }>("create_company", { p_company: { name: "Beta" }, p_people: [], p_force: true })).id;
     const args = { p_company: co, p_title: "Relancer", p_due: today(), p_idempotency_key: "tache-abcdef12" };
-    await db.rpc("create_task", args);
-    await db.rpc("create_task", args);
+    await expect(db.rpc("create_task", args)).rejects.toThrow(/To do list/);
+    expect(await n(`select count(*)::int n from tasks where company_id = $1`, [co])).toBe(0);
+  });
+
+  test("une ancienne tâche de fiche reste en base mais ne compte plus nulle part", async () => {
+    const co = (await db.rpc<{ id: string }>("create_company", { p_company: { name: "Gamma" }, p_people: [], p_force: true })).id;
+    await db.query(`insert into tasks (company_id, title, due_date) values ($1, 'Ancienne tâche', current_date - 1)`, [co]);
+    expect(await n(`select count(*)::int n from todo_items where company_id = $1`, [co])).toBe(0);
+    expect(((await db.rpc<{ todo: number }>("nav_counters", { p_today: today() })).todo)).toBe(0);
+    expect(await db.one(`select next_action_title from company_overview where id = $1`, [co])).toEqual({ next_action_title: null });
     expect(await n(`select count(*)::int n from tasks where company_id = $1`, [co])).toBe(1);
   });
 });

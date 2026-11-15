@@ -86,14 +86,13 @@ export async function searchCompanies(sb: SupabaseClient, query: string, include
 /** Partie légère de la fiche : sans l'historique, chargé à part pour ne pas retarder l'ouverture. */
 export async function getCompanyCore(sb: SupabaseClient, id: string): Promise<CompanyCore | null> {
   parse(idSchema, id);
-  const [companyRes, people, tasks, participants, lists] = await Promise.all([
+  const [companyRes, people, participants, lists] = await Promise.all([
     sb
       .from("companies")
       .select("*, source:lead_sources(id,name,color), pipeline:pipelines(id,name), stage:stages(id,name)")
       .eq("id", id)
       .maybeSingle(),
     sb.from("people").select("*").eq("company_id", id).order("is_primary", { ascending: false }).order("created_at"),
-    sb.from("tasks").select("*").eq("company_id", id).order("done_at", { nullsFirst: true }).order("due_date"),
     sb
       .from("campaign_participants")
       .select("*, campaign:campaigns(id,name,archived_at,status, steps:campaign_steps(position,version,name,step_type,channel,delay_days,message))")
@@ -106,7 +105,6 @@ export async function getCompanyCore(sb: SupabaseClient, id: string): Promise<Co
   return {
     company,
     people: check(people),
-    tasks: check(tasks),
     participants: check(participants),
     lists: (check(lists) as unknown as { list: { id: string; name: string } }[]).map((r) => r.list),
   } as CompanyCore;

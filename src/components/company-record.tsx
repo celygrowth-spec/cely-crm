@@ -30,7 +30,6 @@ const RecordDetails = dynamic(loadDetails, { loading: () => <Skeleton className=
 const RecordDiagnostic = dynamic(() => import("./record-diagnostic").then((m) => m.RecordDiagnostic), { loading: () => <Skeleton className="h-40 w-full" /> });
 const EntryDetail = dynamic(() => import("./record-entry-detail").then((m) => m.EntryDetail));
 const LogForm = dynamic(() => import("./record-log-form").then((m) => m.LogForm), { loading: () => <Skeleton className="h-32 w-full" /> });
-const TaskForm = dynamic(() => import("./record-tasks").then((m) => m.TaskForm), { loading: () => <Skeleton className="h-24 w-full" /> });
 const MailCompose = dynamic(() => import("./mail-compose").then((m) => m.MailCompose));
 
 type CompanyFields = Partial<CompanyCore["company"]>;
@@ -55,7 +54,6 @@ export type RecordCtx = {
   detailsFocus: { section: DetailsSection; edit?: boolean; n: number } | null;
   openEntry: (e: ActivityEntry) => void;
   logExchange: (kind: LogKind) => void;
-  newTask: () => void;
   /** Ouvre l'onglet Diagnostic et crée le premier dossier s'il n'y en a pas. */
   generateDiagnostic: () => void;
 };
@@ -69,7 +67,6 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
   const [detailsFocus, setDetailsFocus] = useState<RecordCtx["detailsFocus"]>(null);
   const [entry, setEntry] = useState<ActivityEntry | null>(null);
   const [log, setLog] = useState<LogKind | null>(null);
-  const [taskForm, setTaskForm] = useState(false);
   const [diagnosticStart, setDiagnosticStart] = useState(0);
   const top = useRef<HTMLDivElement>(null);
   const sync = useSync();
@@ -223,7 +220,6 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
     detailsFocus,
     openEntry: setEntry,
     logExchange: setLog,
-    newTask: () => setTaskForm(true),
     generateDiagnostic: () => {
       go("diagnostic");
       setDiagnosticStart((n) => n + 1);
@@ -248,9 +244,6 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
       {entry && <EntryDetail key={entry.key} entry={entry} ctx={ctx} onClose={() => setEntry(null)} />}
       <Modal open={!!log} onClose={() => setLog(null)} title={log === "note" ? "Ajouter une note" : "Enregistrer un échange"} wide>
         {log && <LogForm ctx={ctx} initial={log} onDone={() => setLog(null)} />}
-      </Modal>
-      <Modal open={taskForm} onClose={() => setTaskForm(false)} title="Créer une tâche">
-        {taskForm && <TaskForm companyId={c.id} people={detail.people} onDone={async () => { setTaskForm(false); await ctx.reload(); }} />}
       </Modal>
     </div>
   );
