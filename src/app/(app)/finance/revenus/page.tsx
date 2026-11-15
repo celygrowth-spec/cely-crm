@@ -6,6 +6,7 @@ export default async function RevenusPage({ searchParams }: { searchParams: Prom
   const sp = await searchParams;
   return (
     <RevenusView
+      key={sp.vue ?? ""} // Factures et Règlements (navigation) ouvrent l'onglet même depuis Revenus
       data={data}
       initial={{
         client: sp.client ?? "", from: sp.du ?? "", to: sp.au ?? "", status: sp.statut ?? "", type: sp.type === "mensuel" || sp.type === "ponctuel" ? sp.type : "",
