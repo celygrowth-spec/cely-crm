@@ -311,10 +311,10 @@ export const undoAction = (sb: SupabaseClient, actionId: string) => rpc<{ status
  * Suite après « Intéressé » ou « RDV obtenu » (Q04) : une étape du pipeline, ou une tâche de suivi. La base refuse
  * le résultat s'il ne reste aucune suite (étape, rendez-vous à venir ou tâche ouverte).
  */
-export type NextStep = { stage_id?: string | null; task?: { title: string; due_date: string } | null };
+export type NextStep = { stage_id?: string | null; task?: { title: string } | null }; // task = élément de la To do list relié à la fiche
 const nextSchema = z.object({
   stage_id: uuid.nullish(),
-  task: z.object({ title: z.string().trim().min(1, "Indiquez la tâche de suivi").max(300), due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date invalide") }).nullish(),
+  task: z.object({ title: z.string().trim().min(1, "Indiquez la prochaine action").max(300) }).nullish(),
 }).nullish();
 const keySchema = z.string().min(8).max(200);
 

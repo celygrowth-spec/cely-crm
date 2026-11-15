@@ -14,12 +14,11 @@ const key = z.string().min(8).max(200);
 export const followupsSchema = z.enum(["stop", "keep"]).nullish();
 export type FollowupsChoice = "stop" | "keep";
 
+// Prochaine action = élément de la To do list relié à la fiche (urgence « moyen »).
 export const nextSchema = z.object({
   title: z.string().trim().min(1, "Indiquez la prochaine action, ou décochez-la.").max(300, "Prochaine action trop longue (300 caractères au plus)."),
-  due_date: z.iso.date("Indiquez la date de la prochaine action."),
-  person_id: uuid.nullish(),
 }).nullish();
-export type NextTask = { title: string; due_date: string; person_id?: string | null };
+export type NextTask = { title: string };
 
 async function rpc<T>(sb: SupabaseClient, fn: string, args: Record<string, unknown>): Promise<T> {
   const { data, error } = await sb.rpc(fn, args);

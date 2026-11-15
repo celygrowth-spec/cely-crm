@@ -82,6 +82,20 @@ const inDays = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10
     log("4. second compte :", r?.status(), new URL(p.url()).pathname, "; Acme visible :", (await p.content()).includes("[TEST] F-001"));
     await p.context().close();
   }
+  // 5. fiche avec d'anciennes tâches : affichée normalement, sans aucune trace des tâches ; projet avec tâches client
+  {
+    await sql(`insert into tasks (company_id, title, due_date) values ($1, '[TEST] Ancienne tâche de fiche', $2)`, [studio, daysAgo(2)]);
+    await sql(`insert into project_tasks (project_id, title, assignee_kind, visible_to_client) values ($1, '[TEST] Envoyer le logo', 'client', true)`, [pr]);
+    const p = await (await context(b, "owner")).newPage(); p.on("pageerror", (e) => errors.push(e.message));
+    await p.goto(`${APP}/fiches/${studio}`, { waitUntil: "networkidle" });
+    const html = await p.locator("main").textContent();
+    log("5. fiche : ancienne tâche visible :", html.includes("Ancienne tâche"), "; « Créer une tâche » :", html.includes("Créer une tâche"), "; onglet Activité :", await p.getByRole("tab", { name: /Activité/ }).count());
+    await p.goto(`${APP}/projets/${pr}/taches`, { waitUntil: "networkidle" });
+    log("   projet, tâches :", (await p.locator("main").textContent()).includes("Envoyer le logo") ? "tâche client affichée" : "ABSENTE");
+    await p.goto(APP + "/", { waitUntil: "networkidle" });
+    log("   accueil : ancienne tâche visible :", (await p.content()).includes("Ancienne tâche"));
+    await p.context().close();
+  }
   log("erreurs JS :", errors.length ? errors : "aucune");
   await b.close();
 })().catch((e) => { console.error(e); process.exit(1); });

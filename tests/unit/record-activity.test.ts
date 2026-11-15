@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { Booking } from "@/lib/appointments/types";
-import { buildActivity, buildJournal, emailThread, matchesFilter, nextBooking, openTasks, recentExchanges } from "@/lib/crm/record-activity";
-import type { ClaudeLogEntry, Interaction, Task } from "@/lib/crm/types";
+import { ACTIVITY_FILTERS, buildActivity, buildJournal, emailThread, matchesFilter, nextBooking, recentExchanges } from "@/lib/crm/record-activity";
+import type { ClaudeLogEntry, Interaction } from "@/lib/crm/types";
 import type { Call } from "@/lib/fireflies/types";
 import type { MailMessage } from "@/lib/mail/types";
 
@@ -10,8 +10,6 @@ const interaction = (id: string, kind: Interaction["kind"], at: string, extra: P
 });
 const call = (id: string, title: string, at: string, extra: Partial<Call> = {}) =>
   ({ id, title, occurred_at: at, person_id: null, summary: { gist: `Résumé ${id}` }, summary_state: "available", ...extra }) as Call;
-const task = (id: string, due: string, done: string | null = null): Task =>
-  ({ id, company_id: "c", person_id: null, title: id, due_date: due, done_at: done, source: "user", created_at: "2026-01-01T00:00:00Z" });
 const mail = (id: string, status: MailMessage["status"], extra: Partial<MailMessage> = {}) =>
   ({ id, status, subject: id, body_text: "", person_id: null, sent_at: null, updated_at: "2026-11-01T10:00:00Z", provider_thread_id: null, ...extra }) as MailMessage;
 const booking = (id: string, at: string, status: Booking["display_status"], extra: Partial<Booking> = {}) =>
@@ -106,16 +104,13 @@ describe("timeline et derniers échanges", () => {
   test("derniers échanges : trois au plus, sans tâche ni rendez-vous à venir ou annulé", () => {
     const entries = buildActivity({
       interactions: ["1", "2", "3", "4"].map((n) => interaction(`n${n}`, "note", `2026-11-0${n}T10:00:00Z`)),
-      tasks: [task("t", "2026-11-05", "2026-11-05T15:00:00Z")],
       bookings: [booking("futur", "2026-11-20T10:00:00Z", "a_venir"), booking("annule", "2026-11-05T18:00:00Z", "cancelled")],
     });
     expect(recentExchanges(entries, 3, now).map((e) => e.key)).toEqual(["n4", "n3", "n2"]);
   });
 
-  test("seules les tâches terminées entrent dans le fil, les autres sont triées par urgence", () => {
-    const tasks = [task("b", "2026-11-09"), task("a", "2026-11-05"), task("fait", "2026-11-01", "2026-11-02T09:00:00Z")];
-    expect(buildActivity({ interactions: [], tasks }).map((e) => e.key)).toEqual(["task-fait"]);
-    expect(openTasks(tasks).map((t) => t.id)).toEqual(["a", "b"]);
+  test("tâches de fiche retirées : plus de filtre « Tâches » dans l'activité", () => {
+    expect(ACTIVITY_FILTERS.map((f) => f.key)).not.toContain("task");
   });
 
   test("prochain rendez-vous : le plus proche à venir, jamais un annulé", () => {

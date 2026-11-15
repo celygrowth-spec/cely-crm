@@ -1,5 +1,5 @@
 // Fiche prospect : « Ajouter à une pipeline » et « Passer en client » (menu Actions, Claude).
-// Mêmes mécanismes que le parcours normal (move_company, sale_confirm, create_task), en une seule opération.
+// Mêmes mécanismes que le parcours normal (move_company, sale_confirm, To do list), en une seule opération.
 import { beforeEach, describe, expect, test } from "vitest";
 import { createDb, type Db } from "./harness";
 
@@ -40,11 +40,11 @@ describe("Ajouter à une pipeline", () => {
     expect(r).toMatchObject({ status: "moved", stopped_followups: 0 });
     expect(await db.one(`select stage_id, prospect_status from companies where id = $1`, [co])).toEqual({ stage_id: stages[0], prospect_status: "qualifie" });
     expect(await n("companies")).toBe(1); // aucune copie
-    expect(await db.one(`select title from todo_items where company_id = $1`, [co])).toEqual({ title: "Envoyer la proposition" });
+    expect(await db.one(`select title from todo_list_items where company_id = $1`, [co])).toEqual({ title: "Envoyer la proposition" });
     expect(await n("interactions", `company_id = '${co}' and kind = 'stage_change'`)).toBe(1);
     // double clic : même résultat, aucune tâche en double
     expect(await add({ p_stage: stages[0], p_next: next("Envoyer la proposition"), p_idempotency_key: "test-add-0001" })).toEqual(r);
-    expect(await n("tasks")).toBe(1);
+    expect(await n("todo_list_items")).toBe(1);
     // déjà dans une pipeline : déplacement
     await add({ p_stage: other });
     expect(await db.one(`select stage_id from companies where id = $1`, [co])).toEqual({ stage_id: other });
@@ -81,12 +81,12 @@ describe("Passer en client", () => {
     expect(await n("project_onboarding", `project_id = '${r.project_id}'`)).toBe(1);
     expect(await n("project_members", `project_id = '${r.project_id}'`)).toBe(1); // contact principal
     expect(await db.one(`select deal_status, stage from sales_overview where sale_id = $1`, [r.sale_id])).toMatchObject({ deal_status: "won" });
-    expect(await db.one(`select title from todo_items where company_id = $1`, [co])).toEqual({ title: "Lancer l'onboarding" });
+    expect(await db.one(`select title from todo_list_items where company_id = $1`, [co])).toEqual({ title: "Lancer l'onboarding" });
 
     // double validation (même clé) puis nouvel essai sans clé : une seule vente, un seul projet, un seul revenu
     expect(await client({ p_stage: stages[1], p_sale: sale(), p_next: next(), p_idempotency_key: "test-client-0001" })).toEqual(r);
     await expect(client({ p_stage: stages[1], p_sale: sale() })).rejects.toThrow(/déjà cliente/);
-    expect([await n("sales"), await n("projects"), await n("finance_missions"), await n("tasks")]).toEqual([1, 1, 1, 1]);
+    expect([await n("sales"), await n("projects"), await n("finance_missions"), await n("todo_list_items")]).toEqual([1, 1, 1, 1]);
   });
 
   test("résultat identique au parcours normal (move_company puis sale_confirm)", async () => {
@@ -109,9 +109,9 @@ describe("Passer en client", () => {
     // le revenu est refusé par sale_confirm, après l'entrée dans la pipeline : tout est annulé
     await expect(client({ p_stage: stages[1], p_sale: sale({ revenue: { mode: "ponctuel", amount: -5, date: today() } }), p_idempotency_key: "test-k-0001" })).rejects.toThrow(/montant positif/);
     // la prochaine action est refusée, après la vente et le projet : tout est annulé aussi
-    await expect(client({ p_stage: stages[1], p_sale: sale(), p_next: { task: { title: "Appeler", due_date: "" } }, p_idempotency_key: "test-k-0002" })).rejects.toThrow(/date de la prochaine action/);
+    await expect(client({ p_stage: stages[1], p_sale: sale(), p_next: { task: { title: " " } }, p_idempotency_key: "test-k-0002" })).rejects.toThrow(/Indiquez la prochaine action/);
     expect(await db.one(`select deal_status, stage_id from companies where id = $1`, [co])).toEqual({ deal_status: "open", stage_id: null });
-    expect([await n("sales"), await n("projects"), await n("finance_missions"), await n("tasks"), await n("idempotency_keys", "key like 'test-k-%'")]).toEqual([0, 0, 0, 0, 0]);
+    expect([await n("sales"), await n("projects"), await n("finance_missions"), await n("todo_list_items"), await n("idempotency_keys", "key like 'test-k-%'")]).toEqual([0, 0, 0, 0, 0]);
     expect(await n("interactions", `company_id = '${co}' and kind in ('stage_change', 'deal_status')`)).toBe(0);
     const r = await client({ p_stage: stages[1], p_sale: sale(), p_idempotency_key: "test-k-0003" });
     expect(r.created.project).toBe(true);

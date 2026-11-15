@@ -10,7 +10,7 @@ import { requireOwner } from "@/lib/auth";
 import * as crm from "@/lib/crm/service";
 import * as files from "@/lib/crm/files";
 import { CrmError } from "@/lib/crm/service";
-import type { CompanyInput, CompanyPatch, InteractionInput, PersonInput, TaskInput } from "@/lib/crm/schemas";
+import type { CompanyInput, CompanyPatch, InteractionInput, PersonInput } from "@/lib/crm/schemas";
 import { idSchema } from "@/lib/crm/schemas";
 
 const name = (max = 120) => z.string().trim().min(1, "Le nom est obligatoire").max(max);
@@ -118,18 +118,6 @@ export async function addInteractionAction(input: InteractionInput, idempotencyK
 }
 
 /** `key` : une seule tâche malgré un double clic ou une reprise réseau (K06). */
-export async function createTaskAction(input: TaskInput, key?: string) {
-  return run((sb) => crm.createTask(sb, input, key));
-}
-
-export async function postponeTaskAction(taskId: string, dueDate: string) {
-  return run((sb) => crm.postponeTask(sb, taskId, dueDate));
-}
-
-export async function setTaskDoneAction(taskId: string, done: boolean) {
-  return run((sb) => crm.setTaskDone(sb, taskId, done));
-}
-
 // ---------------------------------------------------------------------------
 // Pipelines
 // ---------------------------------------------------------------------------

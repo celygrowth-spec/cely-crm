@@ -118,7 +118,6 @@ export type CompanyCore = {
     stage: { id: string; name: string } | null;
   };
   people: Person[];
-  tasks: Task[];
   participants: Participant[];
   lists: { id: string; name: string }[];
 };

@@ -5,6 +5,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { CallCard } from "@/components/fireflies/call-list";
 import { apiGet } from "@/lib/client/query";
 import type { Call } from "@/lib/fireflies/types";
@@ -14,12 +15,13 @@ const SHOWN = 3;
 
 export function HomeCalls({ initial }: { initial: number }) {
   const router = useRouter();
+  const [hadCalls] = useState(initial > 0); // figé au premier affichage : le rafraîchissement après un rattachement ne masque pas le message
   const q = useQuery({
     queryKey: ["fireflies-to-link", "to_link"],
     queryFn: ({ signal }) => apiGet<Call[]>("/api/fireflies/to-link?state=to_link", signal),
   });
   const list = q.data ?? [];
-  if (!initial || q.isLoading) return null;
+  if (!hadCalls || q.isLoading) return null;
   if (q.isError) return <p className="text-sm text-danger">{q.error.message}</p>;
   if (!list.length) return <p className="text-sm text-muted" data-home-calls-done>Tous les appels sont rattachés.</p>;
   return (

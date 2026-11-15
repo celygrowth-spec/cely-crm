@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { ArrowRight, Check } from "lucide-react";
 import { addToPipelineAction, makeClientAction } from "@/app/fiche-actions";
 import { attempt } from "@/lib/client/query";
-import { addDaysISO, personName, relativeDay, todayISO } from "@/lib/format";
+import { personName } from "@/lib/format";
 import type { FollowupsChoice, NextTask } from "@/lib/crm/advance";
 import type { CompanyDetail } from "@/lib/crm/types";
 import { useCrm } from "./app-shell";
@@ -42,28 +42,22 @@ function FollowupsDecision({ detail, value, onChange }: { detail: CompanyDetail;
   );
 }
 
-/** La prochaine chose à faire : tâche de la fiche, visible dans l'Aperçu et dans Aujourd'hui. */
-function useNextStep(detail: CompanyDetail, title: string, inDays: number) {
-  const open = detail.tasks.filter((t) => !t.done_at).sort((a, b) => a.due_date.localeCompare(b.due_date));
+/** La prochaine chose à faire : élément de la To do list relié à la fiche (urgence « moyen »). */
+function useNextStep(detail: CompanyDetail, title: string) {
   const primary = detail.people.find((p) => p.is_primary) ?? detail.people[0] ?? null;
-  const [on, setOn] = useState(open.length === 0);
+  const [on, setOn] = useState(true);
   const [text, setText] = useState(title);
-  const [due, setDue] = useState(addDaysISO(todayISO(), inDays));
-  const value: NextTask | null = on ? { title: text.trim(), due_date: due, person_id: primary?.id ?? null } : null;
-  const check = () => (on && !text.trim() ? "Indiquez la prochaine action, ou décochez-la." : on && !due ? "Indiquez la date de la prochaine action." : null);
+  const value: NextTask | null = on ? { title: text.trim() } : null;
+  const check = () => (on && !text.trim() ? "Indiquez la prochaine action, ou décochez-la." : null);
   const fields = (
     <fieldset className="space-y-2 rounded-xl border border-line p-3 text-sm" data-next-step>
       <legend className="px-1 text-xs font-semibold text-muted">Prochaine action</legend>
-      {open[0] && <p className="text-xs text-muted">Déjà prévue : {open[0].title} · {relativeDay(open[0].due_date)}</p>}
       <label className="flex items-center gap-2">
         <input type="checkbox" className="accent-violet-600" checked={on} onChange={(e) => setOn(e.target.checked)} />
-        {open[0] ? "Ajouter une autre action" : "Créer la prochaine action"}
+        Ajouter à la To do list
       </label>
       {on && (
-        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-          <Input value={text} onChange={(e) => setText(e.target.value)} maxLength={300} aria-label="Prochaine action" />
-          <Input type="date" value={due} onChange={(e) => setDue(e.target.value)} aria-label="Échéance de la prochaine action" className="sm:w-40" />
-        </div>
+        <Input value={text} onChange={(e) => setText(e.target.value)} maxLength={300} aria-label="Prochaine action" />
       )}
     </fieldset>
   );
@@ -115,7 +109,7 @@ function AddToPipelineForm({ ctx, onClose }: { ctx: RecordCtx; onClose: () => vo
   const [stage, setStage] = useState(c.stage_id ?? pipelines[0]?.stages[0]?.id ?? "");
   const [followups, setFollowups] = useState<FollowupsChoice | null>(null);
   const contact = (ctx.detail.people.find((p) => p.is_primary) ?? ctx.detail.people[0]);
-  const next = useNextStep(ctx.detail, `Relancer ${contact ? personName(contact) : c.name}`, 3);
+  const next = useNextStep(ctx.detail, `Relancer ${contact ? personName(contact) : c.name}`);
   const [key] = useState(() => `fiche-pipeline-${crypto.randomUUID()}`);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -196,7 +190,7 @@ function MakeClient({ ctx, onClose }: { ctx: RecordCtx; onClose: () => void }) {
   const first = pipelines.find((p) => p.stages.length);
   const [stage, setStage] = useState(c.stage_id ?? first?.stages[first.stages.length - 1]?.id ?? "");
   const [followups, setFollowups] = useState<FollowupsChoice | null>(null);
-  const next = useNextStep(ctx.detail, `Lancer l'onboarding de ${c.name}`, 0);
+  const next = useNextStep(ctx.detail, `Lancer l'onboarding de ${c.name}`);
 
   const head = (
     <>
