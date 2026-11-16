@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Copy, Download, ExternalLink, RotateCcw, Sparkles } from "lucide-react";
 import { apiGet, attempt } from "@/lib/client/query";
-import { DIAGNOSTIC_STATUS_LABELS, answersPrompt, claudeLink, revisionPrompt, stageOf, startPrompt, type Diagnostic, type DiagnosticQuestion, type DiagnosticStatus, type DiagnosticVersion, type TriggerStage } from "@/lib/crm/diagnostic-rules";
+import { DIAGNOSTIC_STATUS_LABELS, answersPrompt, claudeLink, revisionPrompt, stageOf, startPrompt, type Diagnostic, type DiagnosticSiteCapture, type DiagnosticQuestion, type DiagnosticStatus, type DiagnosticVersion, type TriggerStage } from "@/lib/crm/diagnostic-rules";
 import { formatDateTime } from "@/lib/format";
 import { Badge, Button, Input, SaveIndicator, Skeleton, Textarea } from "./ui";
 
@@ -205,6 +205,7 @@ function Dossier({ dossier, reload }: { dossier: Diagnostic; reload: () => void 
           <span className="text-xs text-muted">Dossier créé le {formatDateTime(dossier.created_at)}</span>
         </div>
         {dossier.status === "failed" && dossier.last_error && <p className="text-sm text-danger">{dossier.last_error}</p>}
+        <SiteCapture capture={dossier.site_captures?.[0]} />
         {dossier.status === "waiting_claude" && <Launch dossier={dossier} stage="start" reload={reload} />}
         {dossier.status === "answers_sent" && <Launch dossier={dossier} stage="answers" reload={reload} />}
         {dossier.status === "revision_requested" && <Launch dossier={dossier} stage="revision" reload={reload} />}
@@ -339,5 +340,23 @@ export function RecordDiagnostic({ companyId, startSignal }: { companyId: string
       </div>
       <Dossier key={current.id} dossier={current} reload={reload} />
     </div>
+  );
+}
+
+/** État de la dernière capture du site par le CRM, que la session Claude lit par le connecteur. */
+function SiteCapture({ capture: c }: { capture?: DiagnosticSiteCapture }) {
+  if (!c) return null;
+  const when = c.captured_at ? ` le ${formatDateTime(c.captured_at)}` : "";
+  const label =
+    c.status === "pending" ? "Capture du site en cours…"
+    : c.status === "none" ? "Site non capturé : pas de site sur la fiche."
+    : c.status === "failed" ? `Site non capturé${when}.`
+    : c.status === "partial" ? `Site capturé en partie${when}.`
+    : `Site capturé${when}.`;
+  return (
+    <p className={`text-xs ${c.status === "failed" ? "text-danger" : "text-muted"}`}>
+      {label}
+      {c.error && c.status !== "none" && <span className="block">{c.error}</span>}
+    </p>
   );
 }

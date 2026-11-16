@@ -100,3 +100,28 @@ describe("stageOf", () => {
   });
 });
 
+
+describe("capture du site au lancement", () => {
+  const ID = "7da410d4-26e1-4f74-89fa-cc0512614f28";
+  const client = (claimed: boolean, order: string[]) => ({ rpc: vi.fn(async (fn: string) => { order.push(fn); return { data: fn === "diagnostic_claim_trigger" ? claimed : null, error: null }; }) });
+
+  test("lancement réservé : le site est capturé avant la session, une seule fois", async () => {
+    configure();
+    const { triggerDiagnostic } = await import("@/lib/crm/diagnostic-trigger");
+    const order: string[] = [];
+    const capture = vi.fn(async () => { order.push("capture"); return "ok" as const; });
+    const f = vi.fn(async () => { order.push("fire"); return new Response("{}", { status: 200 }); });
+    await triggerDiagnostic(client(true, order) as never, ID, "start", f, capture);
+    expect(capture).toHaveBeenCalledWith(expect.anything(), ID, false);
+    expect(order).toEqual(["diagnostic_claim_trigger", "capture", "fire", "diagnostic_trigger_result"]);
+  });
+
+  test("double clic (étape déjà réservée) ou étape suivante : pas de nouvelle capture", async () => {
+    configure();
+    const { triggerDiagnostic } = await import("@/lib/crm/diagnostic-trigger");
+    const capture = vi.fn(async () => "ok" as const);
+    await triggerDiagnostic(client(false, []) as never, ID, "start", reply(200, {}), capture);
+    await triggerDiagnostic(client(true, []) as never, ID, "answers", reply(200, {}), capture);
+    expect(capture).not.toHaveBeenCalled();
+  });
+});

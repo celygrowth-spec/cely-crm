@@ -5,6 +5,9 @@ import { CrmError } from "@/lib/crm/service";
 import { requestRevision, saveAnswer, setChatUrl, submitAnswers } from "@/lib/crm/diagnostic";
 import { routineConfig, triggerDiagnostic } from "@/lib/crm/diagnostic-trigger";
 
+// une relance du lancement refait la capture du site avant la session
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const b = await req.json().catch(() => null);
