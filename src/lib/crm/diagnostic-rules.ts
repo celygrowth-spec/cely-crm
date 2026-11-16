@@ -58,7 +58,10 @@ export type Diagnostic = {
   created_at: string;
   questions: DiagnosticQuestion[];
   versions: DiagnosticVersion[];
+  /** Captures du site par le serveur, la plus récente d'abord (sans le texte des pages). */
+  site_captures?: DiagnosticSiteCapture[];
 };
+export type DiagnosticSiteCapture = { status: "pending" | "ok" | "partial" | "failed" | "none"; site_url: string | null; error: string | null; created_at: string; captured_at: string | null };
 export type LibraryFile = { id: string; category: LibraryCategory; display_name: string; mime_type: string; size_bytes: number; created_at: string };
 
 // Le lien ne porte que l'identifiant du dossier : Claude lit le reste dans le CRM, avec sa propre autorisation.

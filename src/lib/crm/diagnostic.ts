@@ -4,13 +4,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { CrmError, friendlyError } from "./service";
 import { confirmUpload, startUpload, type CompanyFile } from "./files";
+import { extractDocument, isExtractable } from "@/lib/documents/extract";
 import { LIBRARY_BUCKET, LIBRARY_CATEGORIES, MAX_LIBRARY_BYTES, PPTX_TYPE, libraryType, type Diagnostic, type LibraryFile } from "./diagnostic-rules";
 
 const uuid = z.uuid("Identifiant invalide");
 const COMPANY_BUCKET = "company-files";
 const LIBRARY_COLUMNS = "id, category, display_name, mime_type, size_bytes, created_at";
 const COLUMNS = "id, company_id, status, chat_url, summary, sources, answers_sent_at, last_error, trigger_stage, triggered_at, trigger_error, created_at";
-const CHILDREN = "questions:diagnostic_questions(id, position, question, why, answer, dont_know), versions:diagnostic_versions(id, version, file_id, status, created_at, ready_at, feedback, feedback_at)";
+const CHILDREN = "questions:diagnostic_questions(id, position, question, why, answer, dont_know), versions:diagnostic_versions(id, version, file_id, status, created_at, ready_at, feedback, feedback_at), site_captures:diagnostic_site_captures(status, site_url, error, created_at, captured_at)";
 
 function check<T>(res: { data: unknown; error: { message: string; code?: string } | null }): T {
   if (res.error) throw new CrmError(friendlyError(res.error));
@@ -20,7 +21,12 @@ function check<T>(res: { data: unknown; error: { message: string; code?: string 
 const rpc = async <T>(sb: SupabaseClient, fn: string, args: Record<string, unknown>) => check<T>(await sb.rpc(fn, args));
 
 function ordered(d: Diagnostic): Diagnostic {
-  return { ...d, questions: [...d.questions].sort((a, b) => a.position - b.position), versions: [...d.versions].sort((a, b) => b.version - a.version) };
+  return {
+    ...d,
+    questions: [...d.questions].sort((a, b) => a.position - b.position),
+    versions: [...d.versions].sort((a, b) => b.version - a.version),
+    site_captures: [...(d.site_captures ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at)),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -199,6 +205,65 @@ export async function dossierFileUrl(sb: SupabaseClient, id: string, fileId: str
   const { data, error } = await sb.storage.from(COMPANY_BUCKET).createSignedUrl(row.storage_path, 300);
   if (error || !data) throw new CrmError("Lien temporaire impossible à créer.");
   return data.signedUrl;
+}
+
+// Lecture du contenu par le serveur : la session Claude n'ouvre aucun lien, quel que soit son accès réseau.
+export const FILE_READ = { pageChars: 20_000, maxChars: 1_000_000, maxBytes: 26_214_400 };
+
+export type DossierFileRead = {
+  id: string;
+  nom: string;
+  type: string;
+  taille_octets: number;
+  statut: "lu" | "non_lisible" | "vide" | "echec";
+  raison?: string;
+  total_caracteres?: number;
+  debut?: number;
+  fin?: number;
+  suite_offset?: number | null;
+  tronque?: string;
+  texte?: string;
+};
+
+/** Texte d'un fichier de la fiche du dossier, extrait côté serveur et lu par tranches (offset en caractères). */
+export async function readDossierFile(sb: SupabaseClient, id: string, fileId: string, offset = 0): Promise<DossierFileRead> {
+  const company = await companyOf(sb, id);
+  const row = check<{ id: string; display_name: string; mime_type: string; size_bytes: number; storage_path: string } | null>(
+    await sb.from("company_files").select("id, display_name, mime_type, size_bytes, storage_path").eq("id", uuid.parse(fileId)).eq("company_id", company).eq("status", "ready").maybeSingle(),
+  );
+  if (!row) throw new CrmError("Fichier introuvable sur cette fiche.");
+  const base = { id: row.id, nom: row.display_name, type: row.mime_type, taille_octets: row.size_bytes };
+  if (!isExtractable(row.mime_type, row.display_name))
+    return { ...base, statut: "non_lisible", raison: "contenu non lisible : format non extractible (seuls texte, PDF et Word .docx sont lus)" };
+  if (row.size_bytes > FILE_READ.maxBytes) return { ...base, statut: "non_lisible", raison: "contenu non lisible : fichier trop volumineux pour être lu" };
+  const { data, error } = await sb.storage.from(COMPANY_BUCKET).download(row.storage_path);
+  if (error || !data) return { ...base, statut: "echec", raison: "fichier absent du stockage ou illisible" };
+  const ex = await extractDocument(new Uint8Array(await data.arrayBuffer()), row.mime_type, row.display_name, FILE_READ.maxChars);
+  if (ex.status !== "ok" || !ex.text)
+    return { ...base, statut: ex.status === "unsupported" ? "non_lisible" : ex.status === "empty" ? "vide" : "echec", raison: ex.error ?? "lecture impossible" };
+  const total = ex.text.length;
+  const debut = Math.min(Math.max(0, Math.trunc(offset)), total);
+  const texte = ex.text.slice(debut, debut + FILE_READ.pageChars);
+  const fin = debut + texte.length;
+  return {
+    ...base,
+    statut: "lu",
+    total_caracteres: total,
+    debut,
+    fin,
+    suite_offset: fin < total ? fin : null,
+    ...(ex.truncated ? { tronque: `Document très long : seuls les ${FILE_READ.maxChars.toLocaleString("fr-FR")} premiers caractères sont lisibles.` } : {}),
+    texte,
+  };
+}
+
+export type SiteCaptureRow = { status: "pending" | "ok" | "partial" | "failed" | "none"; site_url: string | null; error: string | null; created_at: string; captured_at: string | null; pages: { url: string; titre: string | null; texte: string; tronque: boolean; capture_le: string }[] };
+
+/** Capture du site la plus récente du dossier (chaque lancement en ajoute une, datée). */
+export async function latestSiteCapture(sb: SupabaseClient, id: string): Promise<SiteCaptureRow | null> {
+  return check<SiteCaptureRow | null>(
+    await sb.from("diagnostic_site_captures").select("status, site_url, error, created_at, captured_at, pages").eq("diagnostic_id", uuid.parse(id)).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  );
 }
 
 export const saveResearch = (sb: SupabaseClient, id: string, summary: string, sources: unknown[]) =>

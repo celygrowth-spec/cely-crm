@@ -266,6 +266,17 @@ const server = http.createServer(async (req, res) => {
           for (const e of embeds.filter((x) => x.parent && /^\w+$/.test(x.parent))) {
             const fk = (await tx.query(`select a.attname from pg_constraint c join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
               where c.contype = 'f' and c.conrelid = $1::regclass and c.confrelid = $2::regclass limit 1`, [`public.${t}`, `public.${e.parent}`]).catch(() => ({ rows: [] }))).rows[0]?.attname;
+            // alias:table(...) sans clé vers elle, mais table enfant de celle-ci : un-à-plusieurs, comme PostgREST
+            if (!fk && rows.length && "id" in rows[0]) {
+              const childFk = (await tx.query(`select a.attname from pg_constraint c join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+                where c.contype = 'f' and c.conrelid = $1::regclass and c.confrelid = $2::regclass limit 1`, [`public.${e.parent}`, `public.${t}`]).catch(() => ({ rows: [] }))).rows[0]?.attname;
+              if (childFk) {
+                const kids = (await tx.query(`select ${parseSelect(e.inner).cols}, ${ident(childFk)} as __fk from public.${ident(e.parent)} where ${ident(childFk)} = any($1)`, [rows.map((r) => r.id)])).rows;
+                for (const r of rows) r[`__embed_${e.key}`] = kids.filter((k) => k.__fk === r.id).map((k) => { const { __fk: _fk, _: _x, ...rest } = k; void _fk; void _x; return rest; });
+                e.val = [];
+              }
+              continue;
+            }
             if (!fk || !rows.length || (!(fk in rows[0]) && !("id" in rows[0]))) continue;
             // clé étrangère non sélectionnée : lue à part (PostgREST la résout sans qu'on la demande)
             const fkOf = new Map();

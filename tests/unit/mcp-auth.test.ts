@@ -123,6 +123,8 @@ describe("connecteur MCP : périmètre des outils", () => {
       "postpone_task",
       "preview_client_portal",
       "publish_meeting_recap",
+      "read_diagnostic_file",
+      "read_diagnostic_site",
       "remove_project_member",
       "rename_project_file",
       "report_diagnostic_failure",
