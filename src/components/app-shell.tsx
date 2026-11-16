@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { FolderKanban, Home, LayoutGrid, LogOut, Search, Settings, Users, Wallet, X } from "lucide-react";
+import { ChevronDown, FolderKanban, Home, LayoutGrid, LogOut, Search, Settings, Users, Wallet, X } from "lucide-react";
 import type { LeadSource, List, PipelineWithStages } from "@/lib/crm/types";
 import { signOutAction } from "@/app/actions";
 import { QueryProvider, apiGet, useFlushRouterOnNavigate } from "@/lib/client/query";
@@ -123,6 +123,28 @@ export function sectionActive(pathname: string, search: string, s: NavSection): 
   return (s.items ?? []).some((it) => isItemActive(pathname, search, it)) || (s.key === "commerce" && under(pathname, "/fiches"));
 }
 
+type Counters = { todo: number; due: number; replies: number; messages?: number; calls?: number; emails?: number };
+type Badge = { n: number; label: string; amber?: boolean };
+/** Pastilles des entrées (clé = href) ; une rubrique repliée affiche la somme de celles de ses entrées. */
+function navBadges(c?: Counters): Record<string, Badge> {
+  return {
+    "/prospection/campagnes": { n: c?.replies ?? 0, label: "réponse(s) à traiter", amber: true },
+    "/messages": { n: c?.messages ?? 0, label: "non lu(s)" },
+    "/mail": { n: c?.emails ?? 0, label: "email(s) à rattacher" },
+    "/appels": { n: c?.calls ?? 0, label: "appel(s) à rattacher" },
+    "/productivite/todo": { n: c?.todo ?? 0, label: "tâche(s) à faire" },
+  };
+}
+const sectionCount = (s: NavSection, b: Record<string, Badge>) => (s.items ?? []).reduce((t, it) => t + (b[it.href]?.n ?? 0), 0);
+function Pill({ badge }: { badge?: Badge }) {
+  if (!badge || badge.n <= 0) return null;
+  return (
+    <span className={cn("rounded-full px-1.5 font-label text-[10px]", badge.amber ? "bg-amber-100 font-bold text-amber-800" : "bg-violet text-white")} aria-label={`${badge.n} ${badge.label}`}>
+      {badge.n}
+    </span>
+  );
+}
+
 export function AppShell(props: {
   sources: LeadSource[];
   lists: List[];
@@ -155,15 +177,16 @@ function Shell({
   useFlushRouterOnNavigate();
   const { data: counters } = useQuery({
     queryKey: ["counters"],
-    queryFn: ({ signal }) => apiGet<{ todo: number; due: number; replies: number; messages?: number }>("/api/counters", signal),
+    queryFn: ({ signal }) => apiGet<Counters>("/api/counters", signal),
     staleTime: 60_000,
     refetchInterval: 5 * 60_000, // non-lus de Messages (lemlist) : relus en arrière-plan, page visible
   });
   // pastille d'Accueil : ce qui demande une action (même règle que le bloc « À traiter »)
   const homeCount = counters?.todo ?? 0;
   const search = params.toString();
-  const repliesCount = counters?.replies ?? 0;
-  const messagesCount = counters?.messages ?? 0;
+  const badges = navBadges(counters);
+  // Rubriques repliables : celle de la page en cours est ouverte tant qu'on ne l'a pas repliée.
+  const [toggled, setToggled] = useState<Record<string, boolean>>({});
   const [searchOpen, setSearchOpen] = useState(false);
   const [createDefaults, setCreateDefaults] = useState<CreateDefaults | null>(null);
 
@@ -213,7 +236,7 @@ function Shell({
   useEffect(() => {
     const nav = navRef.current;
     const el = nav?.querySelector<HTMLElement>('[aria-current="page"]');
-    if (!nav || !el) return;
+    if (!nav || !el || !el.offsetParent) return;
     const top = el.getBoundingClientRect().top - nav.getBoundingClientRect().top + nav.scrollTop;
     if (top < nav.scrollTop) nav.scrollTop = top;
     else if (top + el.offsetHeight > nav.scrollTop + nav.clientHeight) nav.scrollTop = top + el.offsetHeight - nav.clientHeight;
@@ -249,24 +272,25 @@ function Shell({
                   </Link>
                 );
               }
+              const open = toggled[sec.key] ?? on;
+              const total = sectionCount(sec, badges);
               return (
                 <div key={sec.key} data-nav-section={sec.key}>
-                  <p className={cn("flex items-center gap-2.5 px-3 py-1 font-label text-[11px] font-bold tracking-wide uppercase", on ? "text-ink" : "text-muted")}>
-                    <Icon size={15} className={on ? "text-violet-strong" : undefined} /> {sec.label}
-                  </p>
-                  <div className="ml-[22px] border-l border-line pl-2">
+                  <button type="button" onClick={() => setToggled((t) => ({ ...t, [sec.key]: !open }))} aria-expanded={open} aria-controls={`nav-${sec.key}`}
+                    className={cn("flex w-full items-center gap-2.5 rounded-md px-3 py-1 font-label text-[11px] font-bold tracking-wide uppercase hover:bg-surface", on ? "text-ink" : "text-muted hover:text-ink")}>
+                    <Icon size={15} className={on ? "text-violet-strong" : undefined} />
+                    <span className="flex-1 text-left">{sec.label}</span>
+                    {!open && total > 0 && <span className="rounded-full bg-violet px-1.5 text-[10px] text-white" aria-label={`${total} notification(s)`}>{total}</span>}
+                    <ChevronDown size={14} aria-hidden className={cn("transition-transform", !open && "-rotate-90")} />
+                  </button>
+                  <div id={`nav-${sec.key}`} hidden={!open} className="ml-[22px] border-l border-line pl-2">
                     {sec.items!.map((it) => {
                       const active = isItemActive(pathname, search, it);
                       return (
                         <Link key={it.href} href={it.href} aria-current={active ? "page" : undefined}
                           className={cn("flex items-center justify-between rounded-md px-2 py-1 text-[13px]", active ? "bg-violet-soft font-semibold text-ink" : "text-muted hover:text-ink")}>
                           {it.label}
-                          {it.label === "Messages" && messagesCount > 0 && (
-                            <span className="rounded-full bg-violet px-1.5 font-label text-[10px] text-white" aria-label={`${messagesCount} non lu(s)`}>{messagesCount}</span>
-                          )}
-                          {it.label === "Prospection" && repliesCount > 0 && (
-                            <span className="rounded-full bg-amber-100 px-1.5 font-label text-[10px] font-bold text-amber-800" aria-label={`${repliesCount} réponse(s) à traiter`}>{repliesCount}</span>
-                          )}
+                          <Pill badge={badges[it.href]} />
                         </Link>
                       );
                     })}
@@ -281,7 +305,7 @@ function Shell({
             </button>
           </form>
         </aside>
-        <MobileNav pathname={pathname} search={search} homeCount={homeCount} messagesCount={messagesCount} onSignOut={() => qc.clear()} />
+        <MobileNav pathname={pathname} search={search} homeCount={homeCount} badges={badges} onSignOut={() => qc.clear()} />
         <main className="min-w-0 flex-1 px-4 pt-5 pb-36 md:px-8 md:pt-7 md:pb-24">{children}</main>
       </div>
       <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} onPick={(id) => { setSearchOpen(false); openCompany(id); }} onCreate={() => setCreateDefaults({})} />
@@ -300,7 +324,7 @@ function Shell({
 }
 
 /** Téléphone : les mêmes six entrées en bas ; une rubrique ouvre un panneau avec ses écrans. */
-function MobileNav({ pathname, search, homeCount, messagesCount, onSignOut }: { pathname: string; search: string; homeCount: number; messagesCount: number; onSignOut: () => void }) {
+function MobileNav({ pathname, search, homeCount, badges, onSignOut }: { pathname: string; search: string; homeCount: number; badges: Record<string, Badge>; onSignOut: () => void }) {
   const [open, setOpen] = useState<string | null>(null);
   useEffect(() => {
     if (!open) return;
@@ -328,7 +352,7 @@ function MobileNav({ pathname, search, homeCount, messagesCount, onSignOut }: { 
                     <Link href={it.href} onClick={() => setOpen(null)} aria-current={active ? "page" : undefined}
                       className={cn("flex items-center justify-between rounded-xl border px-3 py-3 text-sm font-semibold", active ? "border-violet-line bg-violet-soft text-ink" : "border-line text-muted hover:text-ink")}>
                       {it.label}
-                      {it.label === "Messages" && messagesCount > 0 && <span className="rounded-full bg-violet px-1.5 font-label text-[10px] text-white">{messagesCount}</span>}
+                      <Pill badge={badges[it.href]} />
                     </Link>
                   </li>
                 );
@@ -348,7 +372,7 @@ function MobileNav({ pathname, search, homeCount, messagesCount, onSignOut }: { 
         {NAV.map((s) => {
           const Icon = s.icon;
           const active = sectionActive(pathname, search, s) || open === s.key;
-          const badge = s.key === "accueil" ? homeCount : s.key === "clients" ? messagesCount : 0;
+          const badge = s.key === "accueil" ? homeCount : sectionCount(s, badges);
           const inner = (
             <>
               <Icon size={18} className={active ? "text-violet-strong" : undefined} />
