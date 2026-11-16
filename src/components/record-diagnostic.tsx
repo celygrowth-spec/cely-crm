@@ -187,7 +187,7 @@ function Dossier({ dossier, reload }: { dossier: Diagnostic; reload: () => void 
     setSending(false);
     if (!r.ok) return toast.error(r.error);
     if (r.data.error) toast.error(`Réponses envoyées, mais Claude n'a pas été lancé : ${r.data.error}`);
-    else if (r.data.triggered) toast.success("Réponses envoyées : Claude génère les slides");
+    else if (r.data.triggered) toast.success("Réponses envoyées : Claude génère le PDF du diagnostic");
     reload();
   }
 
@@ -195,6 +195,20 @@ function Dossier({ dossier, reload }: { dossier: Diagnostic; reload: () => void 
     const r = await post<string>("/api/files", { op: "url", id: fileId, download: true });
     if (!r.ok) return toast.error(r.error);
     window.location.assign(r.data);
+  }
+
+  /** Affiche la version dans un nouvel onglet (un PDF s'ouvre dans le navigateur ; une ancienne version .pptx se télécharge). */
+  async function openVersion(fileId: string) {
+    // onglet ouvert pendant le clic : un onglet ouvert après l'attente du lien serait bloqué par le navigateur
+    const tab = window.open("", "_blank");
+    const r = await post<string>("/api/files", { op: "url", id: fileId, download: false });
+    if (!r.ok) {
+      tab?.close();
+      return toast.error(r.error);
+    }
+    if (!tab) return window.location.assign(r.data);
+    tab.opener = null;
+    tab.location.href = r.data;
   }
 
   return (
@@ -257,7 +271,12 @@ function Dossier({ dossier, reload }: { dossier: Diagnostic; reload: () => void 
                   <Badge tone={v.status === "ready" ? "success" : "neutral"}>{v.status === "ready" ? "Fichier reçu" : "Dépôt en cours"}</Badge>
                   <span className="text-xs text-muted">{formatDateTime(v.ready_at ?? v.created_at)}</span>
                   {v.status === "ready" && (v.file_id
-                    ? <Button size="sm" className="ml-auto" onClick={() => download(v.file_id!)}><Download size={13} /> Télécharger</Button>
+                    ? (
+                      <span className="ml-auto flex gap-1.5">
+                        <Button size="sm" onClick={() => openVersion(v.file_id!)}><ExternalLink size={13} /> Ouvrir</Button>
+                        <Button size="sm" variant="ghost" onClick={() => download(v.file_id!)}><Download size={13} /> Télécharger</Button>
+                      </span>
+                    )
                     : <span className="ml-auto text-xs text-muted">Fichier supprimé de la fiche</span>)}
                 </div>
                 {v.feedback && <p className="mt-1.5 text-xs whitespace-pre-wrap text-muted"><span className="font-semibold">Retour du {formatDateTime(v.feedback_at!)} :</span> {v.feedback}</p>}

@@ -2,6 +2,8 @@
 export const CLAUDE_NEW_CHAT = "https://claude.ai/new";
 export const LIBRARY_BUCKET = "diagnostic-library";
 export const PPTX_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+/** Format du livrable de diagnostic : un PDF, une slide par page, paysage 16:9. */
+export const PDF_TYPE = "application/pdf";
 export const MAX_LIBRARY_BYTES = 25 * 1024 * 1024;
 
 export const LIBRARY_CATEGORIES = { example: "Diagnostic d'exemple", brand: "Marque et design", guide: "Méthode", other: "Autre" } as const;
