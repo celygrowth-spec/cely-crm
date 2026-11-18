@@ -189,6 +189,29 @@ describe("envoi", () => {
 describe("cibles", () => {
   beforeEach(() => enable());
 
+  test("préparation par moi : tout peut rester vide, enregistrer sans changement ne touche à rien ; Claude et anon ne préparent pas", async () => {
+    await db.as("owner");
+    expect(await db.rpc("discovery_target_save", { p_project: pid, p_position: 3, p_data: JSON.stringify({ name: "", notes: "" }) })).toMatchObject({ changed: false, rev: 1 });
+    expect(await db.rpc("discovery_target_save", { p_project: pid, p_position: 3, p_data: JSON.stringify({ name: "  Agences  ", roles: "Fondateurs" }) })).toMatchObject({ changed: true, rev: 2, validation_dropped: false });
+    expect(await db.one(`select name, roles, sector from discovery_targets where project_id = $1 and position = 3`, [pid])).toEqual({ name: "Agences", roles: "Fondateurs", sector: "" });
+    expect(await err(db.rpc("discovery_target_save", { p_project: pid, p_position: 4, p_data: "{}" }))).toBe("22023");
+    expect(await err(db.rpc("discovery_target_save", { p_project: pid, p_position: 1, p_data: JSON.stringify({ name: "x".repeat(121) }) }))).not.toBeNull();
+    await db.as("claude");
+    expect(await err(db.rpc("discovery_target_save", { p_project: pid, p_position: 1, p_data: JSON.stringify({ name: "Claude" }) }))).toBe("42501");
+    await db.as("anon");
+    expect(await err(db.rpc("discovery_target_save", { p_project: pid, p_position: 1, p_data: JSON.stringify({ name: "Anon" }) }))).not.toBeNull();
+  });
+
+  test("je réécris un champ rempli par le client : il redevient le mien", async () => {
+    let t = (await portal<View>(db, "portal_discovery", alice, { p_project: pid })).targets[0];
+    await portal(db, "portal_discovery_target_fill", alice, { p_project: pid, p_position: 1, p_field: "sector", p_value: "Santé", p_base_rev: t.rev });
+    await db.as("owner");
+    await db.rpc("discovery_target_save", { p_project: pid, p_position: 1, p_data: JSON.stringify({ sector: "Santé privée" }) });
+    t = (await portal<View>(db, "portal_discovery", alice, { p_project: pid })).targets[0];
+    expect(t.client_filled).toEqual([]);
+    expect(await err(portal(db, "portal_discovery_target_fill", alice, { p_project: pid, p_position: 1, p_field: "sector", p_value: "Autre", p_base_rev: t.rev }))).toBe("42501");
+  });
+
   test("préremplie, validée, puis modifiée par moi : validation retirée et « Modifiée depuis ta validation »", async () => {
     await db.as("owner");
     await db.rpc("discovery_target_save", { p_project: pid, p_position: 1, p_data: JSON.stringify({ name: "DAF ETI", sector: "Industrie" }) });

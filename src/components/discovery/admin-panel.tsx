@@ -66,7 +66,7 @@ function Panel({ projectId, a }: { projectId: string; a: Extract<DiscoveryAdmin,
               <strong>Modifié après l&apos;envoi</strong> (dernière modification le {dt(a.changed_after_send_at)}) : voir « Changements depuis l&apos;envoi ».
             </p>
           )}
-          <ol className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3" data-discovery-steps>
+          <ol className="mt-4 grid gap-2 sm:grid-cols-2" data-discovery-steps>
             {STEPS.filter((s) => s.key !== "welcome").map((s, i) => {
               const p = stepProgress(a, s.key);
               const st = a.steps[s.key as StepKey];
