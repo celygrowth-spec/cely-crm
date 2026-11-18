@@ -15,7 +15,7 @@ import { stepComplete, targetHandled, type DiscoveryTarget, type DiscoveryView, 
 import type { FlowApi } from "./flow-api";
 import { Guide, type Mood } from "./mascot";
 import { UploadBox } from "./upload-box";
-import s from "./flow.module.css";
+import "./onboarding.css";
 
 type Screen = { id: string; step: StepKey | "sent"; sub?: number };
 const SCREENS: Screen[] = [
@@ -227,7 +227,7 @@ export function DiscoveryFlow({ initial, api, exitHref }: { initial: DiscoveryVi
           <Link href={exitHref} className="rounded-lg p-2 text-muted hover:bg-violet-50 hover:text-ink" aria-label="Quitter l'onboarding (tout est enregistré)" title="Quitter (tout est enregistré)"><X size={18} /></Link>
         </div>
         <div className="h-1.5 bg-violet-100" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Progression de l'onboarding">
-          <div className={`${s.progress} h-full rounded-r-full bg-gradient-to-r from-violet-500 to-emerald-400`} style={{ width: `${progress}%` }} />
+          <div className={`cob-progress h-full rounded-r-full bg-gradient-to-r from-violet-500 to-emerald-400`} style={{ width: `${progress}%` }} />
         </div>
         {currentStep > 0 && screen.step !== "sent" && (
           <ol className="mx-auto hidden max-w-3xl gap-1 px-4 py-2 md:flex" aria-label="Étapes">
@@ -253,7 +253,7 @@ export function DiscoveryFlow({ initial, api, exitHref }: { initial: DiscoveryVi
         <div className="mb-6">
           <Guide mood={mood} say={say} burst={burst} size={screen.id === "welcome" || screen.id === "sent" ? 112 : 80} />
         </div>
-        <div key={screen.id} className={s.screenIn}>
+        <div key={screen.id} className={"cob-screenIn"}>
           {screen.id === "welcome" && <Welcome onStart={() => { void markStep("welcome", "done"); react("happy", "C'est parti !"); next(); }} setPrimary={setPrimary} firstName={firstName} />}
           {screen.step === "offer" && (
             <OfferQuestion

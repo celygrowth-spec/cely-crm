@@ -9,7 +9,7 @@ import { STEP_FILES, acceptedFor, type UploadStep } from "@/lib/discovery/files"
 import type { DiscoveryFile } from "@/lib/discovery/types";
 import type { FlowApi } from "./flow-api";
 import { UploadError, fingerprint, rememberUpload, savedUpload, uploadFile } from "./uploader";
-import s from "./flow.module.css";
+import "./onboarding.css";
 
 type Job = { key: string; file: File; account: string | null; sent: number; state: "uploading" | "retrying" | "failed" | "done"; message?: string; retryIn?: number; ctrl: AbortController };
 
@@ -136,11 +136,11 @@ export function UploadBox({ api, projectId, step, files, account, multiple, onCh
               {j.state !== "done" && <button type="button" onClick={() => cancel(j)} className="rounded p-1 text-muted hover:bg-surface" aria-label="Annuler l'envoi"><X size={14} /></button>}
             </div>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-violet-100" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Envoi de ${j.file.name}`}>
-              <div className={`${s.progress} h-full rounded-full ${j.state === "failed" ? "bg-red-400" : j.state === "retrying" ? "bg-amber-400" : j.state === "done" ? "bg-emerald-500" : "bg-violet-600"}`} style={{ width: `${pct}%` }} />
+              <div className={`cob-progress h-full rounded-full ${j.state === "failed" ? "bg-red-400" : j.state === "retrying" ? "bg-amber-400" : j.state === "done" ? "bg-emerald-500" : "bg-violet-600"}`} style={{ width: `${pct}%` }} />
             </div>
             <p className="mt-1.5 text-xs text-muted" aria-live="polite">
               {j.state === "uploading" && <>{pct} % · garde cette page ouverte</>}
-              {j.state === "retrying" && <span className={`${s.pulse} inline-flex items-center gap-1 text-amber-700`}><WifiOff size={12} aria-hidden /> Connexion perdue : je reprends {j.retryIn ? `dans ${j.retryIn} s` : "dès son retour"}, sans repartir de zéro.</span>}
+              {j.state === "retrying" && <span className={`cob-pulse inline-flex items-center gap-1 text-amber-700`}><WifiOff size={12} aria-hidden /> Connexion perdue : je reprends {j.retryIn ? `dans ${j.retryIn} s` : "dès son retour"}, sans repartir de zéro.</span>}
               {j.state === "done" && <span className="inline-flex items-center gap-1 text-emerald-700"><CheckCircle2 size={12} aria-hidden /> Reçu !</span>}
               {j.state === "failed" && (
                 <span className="flex flex-wrap items-center gap-2 text-red-700" role="alert">

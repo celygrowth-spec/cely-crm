@@ -1,16 +1,16 @@
-/* Onboarding offre découverte : animations légères (CSS uniquement), coupées si l'utilisateur réduit les mouvements. */
+/* Onboarding offre découverte (classes préfixées cob-, feuille globale) : animations légères (CSS uniquement), coupées si l'utilisateur réduit les mouvements. */
 
-.screenIn { animation: screenIn 420ms cubic-bezier(.2, .8, .2, 1) both; }
+.cob-screenIn { animation: screenIn 420ms cubic-bezier(.2, .8, .2, 1) both; }
 @keyframes screenIn { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
 
-.mascot { transform-origin: 50% 90%; }
-.idle { animation: float 3.2s ease-in-out infinite; }
-.happy { animation: hop 650ms cubic-bezier(.3, 1.6, .5, 1) 1; }
-.cheer { animation: cheer 900ms cubic-bezier(.3, 1.6, .5, 1) 2; }
-.think { animation: tilt 1.6s ease-in-out infinite; }
-.wave .arm { animation: wave 600ms ease-in-out 3; transform-origin: 78% 58%; transform-box: view-box; }
-.eyes { animation: blink 4.5s infinite; transform-origin: 50% 46%; transform-box: view-box; }
-.sprout { animation: sway 2.6s ease-in-out infinite; transform-origin: 50% 22%; transform-box: view-box; }
+.cob-mascot { transform-origin: 50% 90%; }
+.cob-idle { animation: float 3.2s ease-in-out infinite; }
+.cob-happy { animation: hop 650ms cubic-bezier(.3, 1.6, .5, 1) 1; }
+.cob-cheer { animation: cheer 900ms cubic-bezier(.3, 1.6, .5, 1) 2; }
+.cob-think { animation: tilt 1.6s ease-in-out infinite; }
+.cob-wave .cob-arm { animation: wave 600ms ease-in-out 3; transform-origin: 78% 58%; transform-box: view-box; }
+.cob-eyes { animation: blink 4.5s infinite; transform-origin: 50% 46%; transform-box: view-box; }
+.cob-sprout { animation: sway 2.6s ease-in-out infinite; transform-origin: 50% 22%; transform-box: view-box; }
 
 @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 @keyframes hop { 0% { transform: translateY(0) scale(1); } 35% { transform: translateY(-14px) scale(1.04, .97); } 70% { transform: translateY(0) scale(1.05, .95); } 100% { transform: none; } }
@@ -20,12 +20,12 @@
 @keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
 @keyframes sway { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
 
-.bubble { animation: bubble 360ms cubic-bezier(.2, .9, .3, 1.3) both; transform-origin: 0 100%; }
+.cob-bubble { animation: bubble 360ms cubic-bezier(.2, .9, .3, 1.3) both; transform-origin: 0 100%; }
 @keyframes bubble { from { opacity: 0; transform: scale(.85) translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* confettis : 18 pastilles, trajectoires calculées en ligne (variables CSS) */
-.confetti { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
-.confetti i { position: absolute; left: 50%; top: 40%; width: 8px; height: 12px; border-radius: 2px; opacity: 0;
+.cob-confetti { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.cob-confetti i { position: absolute; left: 50%; top: 40%; width: 8px; height: 12px; border-radius: 2px; opacity: 0;
   animation: confetti 1100ms cubic-bezier(.15, .7, .3, 1) forwards; animation-delay: var(--d); background: var(--c);
   transform: translate(0, 0) rotate(0); }
 @keyframes confetti {
@@ -33,12 +33,12 @@
   100% { opacity: 0; transform: translate(var(--x), var(--y)) rotate(var(--r)); }
 }
 
-.progress { transition: width 500ms cubic-bezier(.2, .8, .2, 1); }
-.pulse { animation: pulse 1.6s ease-in-out infinite; }
+.cob-progress { transition: width 500ms cubic-bezier(.2, .8, .2, 1); }
+.cob-pulse { animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .screenIn, .idle, .happy, .cheer, .think, .wave .arm, .eyes, .sprout, .bubble, .pulse { animation: none !important; }
-  .confetti { display: none; }
-  .progress { transition: none; }
+  .cob-screenIn, .cob-idle, .cob-happy, .cob-cheer, .cob-think, .cob-wave .cob-arm, .cob-eyes, .cob-sprout, .cob-bubble, .cob-pulse { animation: none !important; }
+  .cob-confetti { display: none; }
+  .cob-progress { transition: none; }
 }
