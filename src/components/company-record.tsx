@@ -27,6 +27,7 @@ const loadActivity = () => import("./record-activity").then((m) => m.RecordActiv
 const loadDetails = () => import("./record-details").then((m) => m.RecordDetails);
 const RecordActivity = dynamic(loadActivity, { loading: () => <Skeleton className="h-40 w-full" /> });
 const RecordDetails = dynamic(loadDetails, { loading: () => <Skeleton className="h-40 w-full" /> });
+const RecordProposal = dynamic(() => import("./record-proposal").then((m) => m.RecordProposal), { loading: () => <Skeleton className="h-40 w-full" /> });
 const RecordDiagnostic = dynamic(() => import("./record-diagnostic").then((m) => m.RecordDiagnostic), { loading: () => <Skeleton className="h-40 w-full" /> });
 const EntryDetail = dynamic(() => import("./record-entry-detail").then((m) => m.EntryDetail));
 const LogForm = dynamic(() => import("./record-log-form").then((m) => m.LogForm), { loading: () => <Skeleton className="h-32 w-full" /> });
@@ -34,7 +35,7 @@ const MailCompose = dynamic(() => import("./mail-compose").then((m) => m.MailCom
 
 type CompanyFields = Partial<CompanyCore["company"]>;
 
-export type RecordTab = "overview" | "activity" | "details" | "diagnostic";
+export type RecordTab = "overview" | "activity" | "details" | "diagnostic" | "proposal";
 export type DetailsSection = "company" | "deal" | "prospecting" | "files";
 
 export type RecordCtx = {
@@ -56,18 +57,22 @@ export type RecordCtx = {
   logExchange: (kind: LogKind) => void;
   /** Ouvre l'onglet Diagnostic et crée le premier dossier s'il n'y en a pas. */
   generateDiagnostic: () => void;
+  /** Ouvre « Passer en client » (même fenêtre que le menu Actions). */
+  makeClient: () => void;
+  clientSignal: number;
 };
 
-export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () => void; page?: boolean }) {
+export function CompanyRecord({ id, onClose, page, initialTab = "overview" }: { id: string; onClose?: () => void; page?: boolean; initialTab?: RecordTab }) {
   const qc = useQueryClient();
   const [compose, setCompose] = useState<ComposeTarget | null>(null);
-  const [tab, setTab] = useState<RecordTab>("overview");
-  const [visited, setVisited] = useState<Set<RecordTab>>(() => new Set(["overview"]));
+  const [tab, setTab] = useState<RecordTab>(initialTab);
+  const [visited, setVisited] = useState<Set<RecordTab>>(() => new Set<RecordTab>(["overview", initialTab]));
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const [detailsFocus, setDetailsFocus] = useState<RecordCtx["detailsFocus"]>(null);
   const [entry, setEntry] = useState<ActivityEntry | null>(null);
   const [log, setLog] = useState<LogKind | null>(null);
   const [diagnosticStart, setDiagnosticStart] = useState(0);
+  const [clientSignal, setClientSignal] = useState(0);
   const top = useRef<HTMLDivElement>(null);
   const sync = useSync();
   const coreKey = ["company", id];
@@ -224,6 +229,8 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
       go("diagnostic");
       setDiagnosticStart((n) => n + 1);
     },
+    makeClient: () => setClientSignal((n) => n + 1),
+    clientSignal,
   };
 
   return (
@@ -237,6 +244,7 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
         {visited.has("details") && <div role="tabpanel" aria-label="Détails" hidden={tab !== "details"}><RecordDetails ctx={ctx} /></div>}
         {visited.has("diagnostic") && <div role="tabpanel" aria-label="Diagnostic" hidden={tab !== "diagnostic"}><RecordDiagnostic companyId={c.id} startSignal={diagnosticStart}
           onEmail={(fileId) => openCompose({ prefill: { subject: `Votre diagnostic · ${c.name}`, text: "Bonjour,\n\nVous trouverez en pièce jointe le diagnostic dont nous avons parlé.\n\nJe reste disponible pour le parcourir avec vous.\n\nBien à vous,", fileIds: fileId ? [fileId] : [] } })} /></div>}
+        {visited.has("proposal") && <div role="tabpanel" aria-label="Proposition" hidden={tab !== "proposal"}><RecordProposal ctx={ctx} /></div>}
       </div>
       {compose && (
         <MailCompose companyId={c.id} target={compose} onClose={() => setCompose(null)} company={{ name: c.name, website: c.website ?? null, doNotContact: c.do_not_contact ? { reason: c.do_not_contact_reason ?? null } : null }}

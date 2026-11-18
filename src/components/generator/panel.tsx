@@ -32,10 +32,8 @@ const eur = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", c
 export const generatorKey = (kind: GeneratorKind, companyId: string) => ["generator", kind, companyId];
 const working = (d: GeneratorDossier) => d.prefill_state === "requested" || dossierState(d) === "en_generation";
 
-export function GeneratorPanel({ companyId, kind, projectId = null, people, slots = {}, autoRoutine }: {
+export function GeneratorPanel({ companyId, kind, projectId = null, people, slots = {} }: {
   companyId: string; kind: GeneratorKind; projectId?: string | null; people: PersonOption[]; slots?: PanelSlots;
-  /** la tâche Claude est configurée : le lancement est automatique */
-  autoRoutine: boolean;
 }) {
   const qc = useQueryClient();
   const key = generatorKey(kind, companyId);
@@ -86,12 +84,13 @@ export function GeneratorPanel({ companyId, kind, projectId = null, people, slot
         )}
         <Button className="ml-auto" size="sm" disabled={creating} onClick={() => { if (confirm("Créer un nouveau dossier ? Les dossiers existants restent conservés.")) void create(); }}><Sparkles size={13} /> Nouveau dossier</Button>
       </div>
-      <Dossier key={current.id} d={current} kind={kind} people={people} slots={slots} autoRoutine={autoRoutine} reload={reload} />
+      <Dossier key={current.id} d={current} kind={kind} people={people} slots={slots} reload={reload} />
     </div>
   );
 }
 
-function Dossier({ d, kind, people, slots, autoRoutine, reload }: { d: GeneratorDossier; kind: GeneratorKind; people: PersonOption[]; slots: PanelSlots; autoRoutine: boolean; reload: () => void }) {
+function Dossier({ d, kind, people, slots, reload }: { d: GeneratorDossier; kind: GeneratorKind; people: PersonOption[]; slots: PanelSlots; reload: () => void }) {
+  const autoRoutine = d.auto_routine;
   const questions = QUESTIONS[kind];
   const state = dossierState(d);
   const latest = latestVersion(d);

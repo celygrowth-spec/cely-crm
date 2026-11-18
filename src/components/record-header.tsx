@@ -26,6 +26,7 @@ const TABS: { key: RecordTab; label: string }[] = [
   { key: "activity", label: "Activité" },
   { key: "details", label: "Détails" },
   { key: "diagnostic", label: "Diagnostic" },
+  { key: "proposal", label: "Proposition" },
 ];
 
 /** Ferme au clic extérieur et à Échap, sans que Échap ne ferme aussi le panneau de la fiche. */
@@ -161,6 +162,12 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
   const timer = useTimer();
   const timing = timer.running?.company_id === c.id;
   const [advance, setAdvance] = useState<"pipeline" | "client" | null>(null);
+  // « Passer en client » demandé depuis un onglet (proposition signée à confirmer) : même fenêtre que le menu Actions
+  const [clientSignal, setClientSignal] = useState(ctx.clientSignal);
+  if (ctx.clientSignal !== clientSignal) {
+    setClientSignal(ctx.clientSignal);
+    setAdvance("client");
+  }
 
   async function toggleArchive() {
     const value = !c.archived_at;

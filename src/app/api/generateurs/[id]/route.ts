@@ -5,12 +5,14 @@ import { apiRead, apiWrite } from "@/lib/api";
 import { CrmError } from "@/lib/crm/service";
 import type { GeneratorKind } from "@/lib/generators/rules";
 import * as gen from "@/lib/generators/service";
+import { generateProposal, proposalExtras, sendQuote } from "@/lib/proposals/service";
 
 export const maxDuration = 60;
 
-export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return apiRead((sb) => gen.getDossier(sb, id));
+  // ?vue=proposition : devis et signature des versions (réservé à l'application)
+  return apiRead<unknown>((sb) => (req.nextUrl.searchParams.get("vue") === "proposition" ? proposalExtras(sb, id) : gen.getDossier(sb, id)));
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -25,8 +27,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         return gen.saveAnswer(sb, id, kind, String(b.key ?? ""), b.value);
       case "selection":
         return gen.setSelection(sb, id, Array.isArray(b.excluded) ? b.excluded : [], Array.isArray(b.library) ? b.library : null);
-      case "generate":
-        return gen.generate(sb, id, kind, b.request_key, typeof b.feedback === "string" ? b.feedback : null);
+      case "generate": {
+        const feedback = typeof b.feedback === "string" ? b.feedback : null;
+        // proposition : la version et son devis sont créés ensemble, puis slides et devis partent séparément
+        return kind === "proposal" ? generateProposal(sb, id, b.request_key, feedback, { origin: req.nextUrl.origin }) : gen.generate(sb, id, kind, b.request_key, feedback);
+      }
+      case "quote_retry":
+        return sendQuote(sb, String(b.quote_id ?? ""), { origin: req.nextUrl.origin });
+      case "sent":
+        return { sent_at: await gen.markSent(sb, String(b.version_id ?? ""), typeof b.mail_id === "string" ? b.mail_id : null) };
       case "retry":
         return gen.retrySlides(sb, kind, String(b.version_id ?? ""));
       case "trigger": {

@@ -88,3 +88,29 @@ describe("réponses", () => {
     expect(generatorPrompt("proposal", "slides", "ID")).not.toMatch(/@|€|\d{5}/);
   });
 });
+
+describe("devis de la proposition", () => {
+  test("ce qui part à Make vient des réponses, au centime, sans rien d'estimé", async () => {
+    const { quotePayload, quoteRetryable, sendEmailDraft, hasDiscoveryOffer } = await import("@/lib/proposals/rules");
+    const a = (o: Record<string, unknown>): Answers => Object.fromEntries(Object.entries(o).map(([k, value]) => [k, { value: value as never, provenance: null, origin: "owner" as const }]));
+    const answers = a({
+      offre: "decouverte", raison_sociale: " Acme SAS ", siret: "12345678900011", adresse_facturation: "1 rue de Test", code_postal: "75001", ville: "Paris", pays: "fr",
+      signataire: { person_id: "p1", first_name: "Ada", last_name: "Martin", title: "CEO", email: "ada@acme.example.test" },
+      date_demarrage: "2026-12-01", duree_mois: 3, conditions_paiement: "Mensuel, à 30 jours", objectifs: "Doubler les leads",
+      lignes_devis: [{ label: "Growth Part-Time", quantity: 3, unit: "mois", unit_price: 2499.99, vat_rate: 20, recurrence: "monthly" }, { label: "Audit", quantity: 1, unit: "forfait", unit_price: 900, vat_rate: 20, recurrence: "one_off" }],
+    });
+    const p = quotePayload("D1", answers);
+    expect(p.client).toEqual({ company_name: "Acme SAS", siret: "12345678900011", vat_number: "", billing_address: { line1: "1 rue de Test", postal_code: "75001", city: "Paris", country: "FR" } });
+    expect(p.quote.lines.map((l) => l.unit_price_cents)).toEqual([249999, 90000]);
+    expect(p.quote.total_ht_cents).toBe(3 * 249999 + 90000);
+    // les réponses qui ne concernent pas le devis n'y figurent pas
+    expect(JSON.stringify(p)).not.toContain("Doubler les leads");
+    expect(hasDiscoveryOffer(answers)).toBe(true);
+    expect(quoteRetryable({ status: "to_retry", requested_at: null })).toBe(true);
+    expect(quoteRetryable({ status: "requested", requested_at: new Date().toISOString() })).toBe(false);
+    expect(quoteRetryable({ status: "requested", requested_at: new Date(Date.now() - 11 * 60_000).toISOString() })).toBe(true);
+    expect(quoteRetryable({ status: "created", requested_at: null })).toBe(false);
+    expect(sendEmailDraft("Acme", "Ada", { url: "https://exemple.test/d/1", number: "D-1" }).text).toContain("Le devis D-1 correspondant est disponible ici : https://exemple.test/d/1");
+    expect(sendEmailDraft("Acme", null, null).text).not.toContain("devis");
+  });
+});

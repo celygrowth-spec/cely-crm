@@ -48,6 +48,8 @@ export type GeneratorDossier = {
   prefill_state: "none" | "requested" | "done" | "failed";
   trigger_ref: string | null; triggered_at: string | null; trigger_error: string | null; session_url: string | null; last_error: string | null;
   answers: Answers; sources: Source[]; library: LibraryChoice[]; versions: GeneratorVersion[];
+  /** la tâche Claude de ce générateur est configurée : le lancement est automatique */
+  auto_routine: boolean;
 };
 
 /** États visibles, communs aux générateurs. */

@@ -53,6 +53,8 @@ export type SaleRow = {
   candidate_project_id: string | null;
   billing: Billing;
   stage: SaleStage | null;
+  /** devis de la dernière proposition de la fiche, s'il existe (créé par Make) */
+  quote?: { status: string; number: string | null; url: string | null } | null;
 };
 
 export const STAGES: { key: Exclude<SaleStage, "termine">; label: string; hint: string; action: string }[] = [

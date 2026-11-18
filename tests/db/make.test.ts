@@ -67,18 +67,20 @@ describe("retour de Make", () => {
     expect(await calls()).toEqual([]);
   });
 
+  // ces retours ne correspondent à aucun devis : enregistrés une fois, puis ignorés (les effets sur un devis
+  // sont testés dans propositions.test.ts)
   test("un même retour reçu deux fois ne s'enregistre qu'une fois", async () => {
     await db.as("anon");
     const args = { p_outcome: "valid", p_event: "quote.created", p_request_id: REQ, p_quote_number: "D-2026-041", p_quote_url: "https://exemple.test/devis/41" };
-    expect(await ret(args)).toBe("recorded");
+    expect(await ret(args)).toBe("ignored");
     expect(await ret(args)).toBe("duplicate");
-    expect(await ret({ ...args, p_event: "quote.signed", p_signed_on: "2026-11-25" })).toBe("recorded");
+    expect(await ret({ ...args, p_event: "quote.signed", p_signed_on: "2026-11-25" })).toBe("ignored");
     await db.as("owner");
     expect((await db.query(`select event, quote_number, signed_on::text from make_returns order by received_at, event`)).rows).toEqual([
       { event: "quote.created", quote_number: "D-2026-041", signed_on: null },
       { event: "quote.signed", quote_number: "D-2026-041", signed_on: "2026-11-25" },
     ]);
-    expect((await calls()).map((c) => c.status)).toEqual(["ok", "duplicate", "ok"]);
+    expect((await calls()).map((c) => c.status)).toEqual(["ignored", "duplicate", "ignored"]);
   });
 
   test("secret refusé ou contenu invalide : journalisé sans détail, rien d'enregistré", async () => {
@@ -88,9 +90,9 @@ describe("retour de Make", () => {
     expect(await ret({ p_outcome: "valid", p_event: "quote.deleted", p_request_id: REQ })).toBe("invalid");
     expect(await ret({ p_outcome: "valid", p_event: "quote.created", p_request_id: null })).toBe("invalid");
     expect(await ret({ p_outcome: "valid", p_event: "quote.created", p_request_id: REQ, p_quote_url: "http://exemple.test/x" })).toBe("invalid");
-    expect(await ret({ p_outcome: "valid", p_event: "quote.error", p_request_id: REQ, p_error: "Tiime a refusé le client" })).toBe("recorded");
+    expect(await ret({ p_outcome: "valid", p_event: "quote.error", p_request_id: REQ, p_error: "Tiime a refusé le client" })).toBe("ignored");
     const rows = await calls();
-    expect(rows.map((c) => c.status)).toEqual(["refused", "invalid", "invalid", "invalid", "invalid", "error"]);
+    expect(rows.map((c) => c.status)).toEqual(["refused", "invalid", "invalid", "invalid", "invalid", "ignored"]);
     // le message de Make reste sur le retour ; le journal ne porte que nos propres libellés
     expect(rows.map((c) => c.error).join(" ")).not.toMatch(/Tiime/);
     expect((await db.query(`select count(*)::int as n from make_returns`)).rows).toEqual([{ n: 1 }]);

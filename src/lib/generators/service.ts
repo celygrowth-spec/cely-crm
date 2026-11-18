@@ -35,7 +35,7 @@ const dayMonth = (iso: string) => new Intl.DateTimeFormat("fr-FR", { day: "2-dig
 // Lecture
 // ---------------------------------------------------------------------------
 
-type Row = Omit<GeneratorDossier, "answers" | "sources" | "library" | "versions"> & { library_item_ids: string[] };
+type Row = Omit<GeneratorDossier, "answers" | "sources" | "library" | "versions" | "auto_routine"> & { library_item_ids: string[] };
 
 async function hydrate(sb: SupabaseClient, row: Row): Promise<GeneratorDossier> {
   const [answers, versions, sources, lib] = await Promise.all([
@@ -52,6 +52,7 @@ async function hydrate(sb: SupabaseClient, row: Row): Promise<GeneratorDossier> 
   void _ids;
   return {
     ...rest,
+    auto_routine: !!generatorRoutine(rest.kind),
     answers: Object.fromEntries(check<{ question_key: string; value: AnswerValue; provenance: string | null; origin: Answers[string]["origin"] }[]>(answers).map((a) => [a.question_key, { value: a.value, provenance: a.provenance, origin: a.origin }])),
     versions: check<GeneratorVersion[]>(versions),
     sources,
@@ -78,14 +79,17 @@ export async function listDossiers(sb: SupabaseClient, companyId: string, kind: 
 type Prefill = { key: string; value: AnswerValue; provenance: string };
 
 async function crmPrefill(sb: SupabaseClient, kind: GeneratorKind, companyId: string, dossierId: string): Promise<Prefill[]> {
-  const [company, people, previous] = await Promise.all([
+  const [company, people, others] = await Promise.all([
     sb.from("companies").select("name, amount, amount_recurring").eq("id", companyId).maybeSingle(),
     sb.from("people").select("id, first_name, last_name, title, email, is_primary").eq("company_id", companyId).order("is_primary", { ascending: false }).order("created_at"),
-    // dernière proposition de la fiche (validée de préférence) : ses réponses évitent toute ressaisie
-    sb.from("generator_versions").select("version, answers, validated_at, created_at, dossier:generator_dossiers!inner(id, company_id, kind)")
-      .eq("dossier.company_id", companyId).eq("dossier.kind", "proposal").neq("dossier_id", dossierId)
-      .order("validated_at", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }).limit(1),
+    sb.from("generator_dossiers").select("id").eq("company_id", companyId).eq("kind", "proposal").neq("id", dossierId),
   ]);
+  // dernière proposition de la fiche (validée de préférence) : ses réponses évitent toute ressaisie
+  const otherIds = check<{ id: string }[]>(others).map((o) => o.id);
+  const previous = otherIds.length
+    ? await sb.from("generator_versions").select("version, answers, validated_at, created_at").in("dossier_id", otherIds)
+        .order("validated_at", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }).limit(1)
+    : { data: [], error: null };
   const c = check<{ name: string; amount: number | string | null; amount_recurring: boolean } | null>(company);
   const persons = check<{ id: string; first_name: string | null; last_name: string | null; title: string | null; email: string | null; is_primary: boolean }[]>(people);
   const prev = check<{ version: number; answers: Answers; validated_at: string | null; created_at: string }[]>(previous)[0] ?? null;
