@@ -143,7 +143,45 @@ async function storageCheck(auth, sqlText, params) {
   } catch (e) { return e.message === "__rollback_ok__"; }
   return false;
 }
+// Envoi reprenable (TUS, comme Supabase Storage) : jeton d'envoi signé dans x-signature, objet créé à la fin.
+// /debug/tus-fail { patches: n } : les n prochains morceaux échouent (coupure réseau simulée).
+const tusUploads = new Map();
+const TUS_HEADERS = { "access-control-allow-origin": "*", "access-control-expose-headers": "Location, Upload-Offset, Upload-Length, Tus-Resumable", "tus-resumable": "1.0.0" };
+async function handleTus(req, url, raw, send, res) {
+  const id = url.pathname.match(/^\/storage\/v1\/upload\/resumable(?:\/([\w-]+))?$/)[1];
+  const out = (status, headers = {}) => { res.writeHead(status, { ...TUS_HEADERS, ...headers }); res.end(); };
+  if (req.method === "POST" && !id) {
+    const t = tokens.get(req.headers["x-signature"]);
+    if (!t || t.kind !== "upload") return send(403, { message: "invalid signature" }, TUS_HEADERS);
+    const meta = Object.fromEntries((req.headers["upload-metadata"] ?? "").split(",").map((kv) => { const [k, v] = kv.trim().split(" "); return [k, v ? Buffer.from(v, "base64").toString() : ""]; }));
+    if (meta.bucketName !== t.bucket || meta.objectName !== t.path) return send(403, { message: "object mismatch" }, TUS_HEADERS);
+    const uid = crypto.randomUUID();
+    tusUploads.set(uid, { bucket: t.bucket, path: t.path, length: Number(req.headers["upload-length"]), offset: 0, parts: [], type: meta.contentType });
+    return out(201, { location: `http://127.0.0.1:${PORT}/storage/v1/upload/resumable/${uid}` });
+  }
+  const u = id && tusUploads.get(id);
+  if (!u) return out(404);
+  const t = tokens.get(req.headers["x-signature"]);
+  if (!t || t.kind !== "upload" || t.path !== u.path) return out(403);
+  if (req.method === "HEAD") return out(200, { "upload-offset": String(u.offset), "upload-length": String(u.length), "cache-control": "no-store" });
+  if (req.method === "PATCH") {
+    if ((globalThis.TUS_FAIL ?? 0) > 0) { globalThis.TUS_FAIL--; res.socket.destroy(); return; }
+    if (Number(req.headers["upload-offset"]) !== u.offset) return out(409, { "upload-offset": String(u.offset) });
+    u.parts.push(raw); u.offset += raw.length;
+    if (u.offset >= u.length) {
+      await pg.query("insert into storage.objects (bucket_id, name) values ($1, $2)", [u.bucket, u.path]);
+      // contenu non conservé au-delà de 2 Mo (mémoire du faux stockage) : seul l'objet compte pour les contrôles
+      const data = Buffer.concat(u.parts);
+      blobs.set(`${u.bucket}/${u.path}`, { data: data.length <= 2 * 1024 * 1024 ? data : Buffer.from("(contenu volumineux non conservé)"), type: u.type });
+      tusUploads.delete(id);
+    }
+    return out(204, { "upload-offset": String(u.offset) });
+  }
+  return out(405);
+}
+
 async function handleStorage(req, url, body, raw, send, res) {
+  if (url.pathname.startsWith("/storage/v1/upload/resumable")) return handleTus(req, url, raw, send, res);
   const m = url.pathname.match(/^\/storage\/v1\/object\/(upload\/sign|sign)\/([^/]+)\/(.+)$/);
   const auth = req.headers.authorization;
   if (m && req.method === "POST" && m[1] === "upload/sign") {
@@ -202,9 +240,9 @@ const server = http.createServer(async (req, res) => {
   const chunks = [];
   for await (const c of req) chunks.push(c);
   const raw = Buffer.concat(chunks);
-  if (req.method === "OPTIONS") { res.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-methods": "PUT, GET, POST, DELETE", "access-control-allow-headers": "*" }); return res.end(); }
+  if (req.method === "OPTIONS") { res.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-methods": "PUT, GET, POST, DELETE, PATCH, HEAD", "access-control-allow-headers": "*", "access-control-expose-headers": "Location, Upload-Offset, Upload-Length, Tus-Resumable" }); return res.end(); }
   let body = null;
-  try { body = chunks.length && !url.pathname.includes("/upload/sign/") ? JSON.parse(raw.toString() || "null") : null; } catch { body = null; }
+  try { body = chunks.length && !url.pathname.includes("/upload/sign/") && !url.pathname.includes("/upload/resumable") ? JSON.parse(raw.toString() || "null") : null; } catch { body = null; }
   const send = (status, data, headers = {}) => {
     res.writeHead(status, { "content-type": "application/json", ...headers });
     res.end(data === undefined ? "" : JSON.stringify(data));
@@ -227,6 +265,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname.startsWith("/auth/v1/")) return send(200, {});
     if (url.pathname.startsWith("/storage/v1/")) return handleStorage(req, url, body, raw, send, res);
+    if (url.pathname === "/debug/tus-fail") { globalThis.TUS_FAIL = Number(body?.patches ?? 0); return send(200, { ok: true }); }
     if (url.pathname === "/debug/sql") return send(200, (await pg.query(body.sql, body.params ?? [])).rows);
     const rpc = url.pathname.match(/^\/rest\/v1\/rpc\/(\w+)$/);
     if (rpc) {

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 import { updateProjectAction } from "@/app/projets-actions";
 import { Button, Card, Field, Input, Select, Textarea } from "@/components/ui";
+import { DiscoveryToggle } from "@/components/discovery/discovery-toggle";
 import { attempt, useSync } from "@/lib/client/query";
 import { PROJECT_STATUS_LABELS, type Project, type ProjectStatus } from "@/lib/projects/types";
 
@@ -74,6 +75,7 @@ export function ProjectGeneral({ project: p }: { project: Project }) {
               </Select>
             </Field>
           )}
+          <DiscoveryToggle projectId={p.id} />
         </Card>
         <Card className="space-y-3 p-4">
           <div className="flex items-center justify-between"><h2 className="font-display text-base font-bold">Notes internes</h2><VisibilityTag client={false} /></div>

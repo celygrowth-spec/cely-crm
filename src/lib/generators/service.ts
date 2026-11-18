@@ -1,7 +1,7 @@
 import "server-only";
 // Socle commun des générateurs (proposition, onboarding), côté serveur. Utilisé par les routes de l'application et
 // par le connecteur MCP : les droits (sources bornées à la fiche du dossier, versions figées, actions réservées à
-// l'application) sont appliqués en base (migration 20261123000200_generateurs_socle.sql).
+// l'application) sont appliqués en base (migration 20261124000300_generateurs_socle.sql).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { QUESTIONS } from "@/content/generators";
