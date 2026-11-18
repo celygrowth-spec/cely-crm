@@ -2,7 +2,7 @@
 import type { NextRequest } from "next/server";
 import { apiWrite } from "@/lib/api";
 import { CrmError } from "@/lib/crm/service";
-import { requestRevision, saveAnswer, setChatUrl, submitAnswers } from "@/lib/crm/diagnostic";
+import { requestRevision, saveAnswer, setChatUrl, submitAnswers, validateVersion } from "@/lib/crm/diagnostic";
 import { routineConfig, triggerDiagnostic } from "@/lib/crm/diagnostic-trigger";
 
 // une relance du lancement refait la capture du site avant la session
@@ -22,6 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const status = await requestRevision(sb, id, Number(b.version), String(b.feedback ?? ""));
       return { status, ...(await triggerDiagnostic(sb, id, "revision")) };
     }
+    if (b?.op === "validate") return { validated_at: await validateVersion(sb, id, Number(b.version)) };
     if (b?.op === "trigger") {
       if (!routineConfig()) throw new CrmError("Déclenchement automatique non configuré : utilisez le lien vers Claude.");
       const outcome = await triggerDiagnostic(sb, id, b.stage === "revision" ? "revision" : b.stage === "answers" ? "answers" : "start");

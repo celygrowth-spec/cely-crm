@@ -205,7 +205,7 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
     // le blocage existant porte sur la prospection : un email manuel reste possible, mais jamais par mégarde
     if (!t.message && c.do_not_contact && !confirm(`Cette fiche est marquée « Ne plus contacter »${c.do_not_contact_reason ? ` (${c.do_not_contact_reason})` : ""}.\n\nÉcrire quand même ?`)) return;
     const primary = detail.people.find((p) => p.is_primary && p.email && isEmail(p.email)) ?? detail.people.find((p) => p.email && isEmail(p.email));
-    setCompose(t.message || t.replyTo || t.to ? t : { personId: primary?.id ?? null, to: primary?.email ?? null });
+    setCompose(t.message || t.replyTo || t.to ? t : { ...t, personId: primary?.id ?? null, to: primary?.email ?? null });
   };
   const ctx: RecordCtx = {
     detail,
@@ -235,7 +235,8 @@ export function CompanyRecord({ id, onClose, page }: { id: string; onClose?: () 
         <div role="tabpanel" aria-label="Aperçu" hidden={tab !== "overview"}><RecordOverview ctx={ctx} /></div>
         {visited.has("activity") && <div role="tabpanel" aria-label="Activité" hidden={tab !== "activity"}><RecordActivity ctx={ctx} /></div>}
         {visited.has("details") && <div role="tabpanel" aria-label="Détails" hidden={tab !== "details"}><RecordDetails ctx={ctx} /></div>}
-        {visited.has("diagnostic") && <div role="tabpanel" aria-label="Diagnostic" hidden={tab !== "diagnostic"}><RecordDiagnostic companyId={c.id} startSignal={diagnosticStart} /></div>}
+        {visited.has("diagnostic") && <div role="tabpanel" aria-label="Diagnostic" hidden={tab !== "diagnostic"}><RecordDiagnostic companyId={c.id} startSignal={diagnosticStart}
+          onEmail={(fileId) => openCompose({ prefill: { subject: `Votre diagnostic · ${c.name}`, text: "Bonjour,\n\nVous trouverez en pièce jointe le diagnostic dont nous avons parlé.\n\nJe reste disponible pour le parcourir avec vous.\n\nBien à vous,", fileIds: fileId ? [fileId] : [] } })} /></div>}
       </div>
       {compose && (
         <MailCompose companyId={c.id} target={compose} onClose={() => setCompose(null)} company={{ name: c.name, website: c.website ?? null, doNotContact: c.do_not_contact ? { reason: c.do_not_contact_reason ?? null } : null }}

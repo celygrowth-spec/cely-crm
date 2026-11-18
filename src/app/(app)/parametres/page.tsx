@@ -30,6 +30,7 @@ export default async function ParametresPage() {
         <h2 className="font-display text-base font-bold">Données</h2>
         <ul className="mt-2 space-y-1.5 text-sm">
           <li><Link className="font-semibold text-violet-strong" href="/parametres/diagnostic">Bibliothèque de diagnostic (prompt et exemples)</Link></li>
+          <li><Link className="font-semibold text-violet-strong" href="/parametres/generateurs">Générateurs : bibliothèque par défaut de la proposition et de l&apos;onboarding</Link></li>
           <li><Link className="font-semibold text-violet-strong" href="/parametres/passages">Passages planifiés (agenda, rappels, Gmail, Fireflies)</Link></li>
           <li><Link className="font-semibold text-violet-strong" href="/pipelines">Ouvrir Pipelines</Link></li>
           <li><Link className="font-semibold text-violet-strong" href="/prospection/doublons">Doublons à vérifier</Link></li>

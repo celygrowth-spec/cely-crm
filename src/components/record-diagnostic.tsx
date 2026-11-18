@@ -5,10 +5,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Copy, Download, ExternalLink, RotateCcw, Sparkles } from "lucide-react";
-import { apiGet, attempt } from "@/lib/client/query";
-import { DIAGNOSTIC_STATUS_LABELS, answersPrompt, claudeLink, revisionPrompt, stageOf, startPrompt, type Diagnostic, type DiagnosticSiteCapture, type DiagnosticQuestion, type DiagnosticStatus, type DiagnosticVersion, type TriggerStage } from "@/lib/crm/diagnostic-rules";
+import { Check, Download, ExternalLink, Mail, RotateCcw, Sparkles } from "lucide-react";
+import { apiGet } from "@/lib/client/query";
+import { DIAGNOSTIC_STATUS_LABELS, answersPrompt, revisionPrompt, stageOf, startPrompt, type Diagnostic, type DiagnosticSiteCapture, type DiagnosticQuestion, type DiagnosticStatus, type DiagnosticVersion, type TriggerStage } from "@/lib/crm/diagnostic-rules";
 import { formatDateTime } from "@/lib/format";
+import { ClaudeActions, downloadFile as download, openFile as openVersion, post } from "./generator/shared";
 import { Badge, Button, Input, SaveIndicator, Skeleton, Textarea } from "./ui";
 
 const TONES: Record<DiagnosticStatus, "neutral" | "warning" | "success" | "danger"> = {
@@ -23,25 +24,6 @@ const TONES: Record<DiagnosticStatus, "neutral" | "warning" | "success" | "dange
 };
 // Claude travaille : l'écran se met à jour seul
 const WORKING: DiagnosticStatus[] = ["waiting_claude", "researching", "answers_sent", "generating", "revision_requested"];
-
-const post = <T,>(url: string, body: Record<string, unknown>) =>
-  attempt(async () => {
-    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    return (await res.json()) as { ok: true; data: T } | { ok: false; error: string };
-  });
-
-/** Ouvre Claude et garde le message sous la main si le lien ne remplit pas la case. */
-function ClaudeActions({ prompt, chatUrl, label }: { prompt: string; chatUrl: string | null; label: string }) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <a href={claudeLink(prompt, chatUrl)} target="_blank" rel="noreferrer noopener" className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-ink px-3.5 text-sm font-semibold text-white hover:bg-violet-strong">
-        <ExternalLink size={14} /> {label}
-      </a>
-      <Button onClick={async () => { await navigator.clipboard.writeText(prompt); toast.success("Message copié"); }}><Copy size={14} /> Copier le message</Button>
-      <p className="w-full text-xs text-muted">Dans Claude, appuyez sur Entrée pour envoyer. Si la case reste vide, collez le message copié.</p>
-    </div>
-  );
-}
 
 /** Lancement automatique s'il a eu lieu ; sinon, relance et lien vers Claude en secours. */
 const PROMPTS: Record<TriggerStage, { prompt: (id: string) => string; label: string; waiting: string }> = {
@@ -175,8 +157,20 @@ function Revision({ dossierId, version, reload }: { dossierId: string; version: 
   );
 }
 
-function Dossier({ dossier, reload }: { dossier: Diagnostic; reload: () => void }) {
+type After = { onEmail?: (fileId: string | null) => void; next?: React.ReactNode };
+
+function Dossier({ dossier, reload, onEmail, next }: { dossier: Diagnostic; reload: () => void } & After) {
   const [sending, setSending] = useState(false);
+  const [validating, setValidating] = useState(false);
+  async function validate(version: number) {
+    if (validating) return;
+    setValidating(true);
+    const r = await post<{ validated_at: string }>(`/api/diagnostics/${dossier.id}`, { op: "validate", version });
+    setValidating(false);
+    if (!r.ok) return toast.error(r.error);
+    toast.success("Diagnostic validé");
+    reload();
+  }
   const locked = dossier.status !== "questions_ready";
   const missing = dossier.questions.filter((q) => !q.answer && !q.dont_know).length;
   const latestReady = dossier.versions.find((v) => v.status === "ready");
@@ -189,26 +183,6 @@ function Dossier({ dossier, reload }: { dossier: Diagnostic; reload: () => void 
     if (r.data.error) toast.error(`Réponses envoyées, mais Claude n'a pas été lancé : ${r.data.error}`);
     else if (r.data.triggered) toast.success("Réponses envoyées : Claude génère le PDF du diagnostic");
     reload();
-  }
-
-  async function download(fileId: string) {
-    const r = await post<string>("/api/files", { op: "url", id: fileId, download: true });
-    if (!r.ok) return toast.error(r.error);
-    window.location.assign(r.data);
-  }
-
-  /** Affiche la version dans un nouvel onglet (un PDF s'ouvre dans le navigateur ; une ancienne version .pptx se télécharge). */
-  async function openVersion(fileId: string) {
-    // onglet ouvert pendant le clic : un onglet ouvert après l'attente du lien serait bloqué par le navigateur
-    const tab = window.open("", "_blank");
-    const r = await post<string>("/api/files", { op: "url", id: fileId, download: false });
-    if (!r.ok) {
-      tab?.close();
-      return toast.error(r.error);
-    }
-    if (!tab) return window.location.assign(r.data);
-    tab.opener = null;
-    tab.location.href = r.data;
   }
 
   return (
@@ -279,6 +253,16 @@ function Dossier({ dossier, reload }: { dossier: Diagnostic; reload: () => void 
                     )
                     : <span className="ml-auto text-xs text-muted">Fichier supprimé de la fiche</span>)}
                 </div>
+                {v.status === "ready" && v.validated_at && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-line pt-2" data-diagnostic-validated>
+                    <Badge tone="success"><Check size={11} aria-hidden /> Validé le {formatDateTime(v.validated_at)}</Badge>
+                    {onEmail && <Button size="sm" variant="primary" onClick={() => onEmail(v.file_id)}><Mail size={13} /> Envoyer un email</Button>}
+                    {next}
+                  </div>
+                )}
+                {v.status === "ready" && !v.validated_at && v.id === latestReady?.id && (
+                  <div className="mt-2"><Button size="sm" variant="primary" disabled={validating} onClick={() => validate(v.version)}><Check size={13} /> Valider le diagnostic</Button></div>
+                )}
                 {v.feedback && <p className="mt-1.5 text-xs whitespace-pre-wrap text-muted"><span className="font-semibold">Retour du {formatDateTime(v.feedback_at!)} :</span> {v.feedback}</p>}
                 {dossier.status === "version_ready" && v.id === latestReady?.id && <Revision dossierId={dossier.id} version={v} reload={reload} />}
               </li>
@@ -290,7 +274,7 @@ function Dossier({ dossier, reload }: { dossier: Diagnostic; reload: () => void 
   );
 }
 
-export function RecordDiagnostic({ companyId, startSignal }: { companyId: string; startSignal: number }) {
+export function RecordDiagnostic({ companyId, startSignal, onEmail, next }: { companyId: string; startSignal: number } & After) {
   const qc = useQueryClient();
   const key = ["company-diagnostics", companyId];
   const { data, isLoading, isError, error, refetch } = useQuery({
@@ -357,7 +341,7 @@ export function RecordDiagnostic({ companyId, startSignal }: { companyId: string
         )}
         <Button className="ml-auto" disabled={creating} onClick={askNew}><Sparkles size={14} /> Nouveau diagnostic</Button>
       </div>
-      <Dossier key={current.id} dossier={current} reload={reload} />
+      <Dossier key={current.id} dossier={current} reload={reload} onEmail={onEmail} next={next} />
     </div>
   );
 }

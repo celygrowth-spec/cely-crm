@@ -43,7 +43,7 @@ export const DIAGNOSTIC_STATUS_LABELS: Record<DiagnosticStatus, string> = {
 };
 
 export type DiagnosticQuestion = { id: string; position: number; question: string; why: string | null; answer: string | null; dont_know: boolean };
-export type DiagnosticVersion = { id: string; version: number; file_id: string | null; status: "uploading" | "ready"; created_at: string; ready_at: string | null; feedback: string | null; feedback_at: string | null };
+export type DiagnosticVersion = { id: string; version: number; file_id: string | null; status: "uploading" | "ready"; created_at: string; ready_at: string | null; feedback: string | null; feedback_at: string | null; validated_at?: string | null };
 export type DiagnosticSource = { titre: string; url?: string; date?: string; marche?: string; nature: "fait" | "hypothese" | "prospect" };
 export type Diagnostic = {
   id: string;

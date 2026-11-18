@@ -24,7 +24,13 @@ import { RecipientsInput, type Contact } from "./mail/recipients";
 import { fromMessage, readBackup, sameContent, useDraft, type DraftData } from "./mail/use-draft";
 
 /** `replyTo` : un email envoyé auquel on donne suite, dans le même fil (Gmail et en-têtes de réponse). */
-export type ComposeTarget = { message?: MailMessage; replyTo?: MailMessage; personId?: string | null; to?: string | null };
+export type ComposeTarget = {
+  message?: MailMessage; replyTo?: MailMessage; personId?: string | null; to?: string | null;
+  /** contenu proposé pour un nouvel email (objet, texte, fichiers de la fiche déjà joints) : relu et modifiable avant l'envoi */
+  prefill?: { subject?: string; text?: string; fileIds?: string[] };
+  /** appelé une fois l'email accepté par Gmail */
+  onSent?: (m: MailMessage) => void;
+};
 
 const timeFmt = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
@@ -51,7 +57,7 @@ function Composer({ companyId, company, target, contacts, onClose, onReload }: {
     to: re.to_addrs, cc: re.cc_addrs, bcc: [], subject: /^re\s*:/i.test(re.subject) ? re.subject : `Re: ${re.subject}`, text: "", html: null, fileIds: [],
     personId: re.person_id, signature: "", templateId: null, collective: !!re.collective,
   } : {
-    to: target.to ? [target.to] : [], cc: [], bcc: [], subject: "", text: "", html: null, fileIds: [], personId: target.personId ?? null, signature: "",
+    to: target.to ? [target.to] : [], cc: [], bcc: [], subject: target.prefill?.subject ?? "", text: target.prefill?.text ?? "", html: null, fileIds: target.prefill?.fileIds ?? [], personId: target.personId ?? null, signature: "",
     templateId: null, collective: false,
   };
   // réponse : mêmes fil Gmail et en-têtes (In-Reply-To / References) que le message d'origine
@@ -242,6 +248,7 @@ function Composer({ companyId, company, target, contacts, onClose, onReload }: {
     if (r.data.status === "accepted") {
       draft.discardBackup();
       toast.success("Accepté par Gmail");
+      target.onSent?.(r.data);
       return onClose();
     }
     if (r.data.status === "failed") {

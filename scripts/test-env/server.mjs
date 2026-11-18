@@ -240,7 +240,7 @@ const server = http.createServer(async (req, res) => {
       }
       const r = await asRole(req.headers.authorization, (tx) =>
         tx.query(`select public.${rpc[1]}(${keys.map((k, i) => `${k} => $${i + 1}`).join(", ")}) as r`,
-          keys.map((k) => (args[k] !== null && typeof args[k] === "object" ? (Array.isArray(args[k]) && args[k].length > 0 && args[k].every((x) => typeof x === "string") ? `{${args[k].map((x) => `"${x}"`).join(",")}}` : Array.isArray(args[k]) && args[k].length === 0 && /^p_(check|person_ids)$/.test(k) ? "{}" : JSON.stringify(args[k])) : args[k]))));
+          keys.map((k) => (args[k] !== null && typeof args[k] === "object" ? (Array.isArray(args[k]) && args[k].length > 0 && args[k].every((x) => typeof x === "string") ? `{${args[k].map((x) => `"${x}"`).join(",")}}` : Array.isArray(args[k]) && args[k].length === 0 && /^p_(check|person_ids|excluded|library|items)$/.test(k) ? "{}" : JSON.stringify(args[k])) : args[k]))));
       return send(200, r.rows[0]?.r ?? null);
     }
     const tbl = url.pathname.match(/^\/rest\/v1\/(\w+)$/);
