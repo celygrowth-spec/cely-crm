@@ -7,8 +7,10 @@ import "server-only";
 // devis : rejoué, il ne crée ni seconde vente ni second projet.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { DISCOVERY_OFFER } from "@/content/generators/proposition";
 import { makeClient } from "@/lib/crm/advance";
 import { CrmError, friendlyError } from "@/lib/crm/service";
+import { setDiscoveryEnabled } from "@/lib/discovery/service";
 import { todayISO } from "@/lib/format";
 import { rpc } from "@/lib/generators/service";
 import { prepareProject, saleContext, type ConfirmInput } from "@/lib/sales/service";
@@ -72,6 +74,24 @@ export async function winPlan(sb: SupabaseClient, s: SignedProposal): Promise<Wi
   };
 }
 
+/**
+ * La proposition signée contient l'offre découverte : la case « Offre découverte » du projet est cochée, une seule
+ * fois. Si elle a déjà été cochée ou décochée à la main, ce choix est conservé. Un échec ne défait pas la vente.
+ */
+export async function applyDiscoveryOffer(sb: SupabaseClient, s: SignedProposal, projectId: string | null | undefined): Promise<boolean> {
+  if (s.payload?.quote?.offer !== DISCOVERY_OFFER) return false;
+  try {
+    const project = projectId ?? check<{ project_id: string | null }[]>(await sb.from("sales").select("project_id").eq("company_id", s.company_id).in("state", ["won", "reopened"]).not("project_id", "is", null).order("cycle", { ascending: false }).limit(1))[0]?.project_id;
+    if (!project) return false;
+    const existing = check<{ project_id: string } | null>(await sb.from("discovery_onboardings").select("project_id").eq("project_id", project).maybeSingle());
+    if (existing) return false;
+    await setDiscoveryEnabled(sb, project, true);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export type Finalized = { company_id: string; status: "already_client" | "won" | "to_confirm"; reason?: string; project_id?: string | null };
 
 /**
@@ -80,12 +100,16 @@ export type Finalized = { company_id: string; status: "already_client" | "won" |
  */
 export async function finalizeSignature(sb: SupabaseClient, s: SignedProposal): Promise<Finalized> {
   const company = check<{ deal_status: string } | null>(await sb.from("companies").select("deal_status").eq("id", s.company_id).maybeSingle());
-  if (company?.deal_status === "won") return { company_id: s.company_id, status: "already_client" };
+  if (company?.deal_status === "won") {
+    await applyDiscoveryOffer(sb, s, null);
+    return { company_id: s.company_id, status: "already_client" };
+  }
   const plan = await winPlan(sb, s);
   if (!plan.auto) return { company_id: s.company_id, status: "to_confirm", reason: plan.reason };
   const r = await makeClient(sb, s.company_id, { stageId: null, followups: "stop", sale: plan.sale, next: null }, `proposition-signee:${s.quote_id}`);
   // comme dans l'interface : la préparation de l'onboarding suit ; un échec ne défait pas la vente (relançable)
   if (r.project_id) await prepareProject(sb, r.project_id).catch(() => null);
+  await applyDiscoveryOffer(sb, s, r.project_id);
   return { company_id: s.company_id, status: "won", project_id: r.project_id };
 }
 
@@ -95,6 +119,8 @@ export async function finalizePending(sb: SupabaseClient): Promise<Finalized[]> 
   if (!signed.length) return [];
   const open = new Set(check<{ id: string }[]>(await sb.from("companies").select("id").in("id", signed.map((s) => s.company_id)).eq("deal_status", "open")).map((c) => c.id));
   const out: Finalized[] = [];
+  // client confirmé à la main (« Passer en client ») : la case « Offre découverte » reste à cocher, une fois
+  for (const s of signed.filter((x) => !open.has(x.company_id) && x.payload?.quote?.offer === DISCOVERY_OFFER).slice(0, 10)) await applyDiscoveryOffer(sb, s, null);
   for (const s of signed.filter((x) => open.has(x.company_id)).slice(0, 10)) {
     out.push(await finalizeSignature(sb, s).catch((e) => ({ company_id: s.company_id, status: "to_confirm" as const, reason: e instanceof CrmError ? e.message : "Passage en client impossible pour le moment." })));
   }

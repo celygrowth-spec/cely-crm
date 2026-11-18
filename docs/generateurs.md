@@ -50,9 +50,12 @@ Dans l'accueil, « Diagnostic à générer » ne revient que pour un appel de mo
 - Onboarding : rien n'est visible du client avant la validation ; les tâches créées ne lui sont pas visibles, et le
   partage des slides reste l'action explicite existante.
 
+## Offre découverte
+Quand la proposition signée porte l'offre découverte, la case « Offre découverte » du projet est cochée au passage
+en client, une seule fois (module de `feature/onboarding-offre-decouverte`, fonction `discovery_set_enabled`). Si vous
+l'avez déjà cochée ou décochée à la main, votre choix est conservé.
+
 ## Limites connues
-- La case « Offre découverte » n'existe pas encore sur la fiche client : rien n'est coché quand la proposition
-  contient cette offre (`hasDiscoveryOffer` est prêt pour le jour où la case existera).
 - Le CRM ne contient que les emails qu'il a envoyés : les emails reçus ne font pas partie des sources.
 - Les slides d'onboarding restent en PowerPoint (circuit existant) ; celles de la proposition sont en PDF.
 
