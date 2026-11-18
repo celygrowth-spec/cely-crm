@@ -7,6 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { appointmentsSecretOrNull, googleConfig } from "@/lib/appointments/config";
 import { firefliesApiKey, firefliesWebhookSecret } from "@/lib/fireflies/config";
 import { mailConfig } from "@/lib/mail/service";
+import { makeDetail } from "@/lib/make/service";
 import type { Connector, ConnectorKey, McpGrant } from "./types";
 
 type Row = Record<string, unknown>;
@@ -280,6 +281,37 @@ function ubersuggest(): Connector {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Make : scénarios appelés par le CRM (devis…), et leur retour
+// ---------------------------------------------------------------------------
+
+const MAKE = {
+  key: "make" as const, name: "Make", usage: "Scénarios lancés depuis le CRM",
+  feeds: ["Création du devis d'une proposition (scénario « Créer le devis »)", "Retours de Make : devis créé, envoyé, signé, ou erreur", "Journal des appels : date, scénario, statut. Aucun contenu, aucune donnée personnelle"],
+  links: [],
+};
+
+async function make(sb: SupabaseClient, mcpUrl: string): Promise<Connector> {
+  const detail = await makeDetail(sb, mcpUrl.replace(/\/api\/mcp$/, ""));
+  const out = detail.calls.filter((c) => c.direction === "out");
+  const lastOk = out.find((c) => c.status === "ok")?.at ?? null;
+  const lastKo = out.find((c) => c.status === "error") ?? null;
+  const base = {
+    ...MAKE, make: detail, lastCheck: null, canVerify: false, reconnectHref: null, disconnect: null, permissions: [],
+    account: detail.scenarios.length ? detail.scenarios.map((s) => s.name).join(", ") : null,
+    settings: [
+      { label: "Secret du retour côté serveur", value: detail.secretPresent ? "Présent" : "Absent (MAKE_CALLBACK_SECRET)", tone: detail.secretPresent ? ("ok" as const) : ("warn" as const) },
+      { label: "Protection des adresses", value: detail.serverReady ? "Active" : "Inactive (APPOINTMENTS_SECRET)", tone: detail.serverReady ? ("ok" as const) : ("warn" as const) },
+    ],
+    external: "Les scénarios se construisent et s'activent dans Make. Le secret du retour se règle dans les variables de l'hébergement.",
+    lastSuccess: dated(lastOk, "Dernier appel réussi"),
+  };
+  if (!detail.scenarios.length) return { ...base, state: "not_connected", problem: null, note: "Aucun scénario enregistré.", primary: { kind: "manage", label: "Configurer" } };
+  if (lastKo && newer(lastKo.at, lastOk)) return { ...base, state: "sync_error", problem: { at: lastKo.at, message: lastKo.error ?? "Dernier appel en échec." }, note: null, primary: { kind: "manage", label: "Gérer" } };
+  if (!lastOk) return { ...base, state: "to_verify", problem: null, note: "Scénario enregistré : testez la connexion.", primary: { kind: "manage", label: "Tester" } };
+  return { ...base, state: "connected", problem: null, note: detail.secretPresent ? null : "Retours de Make refusés tant que le secret est absent.", primary: { kind: "manage", label: "Gérer" } };
+}
+
 export async function loadConnectors(sb: SupabaseClient, mcpUrl: string): Promise<Connector[]> {
   const c = await checks(sb).catch(() => ({}) as Checks);
   const safe = (p: Promise<Connector>, base: Pick<Connector, "key" | "name" | "usage" | "feeds" | "links">) => p.catch(() => unknown(base, "État illisible pour le moment."));
@@ -288,6 +320,7 @@ export async function loadConnectors(sb: SupabaseClient, mcpUrl: string): Promis
     safe(calendar(sb, c), GCAL),
     safe(fireflies(sb, c), FF),
     safe(claude(sb, c, mcpUrl), MCP),
+    safe(make(sb, mcpUrl), MAKE),
     Promise.resolve(ubersuggest()),
   ]);
 }

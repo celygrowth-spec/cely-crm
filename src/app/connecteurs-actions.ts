@@ -15,6 +15,8 @@ import { CrmError } from "@/lib/crm/service";
 import { fetchAccount, FirefliesFailure } from "@/lib/fireflies/client";
 import { disconnectAccount, verifyAccount } from "@/lib/mail/service";
 import { listMcpGrants, loadConnectors } from "@/lib/connectors/status";
+import * as makeSvc from "@/lib/make/service";
+import type { MakeDetail } from "@/lib/make/rules";
 import type { Connector, ConnectorKey } from "@/lib/connectors/types";
 import { disconnectGoogleAction } from "@/app/rendez-vous-actions";
 
@@ -118,5 +120,34 @@ export async function revokeMcpGrantAction(clientId: string): Promise<ActionResu
     const g = await listMcpGrants(sb);
     await record(sb, "claude_mcp", true, `Accès retiré. ${g.grants?.length ?? "?"} accès restant(s).`);
     return { remaining: g.grants?.length ?? 0 };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Make : scénarios et test de connexion. L'adresse d'un webhook entre ici et n'en ressort jamais.
+// ---------------------------------------------------------------------------
+
+const origin = async () => (await mcpUrl()).replace(/\/api\/mcp$/, "");
+
+export async function saveMakeScenarioAction(input: { id?: string | null; name: string; url?: string | null }): Promise<ActionResult<MakeDetail>> {
+  return owned(async (sb) => {
+    await makeSvc.saveScenario(sb, { id: input?.id ?? null, name: String(input?.name ?? ""), url: input?.url ? String(input.url) : null });
+    return makeSvc.makeDetail(sb, await origin());
+  });
+}
+
+export async function deleteMakeScenarioAction(id: string): Promise<ActionResult<MakeDetail>> {
+  return owned(async (sb) => {
+    await makeSvc.deleteScenario(sb, id);
+    return makeSvc.makeDetail(sb, await origin());
+  });
+}
+
+/** Appel de test, marqué comme tel (`event: "test"`, `test: true`), sans donnée de client. */
+export async function testMakeScenarioAction(id: string): Promise<ActionResult<{ ok: boolean; message: string; detail: MakeDetail }>> {
+  return owned(async (sb) => {
+    const o = await origin();
+    const r = await makeSvc.testScenario(sb, id, { origin: o });
+    return { ok: r.ok, message: r.ok ? "Make a bien reçu l'appel de test." : r.error, detail: await makeSvc.makeDetail(sb, o) };
   });
 }
