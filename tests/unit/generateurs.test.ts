@@ -114,3 +114,17 @@ describe("devis de la proposition", () => {
     expect(sendEmailDraft("Acme", null, null).text).not.toContain("devis");
   });
 });
+
+describe("signature : revenu déduit du devis", () => {
+  test("tout mensuel, tout ponctuel, sinon à renseigner plus tard", async () => {
+    const { revenueFromQuote } = await import("@/lib/proposals/signature");
+    const base = { proposal: { id: "d" }, client: {} as never, signatory: {} as never };
+    const quote = (lines: { quantity: number; unit_price_cents: number; recurrence: "monthly" | "one_off" }[], duration: number | null = 3, start = "2026-12-01") =>
+      ({ ...base, quote: { currency: "EUR" as const, offer: "", start_date: start, duration_months: duration, payment_terms: "", special_conditions: "", total_ht_cents: 0, lines: lines.map((l) => ({ label: "x", description: "", unit: "mois", vat_rate: 20, ...l })) } });
+    expect(revenueFromQuote(quote([{ quantity: 3, unit_price_cents: 250000, recurrence: "monthly" }]))).toEqual({ mode: "mensuel", amount_cents: 250000, date: "2026-12-01", end_date: "2027-02-28" });
+    expect(revenueFromQuote(quote([{ quantity: 1, unit_price_cents: 180000, recurrence: "one_off" }, { quantity: 2, unit_price_cents: 10000, recurrence: "one_off" }]))).toEqual({ mode: "ponctuel", amount_cents: 200000, date: "2026-12-01" });
+    expect(revenueFromQuote(quote([{ quantity: 1, unit_price_cents: 180000, recurrence: "one_off" }, { quantity: 3, unit_price_cents: 250000, recurrence: "monthly" }]))).toEqual({ mode: "plus_tard" });
+    expect(revenueFromQuote(quote([{ quantity: 3, unit_price_cents: 250000, recurrence: "monthly" }], 3, ""))).toEqual({ mode: "plus_tard" });
+    expect(revenueFromQuote(quote([{ quantity: 3, unit_price_cents: 250000, recurrence: "monthly" }], null))).toMatchObject({ mode: "mensuel", end_date: null });
+  });
+});

@@ -6,7 +6,14 @@ export type QuoteStatus = "to_send" | "requested" | "created" | "sent" | "signed
 export type Quote = { id: string; status: QuoteStatus; number: string | null; url: string | null; signed_on: string | null; error: string | null; total_ht_cents: number; requested_at: string | null; updated_at: string };
 /** Devis et signature d'une version de proposition. */
 export type ProposalVersion = { version_id: string; signed_at: string | null; signed_via: "make" | "manual" | null; quote: Quote };
-export type ProposalExtras = { versions: Record<string, ProposalVersion>; makeReady: boolean };
+export type ProposalExtras = {
+  versions: Record<string, ProposalVersion>;
+  makeReady: boolean;
+  /** version signée du dossier ; `older` : une version plus récente existe, mais c'est la signée qui fait foi */
+  signed: { version_id: string; version: number; older: boolean } | null;
+  /** état commercial de la fiche, et raison si le passage en client attend ma confirmation */
+  client: { status: "open" | "won" | "lost"; to_confirm: string | null };
+};
 
 export const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
   to_send: "À créer", requested: "Demandé à Make", created: "Créé", sent: "Envoyé", signed: "Signé", error: "Erreur", to_retry: "À relancer", cancelled: "Annulé",

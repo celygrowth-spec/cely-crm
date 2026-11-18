@@ -8,6 +8,7 @@ import { assertComplete, rpc, trigger, type TriggerOutcome } from "@/lib/generat
 import { QUOTE_SCENARIO } from "@/lib/make/rules";
 import { callScenario, type MakeOutcome } from "@/lib/make/service";
 import { quotePayload, type ProposalExtras, type ProposalVersion, type Quote } from "./rules";
+import { signedProposals, winPlan } from "./signature";
 
 const uuid = z.uuid("Identifiant invalide");
 const QUOTE_COLUMNS = "id, status, number, url, signed_on, error, total_ht_cents, requested_at, updated_at";
@@ -64,9 +65,19 @@ export async function proposalExtras(sb: SupabaseClient, dossierId: string): Pro
   const list = check<(Omit<ProposalVersion, "quote"> & { quote_id: string })[]>(rows);
   const quotes = list.length ? check<Quote[]>(await sb.from("quotes").select(QUOTE_COLUMNS).in("id", [...new Set(list.map((r) => r.quote_id))])) : [];
   const byId = new Map(quotes.map((q) => [q.id, q]));
+  const dossier = check<{ company_id: string } | null>(await sb.from("generator_dossiers").select("company_id").eq("id", dossierId).maybeSingle());
+  const company = dossier ? check<{ deal_status: "open" | "won" | "lost" } | null>(await sb.from("companies").select("deal_status").eq("id", dossier.company_id).maybeSingle()) : null;
+  const signedRow = dossier ? (await signedProposals(sb, [dossier.company_id])).find((x) => x.dossier_id === dossierId) ?? null : null;
+  let toConfirm: string | null = null;
+  if (signedRow && company?.deal_status !== "won") {
+    const plan = await winPlan(sb, signedRow);
+    toConfirm = plan.auto ? null : plan.reason;
+  }
   return {
     versions: Object.fromEntries(list.flatMap(({ quote_id, ...r }) => (byId.has(quote_id) ? [[r.version_id, { ...r, quote: byId.get(quote_id)! }]] : []))),
     makeReady: !!scenario.data,
+    signed: signedRow ? { version_id: signedRow.version_id, version: signedRow.version, older: signedRow.version < signedRow.latest_version } : null,
+    client: { status: company?.deal_status ?? "open", to_confirm: toConfirm },
   };
 }
 
@@ -79,4 +90,11 @@ export async function latestQuotes(sb: SupabaseClient, companyIds: string[]): Pr
   const out: Record<string, Quote> = {};
   for (const { company_id, ...q } of rows) out[company_id] ??= q;
   return out;
+}
+
+/** Ventes, avec le devis de la proposition (numéro, lien, état renvoyés par Make) sur chaque vente gagnée. */
+export async function withQuotes<T extends { company_id: string; deal_status: string }>(sb: SupabaseClient, rows: T[]): Promise<(T & { quote?: Quote })[]> {
+  // un devis illisible ne masque jamais les ventes
+  const quotes = await latestQuotes(sb, [...new Set(rows.filter((r) => r.deal_status === "won").map((r) => r.company_id))]).catch(() => ({}) as Record<string, Quote>);
+  return rows.map((r) => (quotes[r.company_id] ? { ...r, quote: quotes[r.company_id] } : r));
 }

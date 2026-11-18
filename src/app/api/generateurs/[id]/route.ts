@@ -6,6 +6,7 @@ import { CrmError } from "@/lib/crm/service";
 import type { GeneratorKind } from "@/lib/generators/rules";
 import * as gen from "@/lib/generators/service";
 import { generateProposal, proposalExtras, sendQuote } from "@/lib/proposals/service";
+import { markSigned } from "@/lib/proposals/signature";
 
 export const maxDuration = 60;
 
@@ -34,6 +35,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
       case "quote_retry":
         return sendQuote(sb, String(b.quote_id ?? ""), { origin: req.nextUrl.origin });
+      case "sign":
+        if (kind !== "proposal") throw new CrmError("Seule une proposition se signe.");
+        return markSigned(sb, String(b.version_id ?? ""));
       case "sent":
         return { sent_at: await gen.markSent(sb, String(b.version_id ?? ""), typeof b.mail_id === "string" ? b.mail_id : null) };
       case "retry":

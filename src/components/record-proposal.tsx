@@ -3,7 +3,7 @@
 // Onglet Proposition de la fiche : l'écran commun des générateurs, plus ce qui est propre à la proposition
 // (devis créé par Make, envoi par le module Mail, signature).
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Check, ExternalLink, FileText, PenLine, RotateCcw, Send } from "lucide-react";
 import { apiGet } from "@/lib/client/query";
@@ -65,6 +65,15 @@ function VersionExtra({ ctx, d, v, reload, after }: { ctx: RecordCtx; d: Generat
     done(r.data ?? {});
     refresh();
   }
+  const sign = () => {
+    if (!confirm(`Marquer la V${v.version} comme signée ?\n\nLa fiche passera en client (vente, projet et préparation de l'onboarding), comme avec « Passer en client ».`)) return;
+    void run({ op: "sign", version_id: v.id }, (r) => {
+      if (r.status === "won") toast.success(`Proposition signée : ${c.name} est passé en client`);
+      else if (r.status === "to_confirm") toast.message(`Proposition signée. Passage en client à confirmer : ${r.reason}`);
+      else toast.success("Proposition signée");
+      ctx.reload();
+    });
+  };
   const retryQuote = () => run({ op: "quote_retry", quote_id: q.id }, (r) => (r.error ? toast.error(`Devis à relancer : ${r.error}`) : r.sent ? toast.success("Devis demandé à Make") : toast.message("Le devis est déjà en cours de création.")));
   const markSent = (mailId: string | null) => run({ op: "sent", version_id: v.id, mail_id: mailId }, () => toast.success(`Proposition V${v.version} envoyée`));
   const send = () => {
@@ -92,7 +101,7 @@ function VersionExtra({ ctx, d, v, reload, after }: { ctx: RecordCtx; d: Generat
       {!data.makeReady && q.status !== "signed" && <p className="text-xs text-warning">Scénario « Créer le devis » non configuré : Paramètres › Connecteurs › Make.</p>}
       {q.status === "requested" && <p className="text-xs text-muted">Make crée le devis. Son numéro et son lien arriveront ici.</p>}
 
-      {v.validated_at && !pv.signed_at && (
+      {v.validated_at && !pv.signed_at && !data.signed && (
         <div className="flex flex-wrap items-center gap-2">
           {!v.sent_at ? (
             <>
@@ -101,16 +110,46 @@ function VersionExtra({ ctx, d, v, reload, after }: { ctx: RecordCtx; d: Generat
               {!q.url && <span className="text-xs text-muted">Le lien du devis sera ajouté à l&apos;email dès que Make l&apos;aura renvoyé.</span>}
             </>
           ) : <span className="text-xs text-muted"><Check size={12} className="inline" aria-hidden /> Envoyée le {formatDateTime(v.sent_at)}</span>}
+          <Button size="sm" className="ml-auto" disabled={busy} onClick={sign} data-mark-signed><PenLine size={13} /> Marquer comme signée</Button>
         </div>
       )}
       {pv.signed_at && (
-        <div className="flex flex-wrap items-center gap-2" data-signed>
-          <Badge tone="success"><PenLine size={11} aria-hidden /> Signée le {formatDateTime(pv.signed_at)}{pv.signed_via === "manual" ? " (marquée à la main)" : ""}</Badge>
-          {after?.(v)}
+        <div className="grid gap-2" data-signed>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="success"><PenLine size={11} aria-hidden /> Signée le {formatDateTime(pv.signed_at)}{pv.signed_via === "manual" ? " (marquée à la main)" : ""}</Badge>
+            {data.client.status === "won" && <Badge tone="success">Client</Badge>}
+            {data.client.status === "won" && after?.(v)}
+          </div>
+          {data.signed?.older && <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-warning" data-signed-older>C&apos;est la V{v.version} qui a été signée, alors qu&apos;une version plus récente existe. La V{v.version} fait foi pour l&apos;onboarding.</p>}
+          {data.client.status !== "won" && (
+            <div className="flex flex-wrap items-center gap-2 text-xs" data-client-to-confirm>
+              <span className="text-warning">{data.client.to_confirm ?? "Le passage en client se fait à l'ouverture du CRM."}</span>
+              <Button size="sm" variant="primary" onClick={() => ctx.makeClient()}>Passer en client</Button>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
+}
+
+/**
+ * Signatures reçues de Make pendant mon absence : à l'ouverture, chaque proposition signée passe en client par la
+ * logique existante (une seule fois). Sans effet s'il n'y a rien à faire.
+ */
+export function useFinalizeSignatures(onDone: (won: number) => void) {
+  const done = useRef(false);
+  useEffect(() => {
+    if (done.current) return;
+    done.current = true;
+    void post<{ status: string }[]>("/api/propositions/finaliser", {}).then((r) => {
+      if (!r.ok) return;
+      const won = r.data.filter((x) => x.status === "won").length;
+      if (won) toast.success(won > 1 ? `${won} propositions signées : fiches passées en client` : "Proposition signée : la fiche est passée en client");
+      if (r.data.length) onDone(won);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- une seule fois à l'ouverture
+  }, []);
 }
 
 export function RecordProposal({ ctx, versionActions, after }: {
@@ -121,6 +160,7 @@ export function RecordProposal({ ctx, versionActions, after }: {
 }) {
   const qc = useQueryClient();
   const c = ctx.detail.company;
+  useFinalizeSignatures(() => { ctx.reload(); void qc.invalidateQueries({ queryKey: ["proposal-extras"] }); });
   return (
     <GeneratorPanel
       companyId={c.id}
