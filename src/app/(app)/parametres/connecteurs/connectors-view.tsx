@@ -35,11 +35,11 @@ export function StateBadge({ state }: { state: ConnectorState }) {
   return <Badge tone={TONE[state]}>{state === "connected" && <Check size={11} aria-hidden />}{(state === "reconnect" || state === "sync_error") && <AlertTriangle size={11} aria-hidden />}{STATE_LABEL[state]}</Badge>;
 }
 
-export function ConnectorsView({ initial }: { initial: Connector[] }) {
+export function ConnectorsView({ initial, initialOpen = null }: { initial: Connector[]; initialOpen?: string | null }) {
   const router = useRouter();
   const [list, setList] = useState(initial);
   const [busy, setBusy] = useState<ConnectorKey | null>(null);
-  const [open, setOpen] = useState<ConnectorKey | null>(null);
+  const [open, setOpen] = useState<ConnectorKey | null>(() => initial.find((c) => c.key === initialOpen)?.key ?? null);
   const [, start] = useTransition();
   const current = list.find((c) => c.key === open) ?? null;
 
