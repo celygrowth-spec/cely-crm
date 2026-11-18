@@ -111,14 +111,20 @@ async function crmPrefill(sb: SupabaseClient, kind: GeneratorKind, companyId: st
     }
     put("pays", "FR", "valeur par défaut");
   } else {
-    // l'onboarding repart de la proposition (signée de préférence) : voir onboardingPrefill dans le lot onboarding
-    if (prev) {
-      const from = `repris de la proposition V${prev.version}`;
-      put("date_lancement", prev.answers.date_demarrage?.value, from);
+    // l'onboarding repart de la proposition SIGNÉE (c'est elle qui fait foi), sinon de la dernière proposition
+    const signed = check<{ version_id: string; version: number }[]>(await sb.from("proposal_signed").select("version_id, version").eq("company_id", companyId).order("signed_at", { ascending: false }).limit(1))[0];
+    const source = signed
+      ? { label: `repris de la proposition signée V${signed.version}`, answers: check<{ answers: Answers } | null>(await sb.from("generator_versions").select("answers").eq("id", signed.version_id).maybeSingle())?.answers ?? {} }
+      : prev ? { label: `repris de la proposition V${prev.version}`, answers: prev.answers } : null;
+    if (source) {
+      put("date_lancement", source.answers.date_demarrage?.value, source.label);
+      put("vigilance", source.answers.points_sensibles?.value, source.label);
+      put("outils", source.answers.canaux?.value ? `Canaux prévus : ${String(source.answers.canaux.value)}` : null, `${source.label}, à compléter`);
     }
-    if (persons.length) {
-      put("interlocuteurs", persons.map((p) => [`${p.first_name ?? ""} ${p.last_name ?? ""}`.trim(), p.title].filter(Boolean).join(", ")).join("\n"), "repris des interlocuteurs de la fiche, rôles à préciser");
-    }
+    const signer = source?.answers.signataire?.value as PersonValue | undefined;
+    const names = persons.map((p) => [`${p.first_name ?? ""} ${p.last_name ?? ""}`.trim(), p.title].filter(Boolean).join(", "));
+    if (signer && !persons.some((p) => p.id === signer.person_id)) names.unshift([`${signer.first_name} ${signer.last_name}`.trim(), signer.title, "signataire"].filter(Boolean).join(", "));
+    if (names.length) put("interlocuteurs", names.join("\n"), "repris des interlocuteurs de la fiche, rôles à préciser");
   }
   return [...out.values()];
 }
@@ -158,7 +164,10 @@ export async function startDossier(sb: SupabaseClient, kind: GeneratorKind, comp
     const prefill = await crmPrefill(sb, kind, companyId, r.id);
     if (prefill.length) await rpc(sb, "generator_save_answers", { p_id: r.id, p_answers: prefill, p_origin: "crm" });
   }
-  return { id: r.id, created: r.created, ...(await trigger(sb, r.id, kind, "preremplissage", "prefill", fetcher)) };
+  // proposition : Claude propose ensuite le reste à partir des échanges. L'onboarding se pré-remplit sans IA
+  // (proposition signée, fiche) ; sa tâche Claude ne sert qu'à l'analyse et aux slides du projet.
+  const launched = kind === "proposal" ? await trigger(sb, r.id, kind, "preremplissage", "prefill", fetcher) : { triggered: false };
+  return { id: r.id, created: r.created, ...launched };
 }
 
 function question(kind: GeneratorKind, key: string) {

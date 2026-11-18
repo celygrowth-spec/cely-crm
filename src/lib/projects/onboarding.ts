@@ -10,6 +10,7 @@ import { CrmError, friendlyError } from "@/lib/crm/service";
 import { confirmUpload, fileUrl, startUpload } from "@/lib/crm/files";
 import { PPTX_TYPE } from "@/lib/crm/diagnostic-rules";
 import { fireRoutine, routineConfig } from "@/lib/crm/diagnostic-trigger";
+import { generatorContext } from "@/lib/onboarding-generator/context";
 import { idv, rpc, v } from "./service";
 import { SECTION_KEYS, routineText, type Onboarding, type OnboardingDeck, type OnboardingItem, type Section, type SectionKey } from "./onboarding-rules";
 
@@ -214,7 +215,10 @@ export async function openForClaude(sb: SupabaseClient, projectId: string) {
     rpc<unknown[]>(sb, "onboarding_documents", { p_project: o.project_id }),
   ]);
   const library = check(await sb.from("diagnostic_library_files").select("id, display_name, category").eq("status", "ready").in("category", ["brand", "example"])) as unknown[];
+  // « Générer l'onboarding » : questionnaire validé et proposition signée, s'ils existent (rien sinon)
+  const generator = await generatorContext(sb, o.project_id, o.company_id).catch(() => null);
   return {
+    ...(generator ?? {}),
     projet: { id: o.project_id, etat: o.status, date_de_demarrage: o.start_date, publie_sur_le_portail: o.portal_published },
     proposition_retenue: o.documents.find((d) => d.id === o.proposal_file_id) ?? null,
     documents_de_la_fiche: o.documents,

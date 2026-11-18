@@ -21,5 +21,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const b = await req.json().catch(() => null);
-  return apiWrite(req, (sb) => startDossier(sb, kindOf(b?.kind), id, b?.project_id ?? null, b?.request_key));
+  return apiWrite(req, (sb) => {
+    const kind = kindOf(b?.kind);
+    if (kind === "onboarding" && !b?.project_id) throw new CrmError("L'onboarding se génère depuis le projet du client.");
+    return startDossier(sb, kind, id, b?.project_id ?? null, b?.request_key);
+  });
 }

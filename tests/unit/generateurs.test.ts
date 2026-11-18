@@ -128,3 +128,14 @@ describe("signature : revenu déduit du devis", () => {
     expect(revenueFromQuote(quote([{ quantity: 3, unit_price_cents: 250000, recurrence: "monthly" }], null))).toMatchObject({ mode: "mensuel", end_date: null });
   });
 });
+
+describe("onboarding : sections tirées du questionnaire", () => {
+  test("une première action par ligne, le reste en contexte libellé", async () => {
+    const { sectionsFromAnswers } = await import("@/lib/onboarding-generator/service");
+    const a = (o: Record<string, string>): Answers => Object.fromEntries(Object.entries(o).map(([k, value]) => [k, { value, provenance: null, origin: "owner" as const }]));
+    const s = sectionsFromAnswers(a({ premieres_actions: "- Obtenir les accès\n2. Audit du site\n\n• Point de lancement", acces: "Search Console\nAnalytics", rituels: "Point hebdomadaire" }));
+    expect(s.first_actions?.map((x) => x.text)).toEqual(["Obtenir les accès", "Audit du site", "Point de lancement"]);
+    expect(s.context?.map((x) => x.text)).toEqual(["Quels accès faut-il obtenir : Search Console ; Analytics", "Quels rituels de suivi : Point hebdomadaire"]);
+    expect(sectionsFromAnswers({})).toEqual({ first_actions: [], context: [] });
+  });
+});

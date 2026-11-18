@@ -15,6 +15,7 @@ import {
   provenanceLabel, sections, versionState,
   type Answer, type AnswerValue, type Answers, type GeneratorDossier, type GeneratorKind, type GeneratorVersion, type PersonValue, type Question, type QuoteLine,
 } from "@/lib/generators/rules";
+import { analysisPrompt, slidesPrompt } from "@/lib/projects/onboarding-rules";
 import { Badge, Button, Input, SaveIndicator, Skeleton, Textarea } from "../ui";
 import { ClaudeActions, downloadFile, openFile, post } from "./shared";
 
@@ -120,11 +121,11 @@ function Dossier({ d, kind, people, slots, reload }: { d: GeneratorDossier; kind
   async function act(body: Record<string, unknown>, done: string) {
     if (busy) return;
     setBusy(true);
-    const r = await post<{ triggered?: boolean; error?: string }>(url, body);
+    const r = await post<{ triggered?: boolean; error?: string; message?: string }>(url, body);
     setBusy(false);
     if (!r.ok) return toast.error(r.error);
     if (r.data?.error) toast.error(r.data.error);
-    else toast.success(done);
+    else toast.success(r.data?.message ?? done);
     reload();
   }
 
@@ -145,10 +146,13 @@ function Dossier({ d, kind, people, slots, reload }: { d: GeneratorDossier; kind
               : !latest && autoRoutine && <Button size="sm" disabled={busy} onClick={() => act({ op: "trigger" }, "Claude est relancé")}><RotateCcw size={13} /> Réessayer</Button>}
           </div>
         )}
-        {!autoRoutine && !latest && d.prefill_state !== "done" && (
+        {kind === "proposal" && !autoRoutine && !latest && d.prefill_state !== "done" && (
           <ClaudeActions prompt={generatorPrompt(kind, "preremplissage", d.id)} chatUrl={null} label="Pré-remplir dans Claude" />
         )}
-        {!autoRoutine && generating && <ClaudeActions prompt={generatorPrompt(kind, "slides", d.id)} chatUrl={null} label="Générer dans Claude" />}
+        {!autoRoutine && generating && (
+          // l'onboarding passe par la tâche des projets : mêmes messages que « Préparer l'onboarding »
+          <ClaudeActions prompt={kind === "onboarding" && d.project_id ? `${analysisPrompt(d.project_id)}\n\nEnsuite : ${slidesPrompt(d.project_id)}` : generatorPrompt(kind, "slides", d.id)} chatUrl={null} label="Générer dans Claude" />
+        )}
       </section>
 
       <Selection d={d} reload={reload} />

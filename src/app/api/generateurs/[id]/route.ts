@@ -5,6 +5,7 @@ import { apiRead, apiWrite } from "@/lib/api";
 import { CrmError } from "@/lib/crm/service";
 import type { GeneratorKind } from "@/lib/generators/rules";
 import * as gen from "@/lib/generators/service";
+import { generateOnboarding, retryOnboarding, validateOnboarding } from "@/lib/onboarding-generator/service";
 import { generateProposal, proposalExtras, sendQuote } from "@/lib/proposals/service";
 import { markSigned } from "@/lib/proposals/signature";
 
@@ -31,7 +32,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       case "generate": {
         const feedback = typeof b.feedback === "string" ? b.feedback : null;
         // proposition : la version et son devis sont créés ensemble, puis slides et devis partent séparément
-        return kind === "proposal" ? generateProposal(sb, id, b.request_key, feedback, { origin: req.nextUrl.origin }) : gen.generate(sb, id, kind, b.request_key, feedback);
+        // onboarding : la version remplit la préparation de projet existante, puis lance son analyse et ses slides
+        return kind === "proposal" ? generateProposal(sb, id, b.request_key, feedback, { origin: req.nextUrl.origin }) : generateOnboarding(sb, id, b.request_key, feedback);
       }
       case "quote_retry":
         return sendQuote(sb, String(b.quote_id ?? ""), { origin: req.nextUrl.origin });
@@ -41,7 +43,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       case "sent":
         return { sent_at: await gen.markSent(sb, String(b.version_id ?? ""), typeof b.mail_id === "string" ? b.mail_id : null) };
       case "retry":
-        return gen.retrySlides(sb, kind, String(b.version_id ?? ""));
+        return kind === "onboarding" ? retryOnboarding(sb, String(b.version_id ?? "")) : gen.retrySlides(sb, kind, String(b.version_id ?? ""));
       case "trigger": {
         if (!gen.generatorRoutine(kind)) throw new CrmError("Déclenchement automatique non configuré : utilisez le lien vers Claude.");
         const out = await gen.trigger(sb, id, kind, "preremplissage", "prefill");
@@ -50,7 +52,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         return out;
       }
       case "validate":
-        return { validated_at: await gen.validateVersion(sb, String(b.version_id ?? "")) };
+        // onboarding : le planning validé alimente le projet et ses tâches
+        return kind === "onboarding" ? validateOnboarding(sb, String(b.version_id ?? "")) : { validated_at: await gen.validateVersion(sb, String(b.version_id ?? "")) };
     }
     throw new CrmError("Opération inconnue");
   });
