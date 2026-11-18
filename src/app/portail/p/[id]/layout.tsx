@@ -17,11 +17,12 @@ export default async function PortalProjectLayout({ children, params }: { childr
   }
   // la base revérifie à chaque appel ; ce contrôle évite seulement d'afficher la coque d'un projet non autorisé
   if (!me.projects.some((p) => p.id === id)) notFound();
+  const onboarding = await portalRpc<boolean>("portal_discovery_enabled", { p_project: id }).catch(() => false);
   return (
     <>
       <PortalTopBar me={me} projectId={id} />
       <div className="mx-auto max-w-5xl px-4 pt-5 pb-24 md:pb-12">
-        <PortalNav projectId={id} sections={["taches", "fichiers", "idees"]} />
+        <PortalNav projectId={id} sections={onboarding ? ["onboarding", "taches", "fichiers", "idees"] : ["taches", "fichiers", "idees"]} />
         {children}
       </div>
     </>

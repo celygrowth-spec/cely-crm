@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { FolderOpen, Home, Lightbulb, ListChecks, LogOut } from "lucide-react";
+import { FolderOpen, Home, Lightbulb, ListChecks, LogOut, Sparkles } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { PortalMe } from "@/lib/projects/types";
 
@@ -46,11 +46,13 @@ export function PortalTopBar({ me, projectId }: { me: PortalMe; projectId?: stri
   );
 }
 
-export function PortalNav({ projectId, sections }: { projectId: string; sections: ("taches" | "fichiers" | "idees")[] }) {
+export function PortalNav({ projectId, sections }: { projectId: string; sections: ("taches" | "fichiers" | "idees" | "onboarding")[] }) {
   const pathname = usePathname();
   const base = `/portail/p/${projectId}`;
   const items = [
     { href: base, label: "Vue d'ensemble", icon: Home, exact: true },
+    // offre découverte : onglet présent seulement si la case est cochée (contrôlé en base)
+    ...(sections.includes("onboarding") ? [{ href: `${base}/onboarding`, label: "Onboarding", icon: Sparkles, exact: false }] : []),
     ...(sections.includes("taches") ? [{ href: `${base}/taches`, label: "Mes tâches", icon: ListChecks, exact: false }] : []),
     ...(sections.includes("fichiers") ? [{ href: `${base}/fichiers`, label: "Fichiers", icon: FolderOpen, exact: false }] : []),
     ...(sections.includes("idees") ? [{ href: `${base}/idees`, label: "Boîte à idées", icon: Lightbulb, exact: false }] : []),
