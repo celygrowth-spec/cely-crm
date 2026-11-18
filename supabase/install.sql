@@ -18353,7 +18353,7 @@ update public.diagnostic_settings
  where id and instructions ~ '\.pptx';
 
 
--- ===== 20261123000100_onboarding_offre_decouverte.sql =====
+-- ===== 20261123150000_onboarding_offre_decouverte.sql =====
 -- Onboarding de l'offre découverte (test à 500 € : 300 contacts, 3 cibles, email + LinkedIn, 28 jours).
 -- Migration additive. Rien n'est créé pour les projets existants : l'offre est décochée par défaut.
 --

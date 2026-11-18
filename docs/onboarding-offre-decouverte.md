@@ -54,7 +54,7 @@ Aucune variable d'environnement nouvelle (le portail utilise déjà `APPOINTMENT
 `SUPABASE_PUBLISHABLE_KEY`).
 
 ## Migration
-`20261123000100_onboarding_offre_decouverte.sql` (additive, après `20261122001000`). Elle relève aussi la limite de
+`20261123150000_onboarding_offre_decouverte.sql` (additive, après `20261122001000`). Elle relève aussi la limite de
 `company_files.size_bytes` et du bucket `company-files` à 1 Gio ; les autres circuits gardent leurs 25 Mo
 (fonctions du portail, application).
 
