@@ -66,6 +66,19 @@ describe("réglage « Offre découverte »", () => {
     expect((await portal<View>(db, "portal_discovery", alice, { p_project: pid })).answers.offer_pitch.value).toBe("On fait X");
   });
 
+  test("Claude lit l'onboarding (connecteur, mêmes règles que le panneau) ; un compte inconnu ne lit rien", async () => {
+    await enable();
+    await portal(db, "portal_discovery_answer", alice, { p_project: pid, p_key: "offer_pitch", p_value: "On fait X", p_base_rev: 0 });
+    await db.as("claude");
+    const a = await db.rpc<{ answers: Record<string, { value: string }>; enabled: boolean }>("discovery_admin", { p_project: pid });
+    expect(a.enabled).toBe(true);
+    expect(a.answers.offer_pitch.value).toBe("On fait X");
+    expect(JSON.stringify(a)).not.toMatch(/storage_path/);
+    await db.as("stranger");
+    expect(await err(db.rpc("discovery_admin", { p_project: pid }))).toBe("42501");
+    expect((await db.query(`select * from discovery_answers`)).rows).toEqual([]);
+  });
+
   test("seule l'application coche la case ; un inconnu, anon ou Claude ne peuvent pas", async () => {
     await db.as("stranger");
     expect(await err(db.rpc("discovery_set_enabled", { p_project: pid, p_enabled: true }))).toBe("42501");

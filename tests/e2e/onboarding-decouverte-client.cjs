@@ -197,7 +197,7 @@ const screenId = (p) => p.locator("[data-discovery-flow]").getAttribute("data-sc
     "· changements :", await op.locator("[data-discovery-changes] li").count());
   await op.screenshot({ path: join(SHOTS, "crm-3-panneau-recu.png"), fullPage: true });
   await op.goto(`${APP}/`, { waitUntil: "networkidle" });
-  log("    Aujourd'hui :", JSON.stringify(await op.locator("[data-home-tasks] li").allInnerTexts()).replace(/\\n/g, " ").slice(0, 400));
+  log("    Aujourd'hui :", (await op.locator("[data-home-tasks]").innerText()).replace(/\s+/g, " ").slice(0, 400));
   await op.locator("[data-home-tasks]").screenshot({ path: join(SHOTS, "crm-4-aujourdhui.png") }).catch(() => undefined);
   log("    fiche (documents) :", JSON.stringify(await sql(`select display_name, status from company_files where company_id = $1 and uploaded_by_kind = 'client' order by created_at`, [studio])));
   log("    historique de la fiche :", JSON.stringify(await sql(`select content from interactions where company_id = $1 and content like 'Onboarding%'`, [studio])));

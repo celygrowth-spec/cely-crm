@@ -42,8 +42,16 @@ export function DiscoveryToggle({ projectId }: { projectId: string }) {
       {suggested && (
         <p className="mt-2 flex items-center gap-1.5 text-xs text-violet-strong"><Sparkles size={12} aria-hidden /> La vente liée s&apos;appelle « offre découverte » : cochez la case pour lancer l&apos;onboarding.</p>
       )}
+      {enabled && q.data?.exists && (
+        <p className="mt-2 text-xs text-muted" data-discovery-summary>
+          <strong className="text-ink">{q.data.sent_at ? "Onboarding envoyé" : q.data.started_at ? "Onboarding en cours" : "Onboarding non commencé"}</strong>
+          {" · "}{q.data.targets.filter((t) => t.validated_at).length}/3 cibles validées
+          {(() => { const n = q.data.targets.reduce((k, t) => k + t.comments.length, 0); return n ? ` · ${n} commentaire${n > 1 ? "s" : ""}` : ""; })()}
+          {q.data.changed_after_send_at && " · modifié après envoi"}
+        </p>
+      )}
       {enabled && (
-        <Link href={`/projets/${projectId}/onboarding-decouverte`} className="mt-2 inline-block text-xs font-semibold text-violet-strong hover:underline">Ouvrir le suivi de l&apos;onboarding →</Link>
+        <Link href={`/projets/${projectId}/onboarding-decouverte`} className="mt-1 inline-block text-xs font-semibold text-violet-strong hover:underline">Ouvrir le suivi de l&apos;onboarding →</Link>
       )}
     </div>
   );
