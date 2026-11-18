@@ -145,3 +145,27 @@ describe("validation des modifications partielles", () => {
     expect(taskPatchSchema.parse({ status: "en_cours", description: undefined })).not.toHaveProperty("description", null);
   });
 });
+
+describe("onboarding de l'offre découverte (lecture)", () => {
+  const view = {
+    exists: true, enabled: true, enabled_source: "owner", started_at: "2026-11-18T10:00:00Z", sent_at: "2026-11-18T10:10:00Z", sent_by: "Claire",
+    changed_after_send_at: null, sent_task_id: X, changes: [], contacts: [], position: null, me: null,
+    project: { id: P, name: "Test", company: "Acme", read_only: false }, settings: { lemlist_invite_email: null },
+    answers: { offer_pitch: { value: "On aide les PME", rev: 1, by: "Claire", mine: null, at: "2026-11-18T10:01:00Z" } },
+    steps: { offer: { status: "done", by: "Claire", at: "" } },
+    files: [{ id: X, step: "blacklist", name: "liste.csv", size: 10, account: null, by: "Claire", mine: null, at: "" }],
+    targets: [{ position: 1, name: "DAF", sector: "", company_size: "", roles: "", geography: "", notes: "", client_filled: [], rev: 1, validated_at: "2026-11-18", validated_by: "Claire", modified_since_validation: false, comments: [] }],
+  };
+  test("get_project expose l'état, les réponses, les fichiers (sans chemin ni lien) et les cibles, sans rien écrire", async () => {
+    const out = await call("get_project", { project_id: P }, {
+      project_overview: { id: P, company_id: X, name: "Test" }, "rpc:discovery_admin": view,
+      ...Object.fromEntries(["project_members", "project_phases", "project_milestones", "project_meetings", "project_tasks", "project_ideas", "project_idea_comments",
+        "project_folders", "project_file_overview", "company_files", "project_activity"].map((t) => [t, []])),
+    });
+    expect(out).toContain("onboarding_offre_decouverte");
+    expect(out).toContain("On aide les PME");
+    expect(out).toContain("liste.csv");
+    expect(out).not.toMatch(/storage_path|signedUrl|token/);
+    expect(writes.filter((w) => !w.startsWith("rpc:discovery_admin"))).toEqual([]);
+  });
+});

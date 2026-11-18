@@ -102,7 +102,9 @@ describe("fichiers", () => {
     await db.exec(`reset role;`);
     const b = await db.one<{ public: boolean; file_size_limit: string }>(`select public, file_size_limit from storage.buckets where id = 'company-files'`);
     expect(b.public).toBe(false);
-    expect(Number(b.file_size_limit)).toBe(26214400);
+    // 1 Gio depuis l'onboarding de l'offre découverte (archives LinkedIn) ; 25 Mo restent imposés en base
+    // pour tout autre document (déclencheur company_files_size_guard, test ci-dessous)
+    expect(Number(b.file_size_limit)).toBe(1073741824);
   });
 
   test("un anonyme ou un autre compte ne lit ni métadonnées ni objets", async () => {
