@@ -46,3 +46,12 @@ export async function generatorContext(sb: SupabaseClient, projectId: string, co
     } : null,
   };
 }
+
+/**
+ * Sources que l'utilisateur a décochées dans « Générer l'onboarding » : la session Claude des projets ne les lit pas
+ * (appels, fichiers, diagnostic). Ensemble vide si le projet n'a pas de dossier de générateur.
+ */
+export async function excludedSources(sb: SupabaseClient, projectId: string): Promise<Set<string>> {
+  const { data } = await sb.from("generator_dossiers").select("excluded_sources").eq("project_id", projectId).eq("kind", "onboarding").order("created_at", { ascending: false }).limit(1);
+  return new Set(((data?.[0] as { excluded_sources?: string[] } | undefined)?.excluded_sources) ?? []);
+}

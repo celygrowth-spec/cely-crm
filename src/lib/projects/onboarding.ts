@@ -10,7 +10,7 @@ import { CrmError, friendlyError } from "@/lib/crm/service";
 import { confirmUpload, fileUrl, startUpload } from "@/lib/crm/files";
 import { PPTX_TYPE } from "@/lib/crm/diagnostic-rules";
 import { fireRoutine, routineConfig } from "@/lib/crm/diagnostic-trigger";
-import { generatorContext } from "@/lib/onboarding-generator/context";
+import { excludedSources, generatorContext } from "@/lib/onboarding-generator/context";
 import { idv, rpc, v } from "./service";
 import { SECTION_KEYS, routineText, type Onboarding, type OnboardingDeck, type OnboardingItem, type Section, type SectionKey } from "./onboarding-rules";
 
@@ -217,13 +217,24 @@ export async function openForClaude(sb: SupabaseClient, projectId: string) {
   const library = check(await sb.from("diagnostic_library_files").select("id, display_name, category").eq("status", "ready").in("category", ["brand", "example"])) as unknown[];
   // « Générer l'onboarding » : questionnaire validé et proposition signée, s'ils existent (rien sinon)
   const generator = await generatorContext(sb, o.project_id, o.company_id).catch(() => null);
+  // sources décochées dans le générateur : ni listées, ni lisibles (voir aussi callTranscript et claudeDocumentUrl)
+  const excluded = await excludedSources(sb, o.project_id);
+  const kept = <T,>(list: unknown, key: (x: T) => string) => (Array.isArray(list) ? (list as T[]).filter((x) => !excluded.has(key(x))) : list);
+  if (excluded.size) {
+    sources.appels = kept<{ call_id: string }>(sources.appels, (c) => `appel:${c.call_id}`);
+    const diag = sources.diagnostic as { diagnostic_id?: string } | null | undefined;
+    if (diag?.diagnostic_id && excluded.has(`diagnostic:${diag.diagnostic_id}`)) sources.diagnostic = null;
+    if (excluded.has("personnes")) sources.interlocuteurs = [];
+  }
+  const visibleDocs = o.documents.filter((d) => !excluded.has(`fichier:${d.id}`));
   return {
     ...(generator ?? {}),
+    ...(excluded.size ? { sources_ecartees_par_l_utilisateur: excluded.size } : {}),
     projet: { id: o.project_id, etat: o.status, date_de_demarrage: o.start_date, publie_sur_le_portail: o.portal_published },
-    proposition_retenue: o.documents.find((d) => d.id === o.proposal_file_id) ?? null,
-    documents_de_la_fiche: o.documents,
+    proposition_retenue: visibleDocs.find((d) => d.id === o.proposal_file_id) ?? null,
+    documents_de_la_fiche: visibleDocs,
     // contenu lu des documents : la proposition retenue fait référence pour les engagements (K10)
-    contenu_des_documents: documents,
+    contenu_des_documents: kept<{ file_id?: string; id?: string }>(documents, (d) => `fichier:${d.file_id ?? d.id}`),
     sections: o.sections,
     points: o.items.filter((i) => i.status !== "resolved").map((i) => ({ key: i.key, label: i.label, statut: i.status, obligatoire: i.required, reponse: i.answer, repondu_par: i.answered_by })),
     slides: o.decks.map((d) => ({ version: d.version, statut: d.status })),
@@ -232,10 +243,13 @@ export async function openForClaude(sb: SupabaseClient, projectId: string) {
   };
 }
 
-export const callTranscript = (sb: SupabaseClient, projectId: string, callId: string, offset: number, limit: number) =>
-  rpc<{ total: number; lignes: unknown[] }>(sb, "onboarding_call_transcript", { p_project: idv(projectId), p_call: idv(callId), p_offset: offset, p_limit: limit });
+export async function callTranscript(sb: SupabaseClient, projectId: string, callId: string, offset: number, limit: number) {
+  if ((await excludedSources(sb, idv(projectId))).has(`appel:${idv(callId)}`)) throw new CrmError("Cet appel a été écarté des sources par l'utilisateur.");
+  return rpc<{ total: number; lignes: unknown[] }>(sb, "onboarding_call_transcript", { p_project: idv(projectId), p_call: idv(callId), p_offset: offset, p_limit: limit });
+}
 
 export async function claudeDocumentUrl(sb: SupabaseClient, projectId: string, fileId: string) {
+  if ((await excludedSources(sb, idv(projectId))).has(`fichier:${idv(fileId)}`)) throw new CrmError("Ce document a été écarté des sources par l'utilisateur.");
   const o = await getStatusRow(sb, projectId);
   const row = check(await sb.from("company_files").select("storage_path").eq("id", idv(fileId)).eq("company_id", o.company_id).eq("status", "ready").maybeSingle()) as { storage_path: string } | null;
   if (!row) throw new CrmError("Document introuvable sur la fiche de ce projet.");
