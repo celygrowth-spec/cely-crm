@@ -152,11 +152,25 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- Limites de taille : 1 Gio pour la table et le bucket (archives LinkedIn) ; les autres circuits gardent leur
--- contrôle à 25 Mo (fonctions portal_file_start, application).
+-- Limites de taille. La base garde 25 Mo pour tous les documents, sauf les dépôts d'onboarding (archives
+-- LinkedIn jusqu'à 1 Gio) : seule portal_discovery_file_start lève ce plafond, le temps de son insertion
+-- (réglage de transaction, inaccessible depuis l'API). Le bucket passe à 1 Gio pour que Storage accepte ces
+-- archives ; chaque circuit garde son contrôle en base.
 -- ---------------------------------------------------------------------------
 alter table public.company_files drop constraint if exists company_files_size_bytes_check;
 alter table public.company_files add constraint company_files_size_bytes_check check (size_bytes > 0 and size_bytes <= 1073741824);
+
+create or replace function discovery_private.tg_company_files_size()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if new.size_bytes > 26214400 and coalesce(current_setting('cely.discovery_upload', true), '') <> 'on' then
+    raise exception 'Fichier trop volumineux (25 Mo maximum)' using errcode = '23514';
+  end if;
+  return new;
+end; $$;
+create trigger company_files_size_guard before insert or update of size_bytes on public.company_files
+  for each row execute function discovery_private.tg_company_files_size();
+
 update storage.buckets set file_size_limit = 1073741824 where id = 'company-files';
 
 -- ---------------------------------------------------------------------------
@@ -497,8 +511,11 @@ begin
   if (select count(*) from public.discovery_files where project_id = p_project) >= 100 then raise exception 'Nombre maximal de fichiers atteint' using errcode = '22023'; end if;
   select company_id into v_company from public.projects where id = p_project;
   v_path := v_company::text || '/' || v_id::text || '.' || coalesce(nullif(lower(regexp_replace(coalesce(p_ext, ''), '[^a-zA-Z0-9]', '', 'g')), ''), 'bin');
+  -- plafond de 25 Mo levé pour cette seule insertion (limites de l'étape déjà vérifiées ci-dessus)
+  perform set_config('cely.discovery_upload', 'on', true);
   insert into public.company_files (id, company_id, storage_path, display_name, category, mime_type, size_bytes, status, uploaded_by_kind, uploaded_by_person)
   values (v_id, v_company, v_path, left(btrim(p_name), 200), 'Autre', p_type, p_size, 'pending', 'client', v_person);
+  perform set_config('cely.discovery_upload', 'off', true);
   insert into public.project_files (project_id, file_id, folder_id, shared_by_kind, shared_by_person)
   values (p_project, v_id, discovery_private.folder(p_project), 'client', v_person);
   insert into public.discovery_files (project_id, step, file_id, account_name, person_id)

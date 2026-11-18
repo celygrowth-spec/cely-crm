@@ -11,7 +11,7 @@ describe("C14 — accès sans connexion", () => {
     const fns = (await db.query<{ name: string; args: string }>(`select p.proname name, pg_get_function_identity_arguments(p.oid) args
       from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'execute')`)).rows;
     const unprotected = fns.filter((f) => !/\bp_server_key\b/.test(f.args)).map((f) => f.name).sort();
-    expect(unprotected).toEqual(["portal_storage_can", "portal_storage_can_upload"]);
+    expect(unprotected).toEqual(["discovery_storage_can_upload", "portal_storage_can", "portal_storage_can_upload"]);
     const tables = (await db.query(`select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public' and c.relkind in ('r','v','m') and has_table_privilege('anon', c.oid, 'select')`)).rows;
     expect(tables).toEqual([]);

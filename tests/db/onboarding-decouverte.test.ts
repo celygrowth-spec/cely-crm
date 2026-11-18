@@ -292,6 +292,11 @@ describe("dépôts", () => {
     expect(v.files).toMatchObject([{ step: "linkedin", account: "Alice Martin", mine: false }]);
   });
 
+  test("hors onboarding, la base refuse tout document de plus de 25 Mo (propriétaire compris)", async () => {
+    await db.as("owner");
+    expect(await err(db.query(`insert into company_files (company_id, storage_path, display_name, mime_type, size_bytes) values ($1, 'x/gros.zip', 'gros.zip', 'application/zip', $2)`, [acme.id, 30 * 1024 * 1024]))).toBe("23514");
+  });
+
   test("le circuit habituel du portail reste limité à 25 Mo", async () => {
     expect(await err(portal(db, "portal_file_start", alice, { p_project: pid, p_folder: null, p_task: null, p_name: "gros.zip", p_type: "application/zip", p_size: 30 * 1024 * 1024, p_ext: "zip" }))).toBe("22023");
   });
