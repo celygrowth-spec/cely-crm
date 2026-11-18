@@ -1,5 +1,6 @@
 "use client";
 
+import { NextActionButton } from "@/components/next-action";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
@@ -168,6 +169,7 @@ function KCard({ card: c, pipelines, onOpen, onHover, onMove, disabled, onClosed
       </button>
       <CardClosingMenu target={{ id: c.id, name: c.name, deal_status: c.deal_status, amount: c.amount, deal_closed_at: c.deal_closed_at, lost_reason: c.lost_reason }} onChanged={onClosed} />
       </div>
+      {c.deal_status === "open" && <NextActionButton companyId={c.id} className="mt-1.5" />}
       {!disabled && (
         <Select
           value=""

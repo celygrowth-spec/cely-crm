@@ -286,7 +286,7 @@ export function RecordDiagnostic({ companyId, startSignal, onEmail, next }: { co
   const [creating, setCreating] = useState(false);
   // une même demande garde sa clé : un double clic ou une nouvelle tentative ne crée pas un second dossier
   const requestKey = useRef<string | null>(null);
-  const reload = () => qc.invalidateQueries({ queryKey: key });
+  const reload = () => { void qc.invalidateQueries({ queryKey: ["journey"] }); return qc.invalidateQueries({ queryKey: key }); };
 
   async function create() {
     if (creating) return;

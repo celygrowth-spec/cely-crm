@@ -16,7 +16,10 @@ import { formatDate, relativeDay, todayISO } from "@/lib/format";
 import { inboxCounts } from "@/lib/lemlist/inbox";
 import { listProjects } from "@/lib/projects/owner";
 import { PROJECT_STATUS_LABELS } from "@/lib/projects/types";
+import { journeyTodos } from "@/lib/journey/rules";
+import { listJourney } from "@/lib/journey/service";
 import { HomeCalls } from "./_today/home-calls";
+import { JourneyActions } from "./_today/journey-actions";
 import { TasksList } from "./_today/tasks-list";
 
 // Accueil : ce qui compte en ouvrant Cely Growth. Finance du mois, clients en cours, et ce qui attend une action
@@ -54,6 +57,8 @@ export default async function HomePage() {
     ok(listBookings(supabase, { from: zonedToUtc(day, "00:00", DEFAULT_TZ).toISOString(), to: zonedToUtc(addDaysKey(day, 1), "00:00", DEFAULT_TZ).toISOString() }, 50)),
   ]);
   const c = (counters.data ?? {}) as { replies?: number; calls?: number; emails?: number };
+  // parcours des clients (diagnostic, proposition, signature, onboarding) : ce qui attend une action de ma part
+  const journey = await ok(listJourney(supabase));
 
   // --- Finance du mois ---
   const from = monthStart(today), to = monthEnd(today);
@@ -126,6 +131,10 @@ export default async function HomePage() {
               ) : <Empty>Aucune facture en retard.</Empty>}
             </>
           )}
+        </Block>
+
+        <Block title="Prochaines actions clients" href="/pipelines" data-home-journey-block>
+          {!journey.ok ? <Empty>Parcours indisponible pour le moment.</Empty> : <JourneyActions lines={journeyTodos(journey.v)} />}
         </Block>
 
         <Block title="Clients en cours" href="/projets" data-home-clients>

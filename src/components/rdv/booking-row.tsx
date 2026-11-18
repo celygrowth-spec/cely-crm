@@ -4,6 +4,7 @@ import { ExternalLink } from "lucide-react";
 import { Badge, cn } from "@/components/ui";
 import { DEFAULT_TZ, formatLongDate, formatTimeShort } from "@/lib/appointments/time";
 import type { Booking } from "@/lib/appointments/types";
+import { NextActionButton } from "@/components/next-action";
 import { StatusBadge, useOpenBooking } from "./booking-detail";
 
 /** Ligne cliquable d'un rendez-vous (vue d'ensemble, listes courtes). */
@@ -32,6 +33,8 @@ export function BookingRow({ b, showDate = true }: { b: Booking; showDate?: bool
           </a>
         )}
       </button>
+      {/* après le rendez-vous : la prochaine action du parcours de la fiche */}
+      {b.company_id && (b.display_status === "done" || b.display_status === "a_renseigner") && <div className="px-3 pb-2 sm:pl-[8.5rem]"><NextActionButton companyId={b.company_id} /></div>}
     </li>
   );
 }

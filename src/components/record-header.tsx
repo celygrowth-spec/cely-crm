@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Archive, ArchiveRestore, Ban, Columns3, Trophy, ChevronDown, ExternalLink, FileUp, Mail, Maximize2, MessageSquarePlus, MoreHorizontal, Pencil, Phone, Plus, Sparkles, StickyNote, Timer, UserRound, X } from "lucide-react";
 import { RecordDealClosing } from "./deal-closing";
+import { NextActionButton } from "./next-action";
 import { AddToPipelineDialog, MakeClientDialog } from "./record-advance";
 import { useTimer } from "./time/timer";
 import { useCompanyMails } from "./record-entry";
@@ -242,6 +243,9 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
           ))}
         </nav>
         <div className="ml-auto flex shrink-0 items-center gap-1 pb-1 max-sm:pt-1">
+          {/* la prochaine action du parcours (diagnostic, proposition, onboarding), déduite de l'état de la fiche */}
+          <NextActionButton companyId={c.id} variant="primary"
+            onAct={(a) => (a.target.kind === "client" ? setAdvance("client") : a.target.kind === "tab" && a.target.tab === "diagnostic" && a.create ? ctx.generateDiagnostic() : a.target.kind === "tab" ? ctx.go(a.target.tab, a.create ? { start: true } : undefined) : undefined)} />
           <QuickAction icon={Mail} label="Envoyer un mail" onClick={() => ctx.compose({})} warn={c.do_not_contact} />
           <DraftsAccess ctx={ctx} />
           <TrashButton kind="company" id={c.id} size="sm" variant="secondary" className="max-md:h-8 max-md:w-9 max-md:px-0"

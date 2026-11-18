@@ -2,6 +2,7 @@
 
 // Liste d'appels, utilisée sur la fiche, le rendez-vous et la file à rattacher. Le panneau (et sa transcription)
 // n'est chargé qu'au clic : la liste reste légère.
+import { NextActionButton } from "@/components/next-action";
 import { useQuery } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import { ExternalLink } from "lucide-react";
@@ -46,6 +47,8 @@ export function CallCard({ call, onOpen, children }: { call: Call; onOpen: () =>
       <button type="button" onClick={onOpen} className="mt-1 line-clamp-2 w-full text-left text-muted hover:text-ink">
         {preview ?? (call.summary_state === "pending" ? "Résumé en attente." : "Pas de résumé. Ouvrir la transcription.")}
       </button>
+      {/* après l'appel : la prochaine action du parcours de la fiche rattachée */}
+      {call.company_id && <div className="mt-1.5"><NextActionButton companyId={call.company_id} /></div>}
       {children}
     </li>
   );

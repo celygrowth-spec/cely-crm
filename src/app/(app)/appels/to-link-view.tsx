@@ -1,6 +1,8 @@
 "use client";
 
 // File « Appels à rattacher » : les candidates aident, le choix reste le vôtre et il est conservé.
+import { JOURNEY_KEY } from "@/components/next-action";
+import { actionHref, nextAction, type JourneyRow } from "@/lib/journey/rules";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import { useRef, useState } from "react";
@@ -83,9 +85,13 @@ export function LinkActions({ call, ignored }: { call: Call; ignored: boolean })
     sending.current = false;
     setBusy(false);
     if (!r.ok) return toast.error(r.error);
-    toast.success(done);
     qc.setQueryData<Call[]>(["fireflies-to-link", ignored ? "ignored" : "to_link"], (old) => old?.filter((x) => x.id !== call.id));
-    sync(...KEYS);
+    sync(...KEYS, JOURNEY_KEY);
+    // l'appel vient d'être rattaché : la prochaine action de cette fiche est proposée aussitôt
+    const company = (body as { action?: string; company_id?: string }).action === "link" ? (body as { company_id?: string }).company_id : null;
+    const row = company ? (await apiGet<JourneyRow[]>("/api/parcours").catch(() => null))?.find((x) => x.company_id === company) : null;
+    const next = row ? nextAction(row) : null;
+    toast.success(done, next && company ? { action: { label: next.label, onClick: () => window.location.assign(actionHref(company, next)) }, duration: 12_000 } : undefined);
   }
   if (ignored) {
     return <div className="mt-2"><Button size="sm" variant="ghost" disabled={busy} onClick={() => act({ action: "reset" }, "Choix annulé")}>Annuler mon choix</Button></div>;

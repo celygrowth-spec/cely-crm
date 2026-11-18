@@ -51,7 +51,7 @@ function VersionExtra({ ctx, d, v, reload, after }: { ctx: RecordCtx; d: Generat
   const pv = data?.versions[v.id];
   if (!pv) return null;
   const q = pv.quote;
-  const refresh = () => { void qc.invalidateQueries({ queryKey: key }); reload(); };
+  const refresh = () => { void qc.invalidateQueries({ queryKey: key }); void qc.invalidateQueries({ queryKey: ["journey"] }); reload(); };
   const c = ctx.detail.company;
 
   async function run(body: Record<string, unknown>, done: (r: Record<string, unknown>) => void) {
@@ -152,8 +152,10 @@ export function useFinalizeSignatures(onDone: (won: number) => void) {
   }, []);
 }
 
-export function RecordProposal({ ctx, versionActions, after }: {
+export function RecordProposal({ ctx, versionActions, after, startSignal = 0 }: {
   ctx: RecordCtx;
+  /** demande de lancement venue de l'en-tête de la fiche ou d'un autre écran */
+  startSignal?: number;
   /** actions supplémentaires d'une version (signature : lot suivant) */
   versionActions?: (d: GeneratorDossier, v: GeneratorVersion, reload: () => void) => React.ReactNode;
   after?: (signedVersion: GeneratorVersion) => React.ReactNode;
@@ -165,6 +167,7 @@ export function RecordProposal({ ctx, versionActions, after }: {
     <GeneratorPanel
       companyId={c.id}
       kind="proposal"
+      startSignal={startSignal}
       people={ctx.detail.people}
       slots={{
         recapMake: (answers) => <MakeRecap answers={answers} />,

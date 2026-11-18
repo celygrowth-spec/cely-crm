@@ -28,6 +28,7 @@ const loadDetails = () => import("./record-details").then((m) => m.RecordDetails
 const RecordActivity = dynamic(loadActivity, { loading: () => <Skeleton className="h-40 w-full" /> });
 const RecordDetails = dynamic(loadDetails, { loading: () => <Skeleton className="h-40 w-full" /> });
 const RecordProposal = dynamic(() => import("./record-proposal").then((m) => m.RecordProposal), { loading: () => <Skeleton className="h-40 w-full" /> });
+import { NextActionButton, useJourneyRow } from "./next-action";
 const RecordDiagnostic = dynamic(() => import("./record-diagnostic").then((m) => m.RecordDiagnostic), { loading: () => <Skeleton className="h-40 w-full" /> });
 const EntryDetail = dynamic(() => import("./record-entry-detail").then((m) => m.EntryDetail));
 const LogForm = dynamic(() => import("./record-log-form").then((m) => m.LogForm), { loading: () => <Skeleton className="h-32 w-full" /> });
@@ -49,7 +50,8 @@ export type RecordCtx = {
   /** Ouvre le composeur d'email. */
   compose: (target: ComposeTarget) => void;
   /** Change d'onglet, avec le filtre de l'Activité ou la section des Détails à montrer. */
-  go: (tab: RecordTab, opts?: { filter?: ActivityFilter; section?: DetailsSection; edit?: boolean }) => void;
+  /** `start` : lance aussitôt le générateur de l'onglet (proposition) s'il n'a pas encore de dossier */
+  go: (tab: RecordTab, opts?: { filter?: ActivityFilter; section?: DetailsSection; edit?: boolean; start?: boolean }) => void;
   filter: ActivityFilter;
   setFilter: (f: ActivityFilter) => void;
   detailsFocus: { section: DetailsSection; edit?: boolean; n: number } | null;
@@ -62,7 +64,7 @@ export type RecordCtx = {
   clientSignal: number;
 };
 
-export function CompanyRecord({ id, onClose, page, initialTab = "overview" }: { id: string; onClose?: () => void; page?: boolean; initialTab?: RecordTab }) {
+export function CompanyRecord({ id, onClose, page, initialTab = "overview", autoStart = false }: { id: string; onClose?: () => void; page?: boolean; initialTab?: RecordTab; autoStart?: boolean }) {
   const qc = useQueryClient();
   const [compose, setCompose] = useState<ComposeTarget | null>(null);
   const [tab, setTab] = useState<RecordTab>(initialTab);
@@ -71,7 +73,9 @@ export function CompanyRecord({ id, onClose, page, initialTab = "overview" }: { 
   const [detailsFocus, setDetailsFocus] = useState<RecordCtx["detailsFocus"]>(null);
   const [entry, setEntry] = useState<ActivityEntry | null>(null);
   const [log, setLog] = useState<LogKind | null>(null);
-  const [diagnosticStart, setDiagnosticStart] = useState(0);
+  // lien « Générer… » venu d'un autre écran (Pipeline, Appels, Aujourd'hui) : l'onglet s'ouvre et le générateur démarre
+  const [diagnosticStart, setDiagnosticStart] = useState(autoStart && initialTab === "diagnostic" ? 1 : 0);
+  const [proposalStart, setProposalStart] = useState(autoStart && initialTab === "proposal" ? 1 : 0);
   const [clientSignal, setClientSignal] = useState(0);
   const top = useRef<HTMLDivElement>(null);
   const sync = useSync();
@@ -126,6 +130,7 @@ export function CompanyRecord({ id, onClose, page, initialTab = "overview" }: { 
   const go = useCallback<RecordCtx["go"]>((t, opts) => {
     setTab(t);
     setVisited((v) => (v.has(t) ? v : new Set(v).add(t)));
+    if (opts?.start && t === "proposal") setProposalStart((n) => n + 1);
     if (opts?.filter) setFilter(opts.filter);
     if (opts?.section) {
       const { section, edit } = opts;
@@ -243,8 +248,9 @@ export function CompanyRecord({ id, onClose, page, initialTab = "overview" }: { 
         {visited.has("activity") && <div role="tabpanel" aria-label="Activité" hidden={tab !== "activity"}><RecordActivity ctx={ctx} /></div>}
         {visited.has("details") && <div role="tabpanel" aria-label="Détails" hidden={tab !== "details"}><RecordDetails ctx={ctx} /></div>}
         {visited.has("diagnostic") && <div role="tabpanel" aria-label="Diagnostic" hidden={tab !== "diagnostic"}><RecordDiagnostic companyId={c.id} startSignal={diagnosticStart}
-          onEmail={(fileId) => openCompose({ prefill: { subject: `Votre diagnostic · ${c.name}`, text: "Bonjour,\n\nVous trouverez en pièce jointe le diagnostic dont nous avons parlé.\n\nJe reste disponible pour le parcourir avec vous.\n\nBien à vous,", fileIds: fileId ? [fileId] : [] } })} /></div>}
-        {visited.has("proposal") && <div role="tabpanel" aria-label="Proposition" hidden={tab !== "proposal"}><RecordProposal ctx={ctx} /></div>}
+          onEmail={(fileId) => openCompose({ prefill: { subject: `Votre diagnostic · ${c.name}`, text: "Bonjour,\n\nVous trouverez en pièce jointe le diagnostic dont nous avons parlé.\n\nJe reste disponible pour le parcourir avec vous.\n\nBien à vous,", fileIds: fileId ? [fileId] : [] } })}
+          next={<DiagnosticNext companyId={c.id} onGo={(start) => go("proposal", { start })} />} /></div>}
+        {visited.has("proposal") && <div role="tabpanel" aria-label="Proposition" hidden={tab !== "proposal"}><RecordProposal ctx={ctx} startSignal={proposalStart} after={() => <NextActionButton companyId={c.id} variant="primary" />} /></div>}
       </div>
       {compose && (
         <MailCompose companyId={c.id} target={compose} onClose={() => setCompose(null)} company={{ name: c.name, website: c.website ?? null, doNotContact: c.do_not_contact ? { reason: c.do_not_contact_reason ?? null } : null }}
@@ -264,5 +270,16 @@ function ButtonOpen({ id, page }: { id: string; page?: boolean }) {
     <Link href={`/fiches/${id}`} className="mt-3 inline-block font-semibold text-violet-strong">Ouvrir la fiche conservée</Link>
   ) : (
     <Button className="mt-3" onClick={() => openCompany(id)}>Ouvrir la fiche conservée</Button>
+  );
+}
+
+/** Fin du diagnostic validé : la proposition, à générer ou à rouvrir. */
+function DiagnosticNext({ companyId, onGo }: { companyId: string; onGo: (start: boolean) => void }) {
+  const row = useJourneyRow(companyId);
+  const exists = !!row?.proposal_id;
+  return (
+    <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-line bg-white px-3 text-xs font-semibold hover:bg-surface" data-diagnostic-next onClick={() => onGo(!exists)}>
+      {exists ? "Voir la proposition" : "Générer la proposition"}
+    </button>
   );
 }

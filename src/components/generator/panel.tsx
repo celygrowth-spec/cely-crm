@@ -4,7 +4,7 @@
 // questions pré-remplies avec leur provenance, génération d'une version, relecture, validation.
 // Ce qui est propre à un générateur (devis, envoi, signature) arrive par les emplacements `recapMake` et `versionExtra`.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Check, Download, ExternalLink, Plus, RotateCcw, Sparkles, Trash2, X } from "lucide-react";
 import { QUESTIONS } from "@/content/generators";
@@ -17,6 +17,7 @@ import {
 } from "@/lib/generators/rules";
 import { analysisPrompt, slidesPrompt } from "@/lib/projects/onboarding-rules";
 import { Badge, Button, Input, SaveIndicator, Skeleton, Textarea } from "../ui";
+import { JOURNEY_KEY } from "../next-action";
 import { ClaudeActions, downloadFile, openFile, post } from "./shared";
 
 export type PersonOption = { id: string; first_name: string | null; last_name: string | null; title: string | null; email: string | null };
@@ -33,8 +34,10 @@ const eur = (n: number) => new Intl.NumberFormat("fr-FR", { style: "currency", c
 export const generatorKey = (kind: GeneratorKind, companyId: string) => ["generator", kind, companyId];
 const working = (d: GeneratorDossier) => d.prefill_state === "requested" || dossierState(d) === "en_generation";
 
-export function GeneratorPanel({ companyId, kind, projectId = null, people, slots = {} }: {
+export function GeneratorPanel({ companyId, kind, projectId = null, people, slots = {}, startSignal = 0 }: {
   companyId: string; kind: GeneratorKind; projectId?: string | null; people: PersonOption[]; slots?: PanelSlots;
+  /** un bouton hors de l'écran (en-tête de la fiche, Pipeline, Aujourd'hui) demande le lancement */
+  startSignal?: number;
 }) {
   const qc = useQueryClient();
   const key = generatorKey(kind, companyId);
@@ -47,7 +50,8 @@ export function GeneratorPanel({ companyId, kind, projectId = null, people, slot
   const [creating, setCreating] = useState(false);
   // une même demande garde sa clé : un double clic ou une nouvelle tentative ne crée pas un second dossier
   const requestKey = useRef<string | null>(null);
-  const reload = () => qc.invalidateQueries({ queryKey: key });
+  // le parcours du client (prochaine action) suit chaque changement du dossier
+  const reload = () => { void qc.invalidateQueries({ queryKey: JOURNEY_KEY }); return qc.invalidateQueries({ queryKey: key }); };
   const name = GENERATOR_NAMES[kind];
 
   async function create() {
@@ -62,6 +66,18 @@ export function GeneratorPanel({ companyId, kind, projectId = null, people, slot
     setSelected(r.data.id);
     await reload();
   }
+
+  // lancement demandé de l'extérieur : seulement s'il n'y a encore aucun dossier (sinon, il est simplement affiché)
+  const seen = useRef(0);
+  const ready = !!data;
+  const empty = data?.length === 0;
+  useEffect(() => {
+    if (!startSignal || startSignal === seen.current || !ready) return;
+    seen.current = startSignal;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- action demandée depuis un autre écran
+    if (empty) void create();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startSignal, ready, empty]);
 
   if (isLoading) return <Skeleton className="h-40 w-full" />;
   if (isError) return <p className="text-sm text-danger">{error.message} <button className="underline" onClick={() => refetch()}>Réessayer</button></p>;
