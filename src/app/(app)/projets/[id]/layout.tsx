@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Sparkles } from "lucide-react";
 import { requireOwner } from "@/lib/auth";
 import { getProject } from "@/lib/projects/owner";
+import { discoveryEnabled } from "@/lib/discovery/service";
 import { Badge } from "@/components/ui";
 import { PROJECT_STATUS_LABELS, PROJECT_STATUS_TONES } from "@/lib/projects/types";
 import { ProjectSalePanel } from "@/components/sales/project-sale-panel";
@@ -15,7 +16,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
   const { supabase } = await requireOwner();
-  const p = await getProject(supabase, id);
+  const [p, discovery] = await Promise.all([getProject(supabase, id), discoveryEnabled(supabase, id)]);
   if (!p) notFound();
   return (
     <div>
@@ -25,6 +26,11 @@ export default async function ProjectLayout({ children, params }: { children: Re
           <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">{p.name}</h1>
           <Badge tone={PROJECT_STATUS_TONES[p.status]}>{PROJECT_STATUS_LABELS[p.status]}</Badge>
           {p.portal_published ? <Badge tone="success">Visible sur le portail</Badge> : <Badge>Non publié</Badge>}
+          {discovery && (
+            <Link href={`/projets/${p.id}/onboarding-decouverte`} data-discovery-button className="inline-flex items-center gap-1.5 rounded-lg bg-violet-soft px-2.5 py-1 text-sm font-semibold text-violet-strong hover:bg-violet-soft/70">
+              <Sparkles size={14} aria-hidden /> Onboarding offre découverte
+            </Link>
+          )}
           <span className="ml-auto"><TrashAndLeave kind="project" id={p.id} href="/projets" label="Supprimer le projet" /></span>
         </div>
         <p className="mt-1 text-sm text-muted">
