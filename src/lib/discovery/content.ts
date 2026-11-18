@@ -163,7 +163,7 @@ export const TARGET_FIELDS: { key: "name" | "sector" | "company_size" | "roles" 
 /** Ce que dit la mascotte. {prénom} est remplacé par le prénom du contact. */
 export const MASCOT_LINES = {
   welcome: "Salut {prénom} ! Je suis Cely. En une dizaine de minutes, on prépare tout ce qu'il faut pour lancer ton test.",
-  welcomeKit: ["Ton offre en tête (5 questions rapides)", "Un accès à ton email pro pour créer un compte lemlist", "Ta liste de clients et prospects à exclure (CSV ou Excel), si tu en as une", "Ton accès LinkedIn pour demander ton archive"],
+  welcomeKit: ["Ton offre en tête (7 questions rapides, dont une facultative)", "Un accès à ton email pro pour créer un compte lemlist", "Ta liste de clients et prospects à exclure (CSV ou Excel), si tu en as une", "Ton accès LinkedIn pour demander ton archive"],
   stepDone: ["Parfait !", "Et de un de plus !", "Super, c'est noté.", "On avance bien !", "Top, merci !"],
   offerAnswered: ["Noté !", "J'adore.", "Très clair.", "Ça va m'aider.", "Bien vu."],
   later: "Pas de souci : l'étape reste ouverte, tu pourras revenir quand LinkedIn t'aura envoyé l'archive.",
