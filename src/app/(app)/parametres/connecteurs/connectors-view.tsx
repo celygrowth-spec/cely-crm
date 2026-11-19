@@ -6,12 +6,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowUpRight, Bot, CalendarDays, Check, Copy, ExternalLink, Mail, Mic, RefreshCw, Search, X } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Bot, CalendarDays, Check, Copy, ExternalLink, Mail, Mic, RefreshCw, Search, Workflow, X } from "lucide-react";
 import { disconnectConnectorAction, revokeMcpGrantAction, verifyConnectorAction } from "@/app/connecteurs-actions";
 import { Badge, Button, Spinner, cn } from "@/components/ui";
+import { MakeDetail } from "./make-detail";
 import { STATE_LABEL, groupOf, type Connector, type ConnectorGroup, type ConnectorKey, type ConnectorState } from "@/lib/connectors/types";
 
-const ICON: Record<ConnectorKey, typeof Mail> = { gmail: Mail, google_calendar: CalendarDays, fireflies: Mic, claude_mcp: Bot, ubersuggest: Search };
+const ICON: Record<ConnectorKey, typeof Mail> = { gmail: Mail, google_calendar: CalendarDays, fireflies: Mic, claude_mcp: Bot, ubersuggest: Search, make: Workflow };
 const TONE: Record<ConnectorState, "success" | "danger" | "warning" | "violet" | "neutral" | "ink"> = {
   connected: "success", reconnect: "danger", sync_error: "warning", to_verify: "violet", not_connected: "neutral", claude: "neutral", unknown: "warning",
 };
@@ -149,6 +150,7 @@ function Panel({ c, busy, onClose, onVerify, onChanged }: { c: Connector; busy: 
           <ul className="list-disc space-y-0.5 pl-5 text-sm">{c.feeds.map((f) => <li key={f}>{f}</li>)}</ul>
         </Section>
 
+        {c.make && <MakeDetail initial={c.make} onChanged={onChanged} />}
         {c.mcp ? <McpDetail c={c} onChanged={onChanged} /> : (
           <>
             {(c.account || c.permissions.length > 0) && (

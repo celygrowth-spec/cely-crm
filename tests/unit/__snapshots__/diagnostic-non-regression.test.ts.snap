@@ -1,0 +1,619 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`diagnostic : inchangé > les 16 outils MCP du diagnostic : mêmes noms, mêmes descriptions, mêmes paramètres 1`] = `
+[
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+    },
+    "description": "À appeler en premier. Renvoie le prompt de diagnostic, la fiche et ses interlocuteurs, l'état du dossier, ses questions, réponses et versions, la bibliothèque de diagnostic (fichiers et prompts du dossier « Bibliothèque diagnostic »), le site du prospect capturé par le CRM et la liste des fichiers de la fiche, à lire avec read_diagnostic_site et read_diagnostic_file.",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "diagnostic_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+      },
+      "required": [
+        "diagnostic_id",
+      ],
+      "type": "object",
+    },
+    "name": "open_diagnostic",
+    "title": "Ouvrir un dossier de diagnostic",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+    },
+    "description": "Notes, échanges enregistrés, appels et rendez-vous notés sur la fiche du dossier, du plus récent au plus ancien. Pour la page suivante, passez before = date du dernier élément.",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "before": {
+          "description": "Date du dernier élément de la page précédente.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+          "type": "string",
+        },
+        "diagnostic_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+        "limit": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer",
+        },
+      },
+      "required": [
+        "diagnostic_id",
+        "limit",
+      ],
+      "type": "object",
+    },
+    "name": "list_diagnostic_history",
+    "title": "Parcourir l'historique de la fiche",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+    },
+    "description": "Emails envoyés depuis le CRM pour la fiche du dossier, avec un aperçu, du plus récent au plus ancien. Le CRM ne contient pas les emails reçus par Gmail : ils ne figurent que s'ils ont été notés dans l'historique. Pour la page suivante, passez before = date du dernier élément.",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "before": {
+          "description": "Date du dernier élément de la page précédente.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+          "type": "string",
+        },
+        "diagnostic_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+        "limit": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer",
+        },
+      },
+      "required": [
+        "diagnostic_id",
+        "limit",
+      ],
+      "type": "object",
+    },
+    "name": "list_diagnostic_emails",
+    "title": "Parcourir les emails de la fiche",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+    },
+    "description": "Texte complet du fil d'un email de la fiche, 5 messages par page (offset pour la suite). Un corps de plus de 25 000 caractères est tronqué et signalé.",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "diagnostic_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+        "mail_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+        "offset": {
+          "default": 0,
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer",
+        },
+      },
+      "required": [
+        "diagnostic_id",
+        "mail_id",
+        "offset",
+      ],
+      "type": "object",
+    },
+    "name": "get_diagnostic_email_thread",
+    "title": "Lire un fil d'emails",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+    },
+    "description": "Rendez-vous du CRM rattachés à la fiche du dossier, avec les réponses de l'invité et la note interne.",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "diagnostic_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+      },
+      "required": [
+        "diagnostic_id",
+      ],
+      "type": "object",
+    },
+    "name": "list_diagnostic_appointments",
+    "title": "Lister les rendez-vous de la fiche",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+    },
+    "description": "Appels Fireflies rattachés à la fiche du dossier, avec leur résumé et leur nombre de lignes de transcription. Pour la page suivante, passez before = date du dernier élément.",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "before": {
+          "description": "Date du dernier élément de la page précédente.",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+          "type": "string",
+        },
+        "diagnostic_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+        "limit": {
+          "default": 20,
+          "maximum": 50,
+          "minimum": 1,
+          "type": "integer",
+        },
+      },
+      "required": [
+        "diagnostic_id",
+        "limit",
+      ],
+      "type": "object",
+    },
+    "name": "list_diagnostic_calls",
+    "title": "Lister les appels Fireflies de la fiche",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+    },
+    "description": "Lignes de transcription d'un appel de la fiche du dossier. Pour la suite, augmentez offset du nombre de lignes déjà lues.",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "call_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+        "diagnostic_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+        "limit": {
+          "default": 500,
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer",
+        },
+        "offset": {
+          "default": 0,
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer",
+        },
+      },
+      "required": [
+        "diagnostic_id",
+        "call_id",
+        "offset",
+        "limit",
+      ],
+      "type": "object",
+    },
+    "name": "get_diagnostic_transcript",
+    "title": "Lire la transcription d'un appel",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+    },
+    "description": "Fichiers et rapports déposés sur la fiche du dossier.",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "diagnostic_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+      },
+      "required": [
+        "diagnostic_id",
+      ],
+      "type": "object",
+    },
+    "name": "list_diagnostic_files",
+    "title": "Lister les fichiers de la fiche",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+    },
+    "description": "Renvoie un lien de téléchargement valable 5 minutes vers un fichier de la fiche du dossier, à récupérer avec curl. Pour lire le contenu, utilisez read_diagnostic_file, qui ne demande aucun accès réseau. Ce lien ne sert qu'à obtenir le fichier lui-même (par exemple la version précédente à réviser).",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "diagnostic_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+        "file_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+      },
+      "required": [
+        "diagnostic_id",
+        "file_id",
+      ],
+      "type": "object",
+    },
+    "name": "get_diagnostic_file_url",
+    "title": "Télécharger un fichier de la fiche",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+    },
+    "description": "Renvoie le texte d'un fichier de la fiche du dossier, extrait par le CRM (texte, PDF, Word .docx), par tranches de 20 000 caractères : rappelez l'outil avec offset = suite_offset tant qu'il n'est pas nul. Pour une image, une archive ou un autre format, renvoie le nom, le type et « contenu non lisible ». Aucun lien à ouvrir.",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "diagnostic_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+        "file_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+        "offset": {
+          "default": 0,
+          "description": "Position de départ en caractères (suite_offset de l'appel précédent).",
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer",
+        },
+      },
+      "required": [
+        "diagnostic_id",
+        "file_id",
+        "offset",
+      ],
+      "type": "object",
+    },
+    "name": "read_diagnostic_file",
+    "title": "Lire un fichier de la fiche",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true,
+    },
+    "description": "Renvoie le texte d'une page du site du prospect capturé par le CRM au lancement du dossier (accueil puis pages clés : offre, tarifs, références, à propos), avec son titre, son adresse et sa date de capture. Une page par appel (numero, à partir de 1). Si la capture a échoué ou si la fiche n'a pas de site, renvoie la raison.",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "diagnostic_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+        "numero": {
+          "default": 1,
+          "maximum": 20,
+          "minimum": 1,
+          "type": "integer",
+        },
+      },
+      "required": [
+        "diagnostic_id",
+        "numero",
+      ],
+      "type": "object",
+    },
+    "name": "read_diagnostic_site",
+    "title": "Lire le site du prospect",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+    },
+    "description": "Enregistre la synthèse et les sources du dossier. Remplace la synthèse précédente. Pour chaque chiffre, donnez la source, la date et le marché.",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "diagnostic_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+        "sources": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "date": {
+                "maxLength": 50,
+                "type": "string",
+              },
+              "marche": {
+                "maxLength": 100,
+                "type": "string",
+              },
+              "nature": {
+                "description": "fait vérifié, hypothèse ou information fournie par le prospect",
+                "enum": [
+                  "fait",
+                  "hypothese",
+                  "prospect",
+                ],
+                "type": "string",
+              },
+              "titre": {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string",
+              },
+              "url": {
+                "maxLength": 1000,
+                "type": "string",
+              },
+            },
+            "required": [
+              "titre",
+              "nature",
+            ],
+            "type": "object",
+          },
+          "maxItems": 200,
+          "type": "array",
+        },
+        "summary": {
+          "maxLength": 100000,
+          "minLength": 1,
+          "type": "string",
+        },
+      },
+      "required": [
+        "diagnostic_id",
+        "summary",
+        "sources",
+      ],
+      "type": "object",
+    },
+    "name": "save_diagnostic_research",
+    "title": "Enregistrer la recherche",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+    },
+    "description": "Enregistre 10 à 20 questions pour l'utilisateur, à compléter dans le CRM. Remplace les questions précédentes tant qu'aucune réponse n'est saisie. Arrêtez-vous ensuite : la génération attend l'envoi des réponses.",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "diagnostic_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+        "questions": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "question": {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string",
+              },
+              "why": {
+                "description": "En une phrase, pourquoi cette question compte.",
+                "maxLength": 500,
+                "type": "string",
+              },
+            },
+            "required": [
+              "question",
+            ],
+            "type": "object",
+          },
+          "maxItems": 20,
+          "minItems": 10,
+          "type": "array",
+        },
+      },
+      "required": [
+        "diagnostic_id",
+        "questions",
+      ],
+      "type": "object",
+    },
+    "name": "save_diagnostic_questions",
+    "title": "Enregistrer les questions",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+    },
+    "description": "Refusé tant que les réponses ne sont pas envoyées. Pour une révision, partez du fichier de la dernière version et du retour de l'utilisateur. Ouvre la version suivante ou reprend le dépôt en cours, et renvoie une adresse de dépôt. Le livrable est un PDF (une slide par page, paysage 16:9). Envoyez-y le PDF depuis votre environnement d'exécution : curl -X PUT --data-binary @diagnostic.pdf avec l'en-tête Content-Type: application/pdf. Appelez ensuite confirm_diagnostic_version.",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "diagnostic_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+        "size_bytes": {
+          "exclusiveMinimum": 0,
+          "maximum": 26214400,
+          "type": "integer",
+        },
+      },
+      "required": [
+        "diagnostic_id",
+        "size_bytes",
+      ],
+      "type": "object",
+    },
+    "name": "start_diagnostic_version",
+    "title": "Préparer le dépôt d'une version",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+    },
+    "description": "À appeler après l'envoi. Vérifie que le stockage a bien reçu le fichier et que c'est un PDF lisible, puis marque la version comme reçue. Un autre format est refusé avec la marche à suivre : le dépôt reste ouvert, corrigez puis refaites-le. Comparez taille_recue avec la taille de votre fichier et lisez l'éventuel avertissement sur le format de page.",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "diagnostic_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+        "version": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer",
+        },
+      },
+      "required": [
+        "diagnostic_id",
+        "version",
+      ],
+      "type": "object",
+    },
+    "name": "confirm_diagnostic_version",
+    "title": "Confirmer le dépôt d'une version",
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": false,
+    },
+    "description": "Indique à l'utilisateur que le travail n'a pas abouti, avec la raison exacte.",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "diagnostic_id": {
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+          "type": "string",
+        },
+        "message": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "type": "string",
+        },
+      },
+      "required": [
+        "diagnostic_id",
+        "message",
+      ],
+      "type": "object",
+    },
+    "name": "report_diagnostic_failure",
+    "title": "Signaler un échec",
+  },
+]
+`;
+
+exports[`diagnostic : inchangé > états et messages envoyés à Claude 1`] = `
+[
+  "Diagnostic Cely, dossier ID. Avec le connecteur du CRM, appelle open_diagnostic avec cet identifiant, puis suis les consignes qu'il renvoie.",
+  "Diagnostic Cely, dossier ID : les réponses sont envoyées. Avec le connecteur du CRM, appelle open_diagnostic avec cet identifiant, lis les réponses, puis génère les slides et dépose la version dans le CRM.",
+  "Diagnostic Cely, dossier ID : une nouvelle version est demandée. Avec le connecteur du CRM, appelle open_diagnostic avec cet identifiant, applique le retour à la dernière version, puis dépose la version suivante dans le CRM.",
+]
+`;

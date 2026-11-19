@@ -19183,3 +19183,1118 @@ create policy owner_delete on public.connector_map_tools for delete to authentic
   using ((select public.is_app_owner()) and public.current_actor() = 'user');
 revoke all on public.connector_map_tools from anon;
 revoke update, truncate on public.connector_map_tools from authenticated;
+
+
+-- ===== 20261124000200_make_connecteur.sql =====
+-- Connecteur Make : scénarios enregistrés par le propriétaire, journal court des appels, retours de Make.
+--
+--   * make_scenarios : un nom et l'adresse du webhook, CHIFFRÉE par le serveur avant l'écriture (la clé reste dans
+--     l'environnement serveur). Une lecture de la base ne donne aucune adresse utilisable. Un futur scénario
+--     s'ajoute depuis Paramètres › Connecteurs, sans code.
+--   * make_calls : date, scénario, événement, statut, message d'erreur écrit par le CRM. Ni contenu envoyé, ni
+--     donnée personnelle, ni secret. Borné aux 200 dernières lignes.
+--   * make_returns : un retour de Make par couple (demande, événement) : le même retour reçu deux fois ne
+--     s'enregistre qu'une fois. La route publique passe par make_return, protégée par la clé serveur
+--     (appt_private.assert_server) ; le secret partagé avec Make est vérifié par la route, avant l'appel.
+--
+-- Migration additive : aucune table existante n'est modifiée. Réservé au propriétaire dans l'application :
+-- ni anonyme, ni autre compte, ni Claude (connecteur MCP).
+
+create table if not exists public.make_scenarios (
+  id uuid primary key default gen_random_uuid(),
+  key text not null unique check (key ~ '^[a-z0-9_]{2,40}$'),
+  name text not null check (char_length(name) between 1 and 80 and name = btrim(name)),
+  webhook_enc text not null check (webhook_enc like 'v1.%' and char_length(webhook_enc) <= 2000),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+drop trigger if exists set_updated_at on public.make_scenarios;
+create trigger set_updated_at before update on public.make_scenarios
+  for each row execute function public.tg_set_updated_at();
+
+alter table public.make_scenarios enable row level security;
+drop policy if exists owner_select on public.make_scenarios;
+create policy owner_select on public.make_scenarios for select to authenticated
+  using ((select public.is_app_owner()) and public.current_actor() = 'user');
+drop policy if exists owner_insert on public.make_scenarios;
+create policy owner_insert on public.make_scenarios for insert to authenticated
+  with check ((select public.is_app_owner()) and public.current_actor() = 'user');
+drop policy if exists owner_update on public.make_scenarios;
+create policy owner_update on public.make_scenarios for update to authenticated
+  using ((select public.is_app_owner()) and public.current_actor() = 'user')
+  with check ((select public.is_app_owner()) and public.current_actor() = 'user');
+drop policy if exists owner_delete on public.make_scenarios;
+create policy owner_delete on public.make_scenarios for delete to authenticated
+  using ((select public.is_app_owner()) and public.current_actor() = 'user');
+revoke all on public.make_scenarios from anon;
+
+create table if not exists public.make_calls (
+  id bigint generated always as identity primary key,
+  at timestamptz not null default now(),
+  direction text not null check (direction in ('out', 'in')),
+  scenario text check (scenario is null or char_length(scenario) <= 80),
+  event text not null check (char_length(event) <= 40),
+  status text not null check (status in ('ok', 'error', 'duplicate', 'ignored', 'refused', 'invalid')),
+  error text check (error is null or char_length(error) <= 300)
+);
+create index if not exists make_calls_at_idx on public.make_calls (at desc);
+
+alter table public.make_calls enable row level security;
+drop policy if exists owner_select on public.make_calls;
+create policy owner_select on public.make_calls for select to authenticated
+  using ((select public.is_app_owner()) and public.current_actor() = 'user');
+revoke all on public.make_calls from anon;
+revoke insert, update, delete on public.make_calls from authenticated;
+
+create table if not exists public.make_returns (
+  request_id uuid not null,
+  event text not null check (event in ('quote.created', 'quote.sent', 'quote.signed', 'quote.error')),
+  quote_number text check (quote_number is null or char_length(quote_number) <= 60),
+  quote_url text check (quote_url is null or (quote_url ~ '^https://' and char_length(quote_url) <= 500)),
+  signed_on date,
+  error text check (error is null or char_length(error) <= 300),
+  received_at timestamptz not null default now(),
+  primary key (request_id, event)
+);
+
+alter table public.make_returns enable row level security;
+drop policy if exists owner_select on public.make_returns;
+create policy owner_select on public.make_returns for select to authenticated
+  using ((select public.is_app_owner()) and public.current_actor() = 'user');
+revoke all on public.make_returns from anon;
+revoke insert, update, delete on public.make_returns from authenticated;
+
+-- Écriture du journal : interne (appelée par les fonctions ci-dessous seulement).
+create schema if not exists make_private;
+revoke all on schema make_private from public, anon, authenticated;
+
+create or replace function make_private.log(p_direction text, p_scenario text, p_event text, p_status text, p_error text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  insert into public.make_calls (direction, scenario, event, status, error)
+  values (p_direction, left(p_scenario, 80), left(coalesce(p_event, 'inconnu'), 40), p_status, left(p_error, 300));
+  delete from public.make_calls where id <= (select max(id) - 200 from public.make_calls);
+end;
+$$;
+revoke execute on function make_private.log(text, text, text, text, text) from public, anon, authenticated;
+
+-- Appel sortant : le serveur de l'application note son résultat (jamais le contenu envoyé).
+create or replace function public.make_log_call(p_scenario text, p_event text, p_ok boolean, p_error text default null)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform public.assert_owner();
+  if public.current_actor() <> 'user' then
+    raise exception 'Les appels à Make se font dans l''application.' using errcode = '42501';
+  end if;
+  perform make_private.log('out', p_scenario, p_event, case when p_ok then 'ok' else 'error' end, case when p_ok then null else p_error end);
+end;
+$$;
+revoke execute on function public.make_log_call(text, text, boolean, text) from public, anon;
+grant execute on function public.make_log_call(text, text, boolean, text) to authenticated;
+
+-- Retour de Make. p_outcome : 'valid' (secret accepté, contenu validé par la route), 'refused' (secret refusé)
+-- ou 'invalid' (contenu refusé). Renvoie : recorded, duplicate, refused, invalid ou rate_limited.
+-- Au plus 60 retours par minute, tous cas confondus : au-delà, rien n'est écrit.
+create or replace function public.make_return(
+  p_server_key text, p_outcome text, p_event text default null, p_request_id uuid default null,
+  p_quote_number text default null, p_quote_url text default null, p_signed_on date default null, p_error text default null)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare v_event text := case when p_event in ('quote.created', 'quote.sent', 'quote.signed', 'quote.error') then p_event else 'inconnu' end;
+begin
+  perform appt_private.assert_server(p_server_key);
+  -- un seul retour à la fois : le compteur ne se contourne pas par des appels simultanés
+  perform pg_advisory_xact_lock(hashtext('cely_make_return'));
+  if (select count(*) from public.make_calls where direction = 'in' and at > now() - interval '1 minute') >= 60 then
+    return 'rate_limited';
+  end if;
+  if p_outcome = 'refused' then
+    perform make_private.log('in', null, v_event, 'refused', 'Secret refusé.');
+    return 'refused';
+  end if;
+  if p_outcome is distinct from 'valid' or v_event = 'inconnu' or p_request_id is null
+     or char_length(coalesce(p_quote_number, '')) > 60
+     or (p_quote_url is not null and (p_quote_url !~ '^https://' or char_length(p_quote_url) > 500))
+     or char_length(coalesce(p_error, '')) > 300 then
+    perform make_private.log('in', null, v_event, 'invalid', 'Contenu refusé.');
+    return 'invalid';
+  end if;
+  insert into public.make_returns (request_id, event, quote_number, quote_url, signed_on, error)
+  values (p_request_id, v_event, nullif(btrim(p_quote_number), ''), p_quote_url, p_signed_on, nullif(btrim(p_error), ''))
+  on conflict (request_id, event) do nothing;
+  if not found then
+    perform make_private.log('in', null, v_event, 'duplicate', null);
+    return 'duplicate';
+  end if;
+  perform make_private.log('in', null, v_event, case when v_event = 'quote.error' then 'error' else 'ok' end,
+                           case when v_event = 'quote.error' then 'Erreur signalée par Make.' end);
+  return 'recorded';
+end;
+$$;
+revoke execute on function public.make_return(text, text, text, uuid, text, text, date, text) from public;
+grant execute on function public.make_return(text, text, text, uuid, text, text, date, text) to anon, authenticated;
+
+
+-- ===== 20261124000300_generateurs_socle.sql =====
+-- Socle commun des générateurs (proposition, onboarding), sur le modèle du dossier de diagnostic.
+--
+--   * generator_settings : sélection par défaut de la bibliothèque, par générateur.
+--   * generator_dossiers : un dossier par demande (clé : un double clic rend le même), sources décochées,
+--     sélection de bibliothèque ajustée pour ce dossier, état du lancement de la tâche Claude.
+--   * generator_answers : une réponse par question, avec sa provenance. Une réponse corrigée par le propriétaire
+--     n'est jamais remplacée par le CRM ou par Claude.
+--   * generator_versions : v1, v2… avec les réponses qui l'ont produite. Une version validée ne se modifie plus.
+--
+-- Les questions vivent dans des fichiers de contenu de l'application (src/content/generators) : la base ne
+-- connaît que leur clé. Le diagnostic n'est pas modifié par cette migration.
+-- Droits : lecture pour le propriétaire (application et Claude). Créer, répondre en tant que propriétaire,
+-- générer, valider et envoyer sont réservés à l'application. Claude ne lit une source que par generator_read,
+-- pour la fiche du dossier, et seulement si elle n'a pas été décochée.
+
+create table if not exists public.generator_settings (
+  kind text primary key check (kind in ('proposal', 'onboarding')),
+  library_item_ids uuid[] not null default '{}' check (cardinality(library_item_ids) <= 60),
+  updated_at timestamptz not null default now()
+);
+-- au départ : la charte (« Marque et design ») de la bibliothèque de diagnostic, pour garder la même DA
+insert into public.generator_settings (kind, library_item_ids)
+select k, coalesce((select array_agg(f.id) from public.diagnostic_library_files f where f.status = 'ready' and f.category = 'brand'), '{}')
+  from unnest(array['proposal', 'onboarding']) k
+on conflict (kind) do nothing;
+
+create table if not exists public.generator_dossiers (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null check (kind in ('proposal', 'onboarding')),
+  company_id uuid not null references public.companies (id) on delete restrict,
+  project_id uuid references public.projects (id) on delete set null,
+  request_key text not null unique check (char_length(request_key) between 8 and 100),
+  excluded_sources text[] not null default '{}' check (cardinality(excluded_sources) <= 500),
+  library_item_ids uuid[] not null default '{}' check (cardinality(library_item_ids) <= 60),
+  prefill_state text not null default 'none' check (prefill_state in ('none', 'requested', 'done', 'failed')),
+  trigger_ref text check (trigger_ref is null or char_length(trigger_ref) <= 40),
+  triggered_at timestamptz,
+  trigger_error text check (trigger_error is null or char_length(trigger_error) <= 500),
+  session_url text check (session_url is null or (char_length(session_url) <= 500 and session_url ~ '^https://claude\.ai/')),
+  last_error text check (last_error is null or char_length(last_error) <= 2000),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists generator_dossiers_company_idx on public.generator_dossiers (company_id, kind, created_at desc);
+drop trigger if exists set_updated_at on public.generator_dossiers;
+create trigger set_updated_at before update on public.generator_dossiers
+  for each row execute function public.tg_set_updated_at();
+
+create table if not exists public.generator_answers (
+  dossier_id uuid not null references public.generator_dossiers (id) on delete cascade,
+  question_key text not null check (question_key ~ '^[a-z0-9_]{2,60}$'),
+  value jsonb not null check (pg_column_size(value) <= 60000),
+  provenance text check (provenance is null or char_length(provenance) <= 200),
+  origin text not null check (origin in ('crm', 'claude', 'owner')),
+  updated_at timestamptz not null default now(),
+  primary key (dossier_id, question_key)
+);
+
+create table if not exists public.generator_versions (
+  id uuid primary key default gen_random_uuid(),
+  dossier_id uuid not null references public.generator_dossiers (id) on delete cascade,
+  version integer not null check (version >= 1),
+  request_key text not null unique check (char_length(request_key) between 8 and 100),
+  answers jsonb not null default '{}' check (jsonb_typeof(answers) = 'object'),
+  sources jsonb not null default '[]' check (jsonb_typeof(sources) = 'array'),
+  library_item_ids uuid[] not null default '{}',
+  feedback text check (feedback is null or char_length(feedback) <= 10000),
+  slides_status text not null default 'pending' check (slides_status in ('pending', 'uploading', 'ready', 'failed')),
+  slides_error text check (slides_error is null or char_length(slides_error) <= 2000),
+  file_id uuid references public.company_files (id) on delete set null,
+  ready_at timestamptz,
+  validated_at timestamptz,
+  sent_at timestamptz,
+  sent_mail_id uuid references public.mail_messages (id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (dossier_id, version)
+);
+create unique index if not exists generator_versions_one_open on public.generator_versions (dossier_id) where slides_status in ('pending', 'uploading');
+
+-- Une version validée est figée : réponses, sources, bibliothèque et fichier ne changent plus (ni par l'application,
+-- ni par Claude, ni par une autre fonction). Seuls « envoyée » et le retrait du fichier de la fiche restent possibles.
+create or replace function public.tg_generator_version_frozen()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if old.validated_at is not null and (
+       new.answers is distinct from old.answers or new.sources is distinct from old.sources
+       or new.library_item_ids is distinct from old.library_item_ids or new.feedback is distinct from old.feedback
+       or new.slides_status is distinct from old.slides_status or new.version is distinct from old.version
+       or new.validated_at is distinct from old.validated_at
+       or (new.file_id is distinct from old.file_id and new.file_id is not null)) then
+    raise exception 'La version V% est validée : elle ne se modifie plus. Créez une nouvelle version.', old.version using errcode = '22023';
+  end if;
+  return new;
+end; $$;
+drop trigger if exists generator_version_frozen on public.generator_versions;
+create trigger generator_version_frozen before update on public.generator_versions
+  for each row execute function public.tg_generator_version_frozen();
+
+create or replace function public.tg_companies_merge_generators()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if new.merged_into_id is not null and old.merged_into_id is null then
+    update public.generator_dossiers set company_id = new.merged_into_id where company_id = new.id;
+  end if;
+  return null;
+end; $$;
+drop trigger if exists companies_merge_generators on public.companies;
+create trigger companies_merge_generators after update of merged_into_id on public.companies
+  for each row execute function public.tg_companies_merge_generators();
+
+do $$
+declare t text;
+begin
+  foreach t in array array['generator_settings', 'generator_dossiers', 'generator_answers', 'generator_versions'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists owner_select on public.%I', t);
+    execute format('create policy owner_select on public.%I for select to authenticated using ((select public.is_app_owner()))', t);
+    execute format('revoke all on public.%I from public, anon, authenticated', t);
+    execute format('grant select on public.%I to authenticated', t);
+  end loop;
+  foreach t in array array['generator_dossiers', 'generator_versions'] loop
+    execute format('drop trigger if exists activity_log on public.%I', t);
+    execute format('create trigger activity_log after insert or update or delete on public.%I for each row execute function public.tg_activity_log()', t);
+  end loop;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Réglage : sélection par défaut de la bibliothèque
+-- ---------------------------------------------------------------------------
+create or replace function public.generator_clean_library(p_items uuid[])
+returns uuid[] language sql stable security definer set search_path = '' as $$
+  select coalesce(array_agg(f.id order by f.display_name), '{}')
+    from public.diagnostic_library_files f where f.id = any (coalesce(p_items, '{}')) and f.status = 'ready';
+$$;
+
+create or replace function public.generator_set_default_library(p_kind text, p_items uuid[])
+returns uuid[] language plpgsql security definer set search_path = '' as $$
+declare v uuid[];
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Sélection de la bibliothèque');
+  v := public.generator_clean_library(p_items);
+  update public.generator_settings set library_item_ids = v, updated_at = now() where kind = p_kind;
+  if not found then raise exception 'Générateur inconnu' using errcode = '22023'; end if;
+  return v;
+end; $$;
+
+-- ---------------------------------------------------------------------------
+-- Dossier
+-- ---------------------------------------------------------------------------
+create or replace function public.generator_start(p_kind text, p_company uuid, p_project uuid, p_key text)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_id uuid; v_new boolean := false;
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Création d''un dossier');
+  if p_kind not in ('proposal', 'onboarding') then raise exception 'Générateur inconnu' using errcode = '22023'; end if;
+  if p_project is not null and not exists (select 1 from public.projects where id = p_project and company_id = p_company) then
+    raise exception 'Ce projet n''appartient pas à cette fiche' using errcode = '22023';
+  end if;
+  insert into public.generator_dossiers (kind, company_id, project_id, request_key, library_item_ids)
+  select p_kind, p_company, p_project, p_key, public.generator_clean_library(s.library_item_ids)
+    from public.generator_settings s where s.kind = p_kind
+  on conflict (request_key) do nothing
+  returning id into v_id;
+  v_new := v_id is not null;
+  if v_id is null then
+    select id into v_id from public.generator_dossiers where request_key = p_key and company_id = p_company and kind = p_kind;
+  end if;
+  if v_id is null then raise exception 'Demande invalide' using errcode = '22023'; end if;
+  return jsonb_build_object('id', v_id, 'created', v_new);
+end; $$;
+
+create or replace function public.generator_company(p_id uuid)
+returns uuid language plpgsql stable security definer set search_path = '' as $$
+declare v uuid;
+begin
+  perform public.assert_owner();
+  select company_id into v from public.generator_dossiers where id = p_id;
+  if v is null then raise exception 'Dossier introuvable' using errcode = 'P0002'; end if;
+  return v;
+end; $$;
+
+-- Sélection du dossier : sources décochées et éléments de bibliothèque, ajustables jusqu'à la génération.
+create or replace function public.generator_set_selection(p_id uuid, p_excluded text[], p_library uuid[])
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Choix des sources');
+  update public.generator_dossiers
+     set excluded_sources = coalesce((select array_agg(distinct x) from unnest(coalesce(p_excluded, '{}')) x
+                                       where x <> 'fiche' and x ~ '^[a-z_]{2,20}(:[0-9a-f-]{36})?$'), '{}'),
+         library_item_ids = case when p_library is null then library_item_ids else public.generator_clean_library(p_library) end
+   where id = p_id;
+  if not found then raise exception 'Dossier introuvable' using errcode = 'P0002'; end if;
+end; $$;
+
+-- Réponses. p_answers : [{ "key", "value", "provenance" }]. Le propriétaire écrit toujours ; le CRM et Claude ne
+-- remplacent jamais une réponse du propriétaire, et le CRM ne remplace pas une réponse proposée par Claude.
+-- Un appel venu de Claude est toujours enregistré comme tel, quel que soit p_origin.
+create or replace function public.generator_save_answers(p_id uuid, p_answers jsonb, p_origin text)
+returns integer language plpgsql security definer set search_path = '' as $$
+declare v_origin text := case when public.current_actor() = 'claude' then 'claude' else p_origin end; v_count integer;
+begin
+  perform public.assert_owner();
+  if v_origin not in ('crm', 'claude', 'owner') then raise exception 'Origine invalide' using errcode = '22023'; end if;
+  if jsonb_typeof(p_answers) <> 'array' or jsonb_array_length(p_answers) > 100 then raise exception 'Réponses invalides' using errcode = '22023'; end if;
+  perform 1 from public.generator_dossiers where id = p_id for update;
+  if not found then raise exception 'Dossier introuvable' using errcode = 'P0002'; end if;
+  -- une réponse vidée par le propriétaire disparaît : la question redevient « à compléter »
+  if v_origin = 'owner' then
+    delete from public.generator_answers a using jsonb_array_elements(p_answers) e
+     where a.dossier_id = p_id and a.question_key = e ->> 'key'
+       and (e -> 'value' is null or e -> 'value' in ('null'::jsonb, '""'::jsonb, '[]'::jsonb));
+  end if;
+  with incoming as (
+    select e ->> 'key' as k, e -> 'value' as v, nullif(btrim(left(e ->> 'provenance', 200)), '') as p
+      from jsonb_array_elements(p_answers) e
+     where e ->> 'key' ~ '^[a-z0-9_]{2,60}$' and e -> 'value' is not null and e -> 'value' not in ('null'::jsonb, '""'::jsonb, '[]'::jsonb)
+  ), written as (
+    insert into public.generator_answers as a (dossier_id, question_key, value, provenance, origin)
+    select p_id, k, v, case when v_origin = 'owner' then null else p end, v_origin from incoming
+    on conflict (dossier_id, question_key) do update
+      set value = excluded.value, provenance = excluded.provenance, origin = excluded.origin, updated_at = now()
+      where v_origin = 'owner' or (v_origin = 'claude' and a.origin <> 'owner') or (v_origin = 'crm' and a.origin = 'crm')
+    returning 1
+  )
+  select count(*) into v_count from written;
+  if v_origin = 'claude' then
+    update public.generator_dossiers set prefill_state = 'done', last_error = null where id = p_id and prefill_state in ('requested', 'failed');
+  end if;
+  return v_count;
+end; $$;
+
+-- ---------------------------------------------------------------------------
+-- Sources : ce que le CRM sait déjà sur la fiche du dossier, et ce qui est retenu
+-- ---------------------------------------------------------------------------
+create or replace function public.generator_sources(p_id uuid)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_company uuid := public.generator_company(p_id); v_excluded text[];
+begin
+  select excluded_sources into v_excluded from public.generator_dossiers where id = p_id;
+  return (
+    select coalesce(jsonb_agg(jsonb_build_object('cle', s.cle, 'type', s.type, 'titre', s.titre, 'date', s.at,
+                                                 'retenue', not (s.cle = any (v_excluded))) order by s.rang, s.at desc nulls last), '[]')
+    from (
+      select 'fiche' as cle, 'fiche' as type, c.name as titre, c.updated_at as at, 0 as rang from public.companies c where c.id = v_company
+      union all
+      select 'personnes', 'personnes', count(*) || ' interlocuteur(s)', max(p.updated_at), 1 from public.people p where p.company_id = v_company having count(*) > 0
+      union all
+      select 'diagnostic:' || d.id, 'diagnostic', 'Diagnostic', d.created_at, 2 from public.diagnostics d
+       where d.company_id = v_company and (d.summary is not null or exists (select 1 from public.diagnostic_versions v where v.diagnostic_id = d.id and v.status = 'ready'))
+      union all
+      select 'proposition:' || v.id, 'proposition', 'Proposition V' || v.version, coalesce(v.sent_at, v.validated_at), 3
+        from public.generator_versions v join public.generator_dossiers g on g.id = v.dossier_id
+       where g.company_id = v_company and g.kind = 'proposal' and v.validated_at is not null and g.id <> p_id
+      union all
+      select 'appel:' || f.id, 'appel', f.title, f.occurred_at, 4 from public.fireflies_calls f where f.company_id = v_company and f.link_state = 'linked'
+      union all
+      select 'email:' || m.id, 'email', coalesce(nullif(m.subject, ''), '(sans objet)'), m.sent_at, 5 from public.mail_messages m where m.company_id = v_company and m.status = 'accepted'
+      union all
+      select 'rdv:' || b.id, 'rdv', 'Rendez-vous', b.starts_at, 6 from public.appt_bookings b where b.company_id = v_company and b.status = 'confirmed'
+      union all
+      select 'notes', 'notes', count(*) || ' note(s) et échange(s) de l''historique', max(i.occurred_at), 7 from public.interactions i
+       where i.company_id = v_company and i.kind in ('note', 'message_in', 'message_out', 'call', 'meeting') having count(*) > 0
+      union all
+      select 'fichier:' || cf.id, 'fichier', cf.display_name, cf.created_at, 8 from public.company_files cf where cf.company_id = v_company and cf.status = 'ready'
+    ) s
+  );
+end; $$;
+
+-- Une source n'est lisible que si elle appartient à la fiche du dossier et n'a pas été décochée.
+create or replace function public.generator_source_allowed(p_id uuid, p_key text)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from jsonb_array_elements(public.generator_sources(p_id)) e where e ->> 'cle' = p_key and (e ->> 'retenue')::boolean);
+$$;
+
+-- Lecture d'une source par sa clé (« appel:<id> », « email:<id> », « notes »…), par pages.
+create or replace function public.generator_read(p_id uuid, p_key text, p_offset integer default 0, p_limit integer default 200)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_company uuid := public.generator_company(p_id);
+  v_type text := split_part(p_key, ':', 1);
+  v_ref uuid := case when p_key ~ ':[0-9a-f-]{36}$' then split_part(p_key, ':', 2)::uuid end;
+  v_off integer := greatest(coalesce(p_offset, 0), 0);
+  v_lim integer := least(greatest(coalesce(p_limit, 200), 1), 1000);
+  v_lines jsonb; v_thread text;
+begin
+  if not public.generator_source_allowed(p_id, p_key) then
+    raise exception 'Source introuvable ou écartée pour ce dossier' using errcode = 'P0002';
+  end if;
+  if v_type = 'fiche' then
+    return (select jsonb_build_object('nom', c.name, 'site', c.website, 'description', c.description, 'montant', c.amount,
+                                      'montant_mensuel', c.amount_recurring, 'tags', c.tags,
+                                      'pipeline', (select name from public.pipelines where id = c.pipeline_id),
+                                      'etape', (select name from public.stages where id = c.stage_id), 'statut', c.deal_status)
+              from public.companies c where c.id = v_company);
+  elsif v_type = 'personnes' then
+    return (select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'prenom', p.first_name, 'nom', p.last_name, 'fonction', p.title,
+                                                         'email', p.email, 'telephone', p.phone, 'principal', p.is_primary)
+                                      order by p.is_primary desc, p.created_at), '[]')
+              from public.people p where p.company_id = v_company);
+  elsif v_type = 'diagnostic' then
+    return (select jsonb_build_object('synthese', d.summary, 'sources', d.sources,
+              'questions', (select coalesce(jsonb_agg(jsonb_build_object('question', q.question, 'reponse', case when q.dont_know then 'Je ne sais pas' else q.answer end) order by q.position), '[]')
+                              from public.diagnostic_questions q where q.diagnostic_id = d.id),
+              'derniere_version', (select jsonb_build_object('version', v.version, 'fichier', 'fichier:' || v.file_id, 'validee_le', v.validated_at)
+                                     from public.diagnostic_versions v where v.diagnostic_id = d.id and v.status = 'ready' order by v.version desc limit 1))
+              from public.diagnostics d where d.id = v_ref and d.company_id = v_company);
+  elsif v_type = 'proposition' then
+    return (select jsonb_build_object('version', v.version, 'validee_le', v.validated_at, 'envoyee_le', v.sent_at, 'reponses', v.answers,
+                                      'fichier', case when v.file_id is not null then 'fichier:' || v.file_id end)
+              from public.generator_versions v join public.generator_dossiers g on g.id = v.dossier_id
+             where v.id = v_ref and g.company_id = v_company);
+  elsif v_type = 'appel' then
+    select t.lines into v_lines from public.fireflies_calls c left join public.fireflies_call_transcripts t on t.call_id = c.id
+     where c.id = v_ref and c.company_id = v_company and c.link_state = 'linked';
+    return (select jsonb_build_object('titre', c.title, 'date', c.occurred_at, 'duree_minutes', c.duration_minutes, 'participants', c.participants,
+              'resume', c.summary, 'note_interne', c.internal_note, 'total_lignes', coalesce(jsonb_array_length(v_lines), 0),
+              'lignes', coalesce((select jsonb_agg(e order by ord) from jsonb_array_elements(coalesce(v_lines, '[]')) with ordinality as t(e, ord)
+                                   where ord > v_off and ord <= v_off + v_lim), '[]'))
+              from public.fireflies_calls c where c.id = v_ref);
+  elsif v_type = 'email' then
+    select provider_thread_id into v_thread from public.mail_messages where id = v_ref and company_id = v_company and status = 'accepted';
+    return (select coalesce(jsonb_agg(jsonb_build_object('date', m.sent_at, 'a', m.to_addrs, 'cc', m.cc_addrs, 'objet', m.subject, 'corps', m.body_text) order by m.sent_at), '[]')
+              from (select * from public.mail_messages
+                     where company_id = v_company and status = 'accepted' and (id = v_ref or (v_thread is not null and provider_thread_id = v_thread))
+                     order by sent_at offset v_off limit least(v_lim, 20)) m);
+  elsif v_type = 'rdv' then
+    return (select jsonb_build_object('debut', b.starts_at, 'fin', b.ends_at, 'issue', b.outcome, 'prenom', b.first_name, 'nom', b.last_name,
+                                      'reponses', b.answers, 'note_interne', b.internal_note)
+              from public.appt_bookings b where b.id = v_ref and b.company_id = v_company);
+  elsif v_type = 'notes' then
+    return (select coalesce(jsonb_agg(jsonb_build_object('date', i.occurred_at, 'type', i.kind, 'canal', i.channel, 'texte', i.content) order by i.occurred_at desc), '[]')
+              from (select * from public.interactions where company_id = v_company and kind in ('note', 'message_in', 'message_out', 'call', 'meeting')
+                     order by occurred_at desc offset v_off limit least(v_lim, 100)) i);
+  elsif v_type = 'fichier' then
+    return (select jsonb_build_object('id', f.id, 'nom', f.display_name, 'type', f.mime_type, 'categorie', f.category, 'taille_octets', f.size_bytes)
+              from public.company_files f where f.id = v_ref and f.company_id = v_company and f.status = 'ready');
+  end if;
+  raise exception 'Source inconnue' using errcode = '22023';
+end; $$;
+
+-- ---------------------------------------------------------------------------
+-- Lancement de la tâche Claude : une étape (p_ref : « prefill », « slides:3 »…) ne se réserve qu'une fois.
+-- Un échec, ou dix minutes sans résultat (session fermée, délai dépassé), la rend relançable.
+-- ---------------------------------------------------------------------------
+create or replace function public.generator_claim_trigger(p_id uuid, p_ref text)
+returns boolean language plpgsql security definer set search_path = '' as $$
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Lancement d''une génération');
+  update public.generator_dossiers
+     set trigger_ref = p_ref, triggered_at = now(), trigger_error = null, last_error = null,
+         prefill_state = case when p_ref = 'prefill' then 'requested' else prefill_state end
+   where id = p_id
+     and (trigger_ref is distinct from p_ref or trigger_error is not null or last_error is not null or triggered_at < now() - interval '10 minutes');
+  return found;
+end; $$;
+
+create or replace function public.generator_trigger_result(p_id uuid, p_session_url text, p_error text)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Lancement d''une génération');
+  update public.generator_dossiers
+     set session_url = coalesce(p_session_url, session_url), trigger_error = left(p_error, 500),
+         prefill_state = case when p_error is not null and trigger_ref = 'prefill' then 'failed' else prefill_state end
+   where id = p_id;
+end; $$;
+
+-- Échec signalé par la session Claude (ou par l'application) : l'étape en cours devient relançable, les réponses restent.
+create or replace function public.generator_report_failure(p_id uuid, p_message text)
+returns void language plpgsql security definer set search_path = '' as $$
+declare v_msg text := left(coalesce(nullif(btrim(p_message), ''), 'La génération a échoué.'), 2000);
+begin
+  perform public.assert_owner();
+  update public.generator_dossiers set last_error = v_msg,
+         prefill_state = case when prefill_state = 'requested' then 'failed' else prefill_state end
+   where id = p_id;
+  if not found then raise exception 'Dossier introuvable' using errcode = 'P0002'; end if;
+  update public.generator_versions set slides_status = 'failed', slides_error = v_msg
+   where dossier_id = p_id and slides_status in ('pending', 'uploading');
+end; $$;
+
+-- ---------------------------------------------------------------------------
+-- Versions
+-- ---------------------------------------------------------------------------
+-- « Générer » : fige les réponses du moment dans la version suivante. La même clé (double clic, reprise) rend la
+-- même version ; une génération déjà en cours est rendue telle quelle : jamais deux versions pour un clic.
+create or replace function public.generator_generate(p_id uuid, p_key text, p_feedback text default null)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v public.generator_versions; v_dossier public.generator_dossiers;
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Génération');
+  select * into v_dossier from public.generator_dossiers where id = p_id for update;
+  if v_dossier.id is null then raise exception 'Dossier introuvable' using errcode = 'P0002'; end if;
+  select * into v from public.generator_versions where request_key = p_key;
+  if v.id is not null and v.dossier_id <> p_id then raise exception 'Demande invalide' using errcode = '22023'; end if;
+  if v.id is null then
+    select * into v from public.generator_versions where dossier_id = p_id and slides_status in ('pending', 'uploading');
+  end if;
+  if v.id is not null then
+    return jsonb_build_object('id', v.id, 'version', v.version, 'created', false);
+  end if;
+  insert into public.generator_versions (dossier_id, version, request_key, answers, sources, library_item_ids, feedback)
+  select p_id,
+         coalesce((select max(version) from public.generator_versions where dossier_id = p_id), 0) + 1,
+         p_key,
+         coalesce((select jsonb_object_agg(a.question_key, jsonb_build_object('value', a.value, 'provenance', a.provenance, 'origin', a.origin))
+                     from public.generator_answers a where a.dossier_id = p_id), '{}'),
+         coalesce((select jsonb_agg(e) from jsonb_array_elements(public.generator_sources(p_id)) e where (e ->> 'retenue')::boolean), '[]'),
+         public.generator_clean_library(v_dossier.library_item_ids),
+         nullif(btrim(p_feedback), '')
+  returning * into v;
+  update public.generator_dossiers set last_error = null where id = p_id;
+  return jsonb_build_object('id', v.id, 'version', v.version, 'created', true);
+end; $$;
+
+-- Relance des slides d'une version en échec (les réponses de la version ne changent pas).
+create or replace function public.generator_retry_slides(p_version uuid)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare v_dossier uuid;
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Relance d''une génération');
+  update public.generator_versions set slides_status = 'pending', slides_error = null
+   where id = p_version and slides_status = 'failed' and validated_at is null returning dossier_id into v_dossier;
+  if v_dossier is not null then
+    -- l'étape est libérée une seule fois : un double clic sur « Réessayer » ne lance qu'une session
+    update public.generator_dossiers set last_error = null, trigger_ref = null where id = v_dossier;
+    return v_dossier;
+  end if;
+  -- génération interrompue sans échec signalé : relançable après dix minutes (generator_claim_trigger)
+  select dossier_id into v_dossier from public.generator_versions where id = p_version and slides_status in ('pending', 'uploading');
+  if v_dossier is null then raise exception 'Cette version n''est pas à relancer' using errcode = '22023'; end if;
+  return v_dossier;
+end; $$;
+
+-- Dépôt du PDF par la session : ouvre (ou reprend) le dépôt de la version en cours.
+create or replace function public.generator_version_open(p_id uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v public.generator_versions; v_company uuid;
+begin
+  perform public.assert_owner();
+  select company_id into v_company from public.generator_dossiers where id = p_id for update;
+  if v_company is null then raise exception 'Dossier introuvable' using errcode = 'P0002'; end if;
+  select * into v from public.generator_versions where dossier_id = p_id and slides_status in ('pending', 'uploading', 'failed') and validated_at is null
+   order by version desc limit 1;
+  if v.id is null then
+    raise exception 'Aucune version à produire : la génération se lance dans l''application' using errcode = '22023';
+  end if;
+  update public.generator_versions set slides_status = 'uploading', slides_error = null where id = v.id;
+  return jsonb_build_object('id', v.id, 'version', v.version, 'file_id', v.file_id, 'company_id', v_company);
+end; $$;
+
+create or replace function public.generator_version_attach(p_version uuid, p_file uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  perform public.assert_owner();
+  update public.generator_versions v set file_id = p_file
+    from public.generator_dossiers d, public.company_files f
+   where v.id = p_version and v.slides_status = 'uploading' and d.id = v.dossier_id and f.id = p_file and f.company_id = d.company_id;
+  if not found then raise exception 'Fichier ou version invalide' using errcode = '22023'; end if;
+end; $$;
+
+create or replace function public.generator_version_ready(p_id uuid, p_version integer)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  perform public.assert_owner();
+  update public.generator_versions set slides_status = 'ready', ready_at = now(), slides_error = null
+   where dossier_id = p_id and version = p_version and slides_status = 'uploading' and file_id is not null;
+  if not found then raise exception 'Aucun dépôt en cours pour cette version' using errcode = '22023'; end if;
+  update public.generator_dossiers set last_error = null, trigger_error = null where id = p_id;
+end; $$;
+
+-- Validation : réservée au propriétaire, dans l'application. Répétée, elle ne change rien.
+create or replace function public.generator_validate(p_version uuid)
+returns timestamptz language plpgsql security definer set search_path = '' as $$
+declare v public.generator_versions;
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Validation');
+  select * into v from public.generator_versions where id = p_version for update;
+  if v.id is null then raise exception 'Version introuvable' using errcode = 'P0002'; end if;
+  if v.validated_at is not null then return v.validated_at; end if;
+  if v.slides_status <> 'ready' then raise exception 'Les slides de cette version ne sont pas encore reçues' using errcode = '22023'; end if;
+  update public.generator_versions set validated_at = now() where id = p_version returning validated_at into v.validated_at;
+  return v.validated_at;
+end; $$;
+
+-- Envoi : noté une seule fois, sur une version validée.
+create or replace function public.generator_mark_sent(p_version uuid, p_mail uuid default null)
+returns timestamptz language plpgsql security definer set search_path = '' as $$
+declare v public.generator_versions;
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Envoi');
+  select * into v from public.generator_versions where id = p_version for update;
+  if v.id is null then raise exception 'Version introuvable' using errcode = 'P0002'; end if;
+  if v.validated_at is null then raise exception 'Validez la version avant de l''envoyer' using errcode = '22023'; end if;
+  if v.sent_at is not null then return v.sent_at; end if;
+  update public.generator_versions set sent_at = now(), sent_mail_id = p_mail where id = p_version returning sent_at into v.sent_at;
+  return v.sent_at;
+end; $$;
+
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'generator_clean_library(uuid[])', 'generator_set_default_library(text, uuid[])', 'generator_start(text, uuid, uuid, text)',
+    'generator_company(uuid)', 'generator_set_selection(uuid, text[], uuid[])', 'generator_save_answers(uuid, jsonb, text)',
+    'generator_sources(uuid)', 'generator_source_allowed(uuid, text)', 'generator_read(uuid, text, integer, integer)',
+    'generator_claim_trigger(uuid, text)', 'generator_trigger_result(uuid, text, text)', 'generator_report_failure(uuid, text)',
+    'generator_generate(uuid, text, text)', 'generator_retry_slides(uuid)', 'generator_version_open(uuid)',
+    'generator_version_attach(uuid, uuid)', 'generator_version_ready(uuid, integer)', 'generator_validate(uuid)', 'generator_mark_sent(uuid, uuid)']
+  loop
+    execute format('revoke all on function public.%s from public, anon', f);
+    execute format('grant execute on function public.%s to authenticated', f);
+  end loop;
+  foreach f in array array['tg_generator_version_frozen()', 'tg_companies_merge_generators()'] loop
+    execute format('revoke all on function public.%s from public, anon, authenticated', f);
+  end loop;
+end $$;
+
+
+-- ===== 20261124000400_diagnostic_validation.sql =====
+-- Diagnostic : validation d'une version reçue. Ajout pur : le parcours existant (questions, versions, révisions)
+-- ne change pas. « Diagnostic validé » sert de repère à la suite du parcours (email de présentation, proposition).
+-- Réservée au propriétaire, dans l'application ; répétée, elle ne change rien.
+
+alter table public.diagnostic_versions add column if not exists validated_at timestamptz;
+
+create or replace function public.diagnostic_validate(p_id uuid, p_version integer)
+returns timestamptz language plpgsql security definer set search_path = '' as $$
+declare v_at timestamptz; v_status text;
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Validation du diagnostic');
+  select validated_at, status into v_at, v_status from public.diagnostic_versions where diagnostic_id = p_id and version = p_version for update;
+  if not found then raise exception 'Version introuvable' using errcode = 'P0002'; end if;
+  if v_at is not null then return v_at; end if;
+  if v_status <> 'ready' then raise exception 'Cette version n''est pas encore reçue' using errcode = '22023'; end if;
+  update public.diagnostic_versions set validated_at = now() where diagnostic_id = p_id and version = p_version returning validated_at into v_at;
+  return v_at;
+end; $$;
+revoke all on function public.diagnostic_validate(uuid, integer) from public, anon;
+grant execute on function public.diagnostic_validate(uuid, integer) to authenticated;
+
+
+-- ===== 20261124000500_propositions_devis.sql =====
+-- Proposition : devis créé par Make pour une version, et retours de Make appliqués au devis.
+--
+--   * quotes : un devis, avec ce qui part à Make (client, signataire, lignes : figé à la génération, les montants
+--     viennent des réponses du questionnaire), son identifiant de demande (repris par Make dans ses retours),
+--     son état, puis le numéro et le lien renvoyés par Make.
+--   * proposal_versions : le devis d'une version de proposition. La version est la clé : jamais deux devis pour
+--     une même version. Une nouvelle version dont le devis n'a pas changé garde le même devis (rien n'est recréé).
+--
+-- Écritures liées en une opération : proposal_generate crée la version ET son devis, ou rien.
+-- Droits : lecture pour le propriétaire dans l'application (pas pour Claude : coordonnées de facturation).
+-- Aucun appel à Make sans action du propriétaire dans l'application : la réservation d'un envoi (proposal_quote_claim)
+-- est refusée à Claude.
+
+create table if not exists public.quotes (
+  id uuid primary key default gen_random_uuid(),
+  dossier_id uuid not null references public.generator_dossiers (id) on delete restrict,
+  company_id uuid not null references public.companies (id) on delete restrict,
+  request_id uuid not null unique default gen_random_uuid(),
+  payload jsonb not null check (jsonb_typeof(payload) = 'object' and pg_column_size(payload) <= 60000),
+  payload_hash text not null,
+  total_ht_cents bigint not null check (total_ht_cents >= 0),
+  status text not null default 'to_send' check (status in ('to_send', 'requested', 'created', 'sent', 'signed', 'error', 'to_retry', 'cancelled')),
+  number text check (number is null or char_length(number) <= 60),
+  url text check (url is null or (url ~ '^https://' and char_length(url) <= 500)),
+  signed_on date,
+  error text check (error is null or char_length(error) <= 300),
+  requested_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists quotes_company_idx on public.quotes (company_id, created_at desc);
+create index if not exists quotes_dossier_idx on public.quotes (dossier_id, created_at desc);
+drop trigger if exists set_updated_at on public.quotes;
+create trigger set_updated_at before update on public.quotes for each row execute function public.tg_set_updated_at();
+
+create table if not exists public.proposal_versions (
+  version_id uuid primary key references public.generator_versions (id) on delete cascade,
+  quote_id uuid not null references public.quotes (id) on delete restrict,
+  signed_at timestamptz,
+  signed_via text check (signed_via is null or signed_via in ('make', 'manual')),
+  created_at timestamptz not null default now()
+);
+create index if not exists proposal_versions_quote_idx on public.proposal_versions (quote_id);
+
+create or replace function public.tg_companies_merge_quotes()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if new.merged_into_id is not null and old.merged_into_id is null then
+    update public.quotes set company_id = new.merged_into_id where company_id = new.id;
+  end if;
+  return null;
+end; $$;
+drop trigger if exists companies_merge_quotes on public.companies;
+create trigger companies_merge_quotes after update of merged_into_id on public.companies
+  for each row execute function public.tg_companies_merge_quotes();
+
+do $$
+declare t text;
+begin
+  foreach t in array array['quotes', 'proposal_versions'] loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('drop policy if exists owner_select on public.%I', t);
+    execute format('create policy owner_select on public.%I for select to authenticated using ((select public.is_app_owner()) and public.current_actor() = ''user'')', t);
+    execute format('revoke all on public.%I from public, anon, authenticated', t);
+    execute format('grant select on public.%I to authenticated', t);
+    execute format('drop trigger if exists activity_log on public.%I', t);
+    execute format('create trigger activity_log after insert or update or delete on public.%I for each row execute function public.tg_activity_log()', t);
+  end loop;
+end $$;
+
+-- « Générer » une proposition : la version (generator_generate) et son devis, en une seule opération.
+-- p_quote : ce qui partira à Make. Si le devis vivant de la version précédente est identique, il est repris tel
+-- quel ; sinon un nouveau devis est préparé pour la nouvelle version (l'ancien garde la sienne).
+create or replace function public.proposal_generate(p_id uuid, p_key text, p_feedback text, p_quote jsonb, p_total_cents bigint)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v jsonb; v_version uuid; v_company uuid; v_kind text;
+  v_hash text := md5(p_quote::text);
+  v_quote public.quotes; v_new boolean := false;
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Génération d''une proposition');
+  select company_id, kind into v_company, v_kind from public.generator_dossiers where id = p_id for update;
+  if v_company is null then raise exception 'Dossier introuvable' using errcode = 'P0002'; end if;
+  if v_kind <> 'proposal' then raise exception 'Ce dossier n''est pas une proposition' using errcode = '22023'; end if;
+  if jsonb_typeof(p_quote) <> 'object' or jsonb_typeof(p_quote -> 'quote' -> 'lines') <> 'array' or jsonb_array_length(p_quote -> 'quote' -> 'lines') = 0 then
+    raise exception 'Le devis n''a aucune ligne' using errcode = '22023';
+  end if;
+  v := public.generator_generate(p_id, p_key, p_feedback);
+  v_version := (v ->> 'id')::uuid;
+  select q.* into v_quote from public.proposal_versions pv join public.quotes q on q.id = pv.quote_id where pv.version_id = v_version;
+  if v_quote.id is null then
+    -- devis le plus récent du dossier : repris s'il est identique. Sinon un nouveau devis est préparé ; l'ancien reste
+    -- attaché à sa version et reste signable (une signature d'une ancienne version fait foi).
+    select * into v_quote from public.quotes where dossier_id = p_id and status <> 'cancelled' order by created_at desc limit 1;
+    if v_quote.id is null or v_quote.payload_hash <> v_hash then
+      insert into public.quotes (dossier_id, company_id, payload, payload_hash, total_ht_cents)
+      values (p_id, v_company, p_quote, v_hash, p_total_cents) returning * into v_quote;
+      v_new := true;
+    end if;
+    insert into public.proposal_versions (version_id, quote_id) values (v_version, v_quote.id);
+  end if;
+  return v || jsonb_build_object('quote_id', v_quote.id, 'quote_created', v_new, 'quote_status', v_quote.status);
+end; $$;
+
+-- Réserve l'appel à Make pour un devis : une seule fois (double clic), relançable après un échec, une erreur de
+-- Make, ou dix minutes sans retour. Rend ce qu'il faut envoyer, ou null si rien n'est à envoyer.
+create or replace function public.proposal_quote_claim(p_quote uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare q public.quotes;
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Envoi d''un devis à Make');
+  update public.quotes set status = 'requested', requested_at = now(), error = null
+   where id = p_quote and (status in ('to_send', 'to_retry', 'error') or (status = 'requested' and requested_at < now() - interval '10 minutes'))
+  returning * into q;
+  if q.id is null then return null; end if;
+  return jsonb_build_object('request_id', q.request_id, 'payload', q.payload);
+end; $$;
+
+-- Résultat de l'appel : accepté par Make (on attend son retour), ou « à relancer » avec une raison lisible.
+create or replace function public.proposal_quote_result(p_quote uuid, p_ok boolean, p_error text)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Envoi d''un devis à Make');
+  if p_ok then return; end if;
+  update public.quotes set status = 'to_retry', error = left(coalesce(p_error, 'Make est injoignable.'), 300) where id = p_quote and status = 'requested';
+end; $$;
+
+-- Application d'un retour de Make à son devis. Les états ne reculent jamais : un « créé » reçu après « signé » ne
+-- change rien. Rend 'applied', 'unchanged' ou 'ignored' (devis inconnu ou annulé).
+create or replace function make_private.apply_quote_return(p_request_id uuid, p_event text, p_number text, p_url text, p_signed_on date, p_error text)
+returns text language plpgsql security definer set search_path = '' as $$
+declare
+  q public.quotes;
+  v_rank constant jsonb := '{"to_send":0,"to_retry":0,"error":0,"requested":1,"created":2,"sent":3,"signed":4}';
+  v_target text := case p_event when 'quote.created' then 'created' when 'quote.sent' then 'sent' when 'quote.signed' then 'signed' else 'error' end;
+begin
+  select * into q from public.quotes where request_id = p_request_id for update;
+  if q.id is null or q.status = 'cancelled' then return 'ignored'; end if;
+  if v_target = 'error' then
+    if q.status in ('created', 'sent', 'signed') then return 'unchanged'; end if;
+    update public.quotes set status = 'error', error = coalesce(nullif(btrim(p_error), ''), 'Make a signalé une erreur.') where id = q.id;
+    return 'applied';
+  end if;
+  update public.quotes
+     set number = coalesce(nullif(btrim(p_number), ''), number), url = coalesce(p_url, url),
+         signed_on = case when v_target = 'signed' then coalesce(p_signed_on, signed_on, current_date) else signed_on end,
+         status = case when (v_rank ->> v_target)::int > (v_rank ->> status)::int then v_target else status end,
+         error = null
+   where id = q.id;
+  return case when (v_rank ->> v_target)::int > (v_rank ->> q.status)::int then 'applied' else 'unchanged' end;
+end; $$;
+revoke execute on function make_private.apply_quote_return(uuid, text, text, text, date, text) from public, anon, authenticated;
+
+-- Retour de Make (redéfinition complète de la fonction du connecteur) : même protection, même idempotence, et le
+-- retour est maintenant appliqué au devis concerné. Renvoie : recorded, duplicate, ignored, refused, invalid, rate_limited.
+create or replace function public.make_return(
+  p_server_key text, p_outcome text, p_event text default null, p_request_id uuid default null,
+  p_quote_number text default null, p_quote_url text default null, p_signed_on date default null, p_error text default null)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_event text := case when p_event in ('quote.created', 'quote.sent', 'quote.signed', 'quote.error') then p_event else 'inconnu' end;
+  v_applied text;
+begin
+  perform appt_private.assert_server(p_server_key);
+  -- un seul retour à la fois : le compteur ne se contourne pas par des appels simultanés
+  perform pg_advisory_xact_lock(hashtext('cely_make_return'));
+  if (select count(*) from public.make_calls where direction = 'in' and at > now() - interval '1 minute') >= 60 then
+    return 'rate_limited';
+  end if;
+  if p_outcome = 'refused' then
+    perform make_private.log('in', null, v_event, 'refused', 'Secret refusé.');
+    return 'refused';
+  end if;
+  if p_outcome is distinct from 'valid' or v_event = 'inconnu' or p_request_id is null
+     or char_length(coalesce(p_quote_number, '')) > 60
+     or (p_quote_url is not null and (p_quote_url !~ '^https://' or char_length(p_quote_url) > 500))
+     or char_length(coalesce(p_error, '')) > 300 then
+    perform make_private.log('in', null, v_event, 'invalid', 'Contenu refusé.');
+    return 'invalid';
+  end if;
+  insert into public.make_returns (request_id, event, quote_number, quote_url, signed_on, error)
+  values (p_request_id, v_event, nullif(btrim(p_quote_number), ''), p_quote_url, p_signed_on, nullif(btrim(p_error), ''))
+  on conflict (request_id, event) do nothing;
+  if not found then
+    perform make_private.log('in', null, v_event, 'duplicate', null);
+    return 'duplicate';
+  end if;
+  v_applied := make_private.apply_quote_return(p_request_id, v_event, p_quote_number, p_quote_url, p_signed_on, p_error);
+  if v_applied = 'ignored' then
+    perform make_private.log('in', null, v_event, 'ignored', 'Devis inconnu ou annulé.');
+    return 'ignored';
+  end if;
+  perform make_private.log('in', null, v_event, case when v_event = 'quote.error' then 'error' else 'ok' end,
+                           case when v_event = 'quote.error' then 'Erreur signalée par Make.' end);
+  return 'recorded';
+end;
+$$;
+revoke execute on function public.make_return(text, text, text, uuid, text, text, date, text) from public;
+grant execute on function public.make_return(text, text, text, uuid, text, text, date, text) to anon, authenticated;
+
+do $$
+declare f text;
+begin
+  foreach f in array array['proposal_generate(uuid, text, text, jsonb, bigint)', 'proposal_quote_claim(uuid)', 'proposal_quote_result(uuid, boolean, text)'] loop
+    execute format('revoke all on function public.%s from public, anon', f);
+    execute format('grant execute on function public.%s to authenticated', f);
+  end loop;
+  execute 'revoke all on function public.tg_companies_merge_quotes() from public, anon, authenticated';
+end $$;
+
+
+-- ===== 20261124000600_proposition_signature.sql =====
+-- Signature d'une proposition : deux chemins, un seul résultat, une seule fois.
+--   * Make renvoie « devis signé » (make_return → make_private.apply_quote_return) ;
+--   * « Marquer comme signée » dans l'application (proposal_mark_signed), pour une signature arrivée hors Make.
+-- Les deux passent par make_private.sign_quote : la version signée est celle du devis signé, même si une version
+-- plus récente existe (c'est elle qui fait foi pour l'onboarding). Les autres devis du dossier sont annulés : un
+-- retour de Make qui les concernerait ensuite est journalisé et ignoré.
+-- Le passage en client (fiche gagnée, vente, projet) reste fait par la logique existante, dans l'application.
+
+create or replace function make_private.sign_quote(p_quote uuid, p_version uuid, p_via text, p_on date)
+returns boolean language plpgsql security definer set search_path = '' as $$
+declare q public.quotes; v_version uuid;
+begin
+  select * into q from public.quotes where id = p_quote for update;
+  if q.id is null or q.status = 'cancelled' then return false; end if;
+  -- déjà signé : rien de plus (retour rejoué, ou second chemin après le premier)
+  if exists (select 1 from public.proposal_versions where quote_id = p_quote and signed_at is not null) then return false; end if;
+  select pv.version_id into v_version
+    from public.proposal_versions pv join public.generator_versions gv on gv.id = pv.version_id
+   where pv.quote_id = p_quote and (p_version is null or pv.version_id = p_version)
+   order by gv.version desc limit 1;
+  if v_version is null then return false; end if;
+  update public.proposal_versions set signed_at = now(), signed_via = p_via where version_id = v_version;
+  update public.quotes set status = 'signed', signed_on = coalesce(p_on, signed_on, current_date), error = null where id = p_quote;
+  update public.quotes set status = 'cancelled' where dossier_id = q.dossier_id and id <> p_quote and status <> 'signed';
+  -- ce que le client a signé ne se modifie plus
+  update public.generator_versions set validated_at = now() where id = v_version and validated_at is null and slides_status = 'ready';
+  return true;
+end; $$;
+revoke execute on function make_private.sign_quote(uuid, uuid, text, date) from public, anon, authenticated;
+
+-- Redéfinition complète : « signé » passe désormais par sign_quote.
+create or replace function make_private.apply_quote_return(p_request_id uuid, p_event text, p_number text, p_url text, p_signed_on date, p_error text)
+returns text language plpgsql security definer set search_path = '' as $$
+declare
+  q public.quotes;
+  v_rank constant jsonb := '{"to_send":0,"to_retry":0,"error":0,"requested":1,"created":2,"sent":3,"signed":4}';
+  v_target text := case p_event when 'quote.created' then 'created' when 'quote.sent' then 'sent' when 'quote.signed' then 'signed' else 'error' end;
+  v_signed boolean;
+begin
+  select * into q from public.quotes where request_id = p_request_id for update;
+  if q.id is null or q.status = 'cancelled' then return 'ignored'; end if;
+  if v_target = 'error' then
+    if q.status in ('created', 'sent', 'signed') then return 'unchanged'; end if;
+    update public.quotes set status = 'error', error = coalesce(nullif(btrim(p_error), ''), 'Make a signalé une erreur.') where id = q.id;
+    return 'applied';
+  end if;
+  update public.quotes set number = coalesce(nullif(btrim(p_number), ''), number), url = coalesce(p_url, url) where id = q.id;
+  if v_target = 'signed' then
+    v_signed := make_private.sign_quote(q.id, null, 'make', p_signed_on);
+    return case when v_signed then 'applied' else 'unchanged' end;
+  end if;
+  update public.quotes
+     set status = case when (v_rank ->> v_target)::int > (v_rank ->> status)::int then v_target else status end, error = null
+   where id = q.id;
+  return case when (v_rank ->> v_target)::int > (v_rank ->> q.status)::int then 'applied' else 'unchanged' end;
+end; $$;
+revoke execute on function make_private.apply_quote_return(uuid, text, text, text, date, text) from public, anon, authenticated;
+
+-- « Marquer comme signée » : réservé au propriétaire, dans l'application, sur une version validée. Répété, ou après
+-- le retour de Make pour le même devis, il ne change rien (already = true).
+create or replace function public.proposal_mark_signed(p_version uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare pv public.proposal_versions; q public.quotes; v_validated timestamptz; v_other integer;
+begin
+  perform public.assert_owner();
+  perform public.assert_not_claude('Signature d''une proposition');
+  select * into pv from public.proposal_versions where version_id = p_version;
+  if pv.version_id is null then raise exception 'Version introuvable' using errcode = 'P0002'; end if;
+  select * into q from public.quotes where id = pv.quote_id for update;
+  if pv.signed_at is not null then return jsonb_build_object('already', true, 'company_id', q.company_id); end if;
+  select validated_at into v_validated from public.generator_versions where id = p_version;
+  if v_validated is null then raise exception 'Validez la version avant de la marquer comme signée' using errcode = '22023'; end if;
+  select gv.version into v_other from public.proposal_versions x join public.quotes xq on xq.id = x.quote_id join public.generator_versions gv on gv.id = x.version_id
+   where xq.dossier_id = q.dossier_id and x.signed_at is not null limit 1;
+  if v_other is not null then raise exception 'La V% de cette proposition est déjà signée', v_other using errcode = '22023'; end if;
+  perform make_private.sign_quote(q.id, p_version, 'manual', current_date);
+  return jsonb_build_object('already', false, 'company_id', q.company_id);
+end; $$;
+revoke all on function public.proposal_mark_signed(uuid) from public, anon;
+grant execute on function public.proposal_mark_signed(uuid) to authenticated;
+
+-- Propositions signées : la version qui fait foi, et la dernière version du dossier (pour prévenir si elles diffèrent).
+create or replace view public.proposal_signed with (security_invoker = true) as
+  select q.company_id, q.dossier_id, pv.version_id, gv.version,
+         (select max(x.version) from public.generator_versions x where x.dossier_id = q.dossier_id) as latest_version,
+         q.id as quote_id, pv.signed_at, pv.signed_via, q.signed_on, q.payload
+    from public.proposal_versions pv
+    join public.quotes q on q.id = pv.quote_id
+    join public.generator_versions gv on gv.id = pv.version_id
+   where pv.signed_at is not null;
+revoke all on public.proposal_signed from public, anon, authenticated;
+grant select on public.proposal_signed to authenticated;
+
+
+-- ===== 20261124000700_onboarding_generateur.sql =====
+-- Générer l'onboarding : le questionnaire du générateur remplit la préparation de projet EXISTANTE (points à
+-- compléter, sections, analyse, slides, planning). Aucun circuit parallèle : les slides restent celles de
+-- project_onboarding_decks, produites par la tâche Claude des projets.
+--
+--   * Une version du générateur suit les slides d'onboarding du projet : prête quand elles sont reçues, en échec
+--     quand leur génération échoue (déclencheur, sans toucher aux fonctions existantes).
+--   * Rien n'est visible du client avant ma validation : les slides d'une version du générateur non validée ne se
+--     partagent pas. Le partage reste l'action explicite existante.
+-- Migration additive.
+
+create or replace function public.tg_onboarding_deck_generator()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if new.status = 'ready' and new.file_id is not null and old.status is distinct from 'ready' then
+    update public.generator_versions v
+       set file_id = new.file_id, slides_status = 'ready', ready_at = now(), slides_error = null
+      from public.generator_dossiers d
+     where d.id = v.dossier_id and d.kind = 'onboarding' and d.project_id = new.project_id
+       and v.validated_at is null and v.slides_status in ('pending', 'uploading', 'failed')
+       and v.version = (select max(x.version) from public.generator_versions x where x.dossier_id = d.id);
+  elsif new.status = 'failed' and old.status is distinct from 'failed' then
+    update public.generator_versions v
+       set slides_status = 'failed', slides_error = left(coalesce(new.error, 'La génération des slides a échoué.'), 2000)
+      from public.generator_dossiers d
+     where d.id = v.dossier_id and d.kind = 'onboarding' and d.project_id = new.project_id
+       and v.validated_at is null and v.slides_status in ('pending', 'uploading');
+  end if;
+  return null;
+end; $$;
+drop trigger if exists onboarding_deck_generator on public.project_onboarding_decks;
+create trigger onboarding_deck_generator after update of status on public.project_onboarding_decks
+  for each row execute function public.tg_onboarding_deck_generator();
+
+create or replace function public.tg_onboarding_deck_share_guard()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if new.shared_at is not null and old.shared_at is null and exists (
+       select 1 from public.generator_versions v join public.generator_dossiers d on d.id = v.dossier_id
+        where d.kind = 'onboarding' and d.project_id = new.project_id and v.file_id = new.file_id and v.validated_at is null) then
+    raise exception 'Validez l''onboarding avant de partager ses slides au client' using errcode = '22023';
+  end if;
+  return new;
+end; $$;
+drop trigger if exists onboarding_deck_share_guard on public.project_onboarding_decks;
+create trigger onboarding_deck_share_guard before update of shared_at on public.project_onboarding_decks
+  for each row execute function public.tg_onboarding_deck_share_guard();
+
+revoke all on function public.tg_onboarding_deck_generator() from public, anon, authenticated;
+revoke all on function public.tg_onboarding_deck_share_guard() from public, anon, authenticated;
+
+
+-- ===== 20261124000800_parcours_client.sql =====
+-- Parcours d'un client, de l'appel à l'onboarding : l'état dont se déduit SA prochaine action principale
+-- (fiche, carte du Pipeline, Appels, Agenda, Aujourd'hui). Une ligne par fiche concernée.
+-- Lecture seule, aucune étape de pipeline n'y figure : l'état se lit dans les documents (appel, diagnostic,
+-- proposition, devis signé, onboarding). Vue en droits de l'appelant : chaque table garde ses propres règles.
+
+create or replace view public.company_journey with (security_invoker = true) as
+  select c.id as company_id, c.name, c.deal_status,
+         nullif(greatest(
+           coalesce((select max(f.occurred_at) from public.fireflies_calls f where f.company_id = c.id and f.link_state = 'linked'), '-infinity'),
+           coalesce((select max(b.ends_at) from public.appt_bookings b
+                      where b.company_id = c.id and b.status = 'confirmed' and b.ends_at < now() and coalesce(b.outcome, 'done') = 'done'), '-infinity')
+         ), '-infinity') as last_call_at,
+         d.id as diagnostic_id, d.status as diagnostic_status, d.created_at as diagnostic_at,
+         (select max(v.ready_at) from public.diagnostic_versions v where v.diagnostic_id = d.id and v.status = 'ready') as diagnostic_ready_at,
+         (select max(v.validated_at) from public.diagnostic_versions v where v.diagnostic_id = d.id) as diagnostic_validated_at,
+         g.id as proposal_id, g.created_at as proposal_at, gv.version as proposal_version, gv.slides_status as proposal_slides,
+         gv.ready_at as proposal_ready_at, gv.validated_at as proposal_validated_at, gv.sent_at as proposal_sent_at,
+         (select max(pv.signed_at) from public.proposal_versions pv join public.generator_versions x on x.id = pv.version_id where x.dossier_id = g.id) as proposal_signed_at,
+         coalesce((select s.project_id from public.sales s where s.company_id = c.id and s.state in ('won', 'reopened') and s.project_id is not null order by s.cycle desc limit 1), o.project_id) as project_id,
+         o.id as onboarding_id, o.created_at as onboarding_at, ov.version as onboarding_version, ov.slides_status as onboarding_slides,
+         ov.ready_at as onboarding_ready_at, ov.validated_at as onboarding_validated_at
+    from public.companies c
+    left join lateral (select * from public.diagnostics x where x.company_id = c.id order by x.created_at desc limit 1) d on true
+    left join lateral (select * from public.generator_dossiers x where x.company_id = c.id and x.kind = 'proposal' order by x.created_at desc limit 1) g on true
+    left join lateral (select * from public.generator_versions x where x.dossier_id = g.id order by x.version desc limit 1) gv on true
+    left join lateral (select * from public.generator_dossiers x where x.company_id = c.id and x.kind = 'onboarding' order by x.created_at desc limit 1) o on true
+    left join lateral (select * from public.generator_versions x where x.dossier_id = o.id order by x.version desc limit 1) ov on true
+   where c.merged_into_id is null and c.archived_at is null
+     and (d.id is not null or g.id is not null
+          or exists (select 1 from public.fireflies_calls f where f.company_id = c.id and f.link_state = 'linked')
+          or exists (select 1 from public.appt_bookings b where b.company_id = c.id and b.status = 'confirmed' and b.ends_at < now() and coalesce(b.outcome, 'done') = 'done'));
+revoke all on public.company_journey from public, anon, authenticated;
+grant select on public.company_journey to authenticated;

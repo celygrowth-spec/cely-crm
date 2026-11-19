@@ -1,7 +1,8 @@
 // Espace Connecteurs : types partagés (serveur et navigateur). Aucun secret n'y transite :
 // uniquement des états, des dates, des comptes affichables et des messages lisibles.
+import type { MakeDetail } from "@/lib/make/rules";
 
-export type ConnectorKey = "gmail" | "google_calendar" | "fireflies" | "claude_mcp" | "ubersuggest";
+export type ConnectorKey = "gmail" | "google_calendar" | "fireflies" | "claude_mcp" | "ubersuggest" | "make";
 
 export type ConnectorState =
   | "connected" // autorisation active confirmée
@@ -62,5 +63,7 @@ export type Connector = {
   reconnectHref: string | null;
   disconnect: { label: string; effect: string } | null;
   external: string | null; // ce qui se règle hors du CRM
+  /** scénarios Make (sans leur adresse) et journal court des appels */
+  make?: MakeDetail;
   mcp?: { url: string; auth: string; grants: McpGrant[] | null; grantsError: string | null; lastWrite: string | null; shared: boolean };
 };

@@ -11,8 +11,8 @@ const FIRE_URL = /^https:\/\/api\.anthropic\.com\/v1\/claude_code\/routines\/tri
 
 type RoutineConfig = { url: string; token: string };
 
-/** Adresse et jeton d'une tâche Claude ; « ONBOARDING » pour celle des projets. */
-export function routineConfig(prefix: "DIAGNOSTIC" | "ONBOARDING" = "DIAGNOSTIC"): RoutineConfig | null {
+/** Adresse et jeton d'une tâche Claude ; « ONBOARDING » pour celle des projets, « PROPOSITION » pour celle des propositions. */
+export function routineConfig(prefix: "DIAGNOSTIC" | "ONBOARDING" | "PROPOSITION" = "DIAGNOSTIC"): RoutineConfig | null {
   const url = process.env[`${prefix}_ROUTINE_URL`]?.trim();
   const token = process.env[`${prefix}_ROUTINE_TOKEN`]?.trim();
   return url && token && FIRE_URL.test(url) ? { url, token } : null;

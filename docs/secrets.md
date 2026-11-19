@@ -10,6 +10,7 @@ Malgré son nom, il protège plusieurs modules. Tout est **dérivé** de lui (HM
 | clé serveur (`rpc`) | autoriser les fonctions publiques en base (réservation, portail, Fireflies, passages planifiés, Gmail serveur) ; seule son empreinte est en base | réenregistrée automatiquement à la première visite de Rendez-vous ou au premier « Lancer maintenant » (Paramètres › Passages planifiés) ; entre-temps, réservation, portail, Fireflies et passages planifiés sont refusés |
 | jeton privé d'un rendez-vous (`manage`) | liens « annuler / reporter » envoyés aux invités | **tous les liens déjà envoyés deviennent invalides** (l'invité vous écrit ; le rendez-vous reste en base) |
 | chiffrement du jeton Google Agenda (`enc`) | jeton de renouvellement de l'agenda | l'agenda doit être **reconnecté** (Paramètres › Connecteurs › Google Agenda) |
+| chiffrement des adresses de webhook Make (`enc`) | scénarios Make | les adresses sont à **ressaisir** (Paramètres › Connecteurs › Make) |
 | empreintes du portail client | codes d'accès et sessions du portail | **tous les codes d'accès client sont à régénérer**, les sessions ouvertes sont fermées |
 
 ### Procédure de rotation (à faire seulement en cas de fuite)
@@ -34,4 +35,5 @@ codes existants sans bénéfice immédiat).
 | `FIREFLIES_WEBHOOK_SECRET` | signature HMAC des webhooks Fireflies (mécanisme officiel `x-hub-signature`) ; un webhook rejoué est sans effet (import par identifiant de réunion) | changer aussi dans Fireflies |
 | `FIREFLIES_API_KEY` | lecture des appels | retirer la clé = plus aucun import futur ; les appels déjà importés restent |
 | `GOOGLE_*_CLIENT_SECRET` | OAuth Google (agenda, Gmail) | changer dans Google Cloud puis dans l'hébergement |
+| `MAKE_CALLBACK_SECRET` | secret partagé avec Make pour ses retours (`/api/make/retour`) ; les adresses de webhook, elles, sont en base, chiffrées avec `APPOINTMENTS_SECRET` (`docs/integrations/make.md`) | changer aussi dans le module HTTP du scénario Make |
 | `APP_URL` | adresse publique de l'application : retours OAuth et liens, jamais déduits d'un en-tête de requête | — |

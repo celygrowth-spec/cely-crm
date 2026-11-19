@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Archive, ArchiveRestore, Ban, Columns3, Trophy, ChevronDown, ExternalLink, FileUp, Mail, Maximize2, MessageSquarePlus, MoreHorizontal, Pencil, Phone, Plus, Sparkles, StickyNote, Timer, UserRound, X } from "lucide-react";
 import { RecordDealClosing } from "./deal-closing";
+import { NextActionButton } from "./next-action";
 import { AddToPipelineDialog, MakeClientDialog } from "./record-advance";
 import { useTimer } from "./time/timer";
 import { useCompanyMails } from "./record-entry";
@@ -26,6 +27,7 @@ const TABS: { key: RecordTab; label: string }[] = [
   { key: "activity", label: "Activité" },
   { key: "details", label: "Détails" },
   { key: "diagnostic", label: "Diagnostic" },
+  { key: "proposal", label: "Proposition" },
 ];
 
 /** Ferme au clic extérieur et à Échap, sans que Échap ne ferme aussi le panneau de la fiche. */
@@ -161,6 +163,12 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
   const timer = useTimer();
   const timing = timer.running?.company_id === c.id;
   const [advance, setAdvance] = useState<"pipeline" | "client" | null>(null);
+  // « Passer en client » demandé depuis un onglet (proposition signée à confirmer) : même fenêtre que le menu Actions
+  const [clientSignal, setClientSignal] = useState(ctx.clientSignal);
+  if (ctx.clientSignal !== clientSignal) {
+    setClientSignal(ctx.clientSignal);
+    setAdvance("client");
+  }
 
   async function toggleArchive() {
     const value = !c.archived_at;
@@ -235,6 +243,9 @@ export function RecordHeader({ ctx, tab, onClose, page, save, onPreload }: { ctx
           ))}
         </nav>
         <div className="ml-auto flex shrink-0 items-center gap-1 pb-1 max-sm:pt-1">
+          {/* la prochaine action du parcours (diagnostic, proposition, onboarding), déduite de l'état de la fiche */}
+          <NextActionButton companyId={c.id} variant="primary"
+            onAct={(a) => (a.target.kind === "client" ? setAdvance("client") : a.target.kind === "tab" && a.target.tab === "diagnostic" && a.create ? ctx.generateDiagnostic() : a.target.kind === "tab" ? ctx.go(a.target.tab, a.create ? { start: true } : undefined) : undefined)} />
           <QuickAction icon={Mail} label="Envoyer un mail" onClick={() => ctx.compose({})} warn={c.do_not_contact} />
           <DraftsAccess ctx={ctx} />
           <TrashButton kind="company" id={c.id} size="sm" variant="secondary" className="max-md:h-8 max-md:w-9 max-md:px-0"

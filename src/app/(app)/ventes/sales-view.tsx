@@ -2,6 +2,8 @@
 
 // Ventes : où en est chaque client après la signature. Pipelines garde les opportunités ouvertes ;
 // une fiche gagnée ou perdue arrive ici, avec la même fiche, ses contacts et son historique.
+import { NextActionButton } from "@/components/next-action";
+import { QUOTE_STATUS_LABELS } from "@/lib/proposals/rules";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -179,6 +181,14 @@ function SaleCard({ r }: { r: SaleRow }) {
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
         <Badge tone={BILLING_TONES[r.billing]}>{billingLabel(r)}</Badge>
+        {/* une fois le client gagné, la suite du parcours (onboarding) reste à portée de main */}
+        <NextActionButton companyId={r.company_id} />
+        {r.quote && (
+          <span className="inline-flex items-center gap-1 text-xs text-muted" data-sale-quote>
+            Devis {r.quote.number ?? ""} · {QUOTE_STATUS_LABELS[r.quote.status as keyof typeof QUOTE_STATUS_LABELS] ?? r.quote.status}
+            {r.quote.url && <a className="font-semibold text-violet-strong hover:underline" href={r.quote.url} target="_blank" rel="noreferrer noopener" onClick={(e) => e.stopPropagation()}>Ouvrir</a>}
+          </span>
+        )}
         {r.billing === "a_renseigner" && (
           <button type="button" onClick={() => setComplete(true)} className="text-xs font-semibold text-violet-strong hover:underline" data-fill-billing>Renseigner</button>
         )}

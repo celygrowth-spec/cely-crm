@@ -11,7 +11,7 @@ const uuid = z.uuid("Identifiant invalide");
 const COMPANY_BUCKET = "company-files";
 const LIBRARY_COLUMNS = "id, category, display_name, mime_type, size_bytes, created_at";
 const COLUMNS = "id, company_id, status, chat_url, summary, sources, answers_sent_at, last_error, trigger_stage, triggered_at, trigger_error, created_at";
-const CHILDREN = "questions:diagnostic_questions(id, position, question, why, answer, dont_know), versions:diagnostic_versions(id, version, file_id, status, created_at, ready_at, feedback, feedback_at), site_captures:diagnostic_site_captures(status, site_url, error, created_at, captured_at)";
+const CHILDREN = "questions:diagnostic_questions(id, position, question, why, answer, dont_know), versions:diagnostic_versions(id, version, file_id, status, created_at, ready_at, feedback, feedback_at, validated_at), site_captures:diagnostic_site_captures(status, site_url, error, created_at, captured_at)";
 
 function check<T>(res: { data: unknown; error: { message: string; code?: string } | null }): T {
   if (res.error) throw new CrmError(friendlyError(res.error));
@@ -149,6 +149,10 @@ export const requestRevision = (sb: SupabaseClient, id: string, version: number,
     p_feedback: z.string().trim().min(1, "Décrivez ce qu'il faut changer.").max(10000, "Retour trop long (10 000 caractères au maximum).").parse(feedback),
   });
 
+/** « Valider le diagnostic » : repère pour la suite (email de présentation, proposition). Sans effet sur le reste du dossier. */
+export const validateVersion = (sb: SupabaseClient, id: string, version: number) =>
+  rpc<string>(sb, "diagnostic_validate", { p_id: uuid.parse(id), p_version: z.number().int().min(1).parse(version) });
+
 export const submitAnswers = (sb: SupabaseClient, id: string) => rpc<string>(sb, "diagnostic_submit_answers", { p_id: uuid.parse(id) });
 
 // ---------------------------------------------------------------------------
@@ -226,8 +230,11 @@ export type DossierFileRead = {
 };
 
 /** Texte d'un fichier de la fiche du dossier, extrait côté serveur et lu par tranches (offset en caractères). */
-export async function readDossierFile(sb: SupabaseClient, id: string, fileId: string, offset = 0): Promise<DossierFileRead> {
-  const company = await companyOf(sb, id);
+export const readDossierFile = async (sb: SupabaseClient, id: string, fileId: string, offset = 0): Promise<DossierFileRead> =>
+  readCompanyFile(sb, await companyOf(sb, id), fileId, offset);
+
+/** Même lecture, pour une fiche donnée (partagée avec les générateurs, qui contrôlent la fiche de leur propre dossier). */
+export async function readCompanyFile(sb: SupabaseClient, company: string, fileId: string, offset = 0): Promise<DossierFileRead> {
   const row = check<{ id: string; display_name: string; mime_type: string; size_bytes: number; storage_path: string } | null>(
     await sb.from("company_files").select("id, display_name, mime_type, size_bytes, storage_path").eq("id", uuid.parse(fileId)).eq("company_id", company).eq("status", "ready").maybeSingle(),
   );
@@ -282,18 +289,27 @@ type OpenVersion = { id: string; version: number; file_id: string | null; compan
 export async function startVersion(sb: SupabaseClient, id: string, size: number, companyName: string) {
   const v = await rpc<OpenVersion>(sb, "diagnostic_version_open", { p_id: uuid.parse(id) });
   const name = `Diagnostic ${companyName} V${v.version}.pdf`;
-  const pending = v.file_id
-    ? check<{ storage_path: string; mime_type: string } | null>(await sb.from("company_files").select("storage_path, mime_type").eq("id", v.file_id).maybeSingle())
+  const d = await openPdfDeposit(sb, { companyId: v.company_id, name, size, fileId: v.file_id });
+  if (d.fileId !== v.file_id) await rpc(sb, "diagnostic_version_attach", { p_version: v.id, p_file: d.fileId });
+  return { version: v.version, uploadUrl: d.uploadUrl, name };
+}
+
+/**
+ * Adresse de dépôt d'un PDF dans les fichiers de la fiche : reprend le dépôt en cours s'il est déjà en PDF, sinon
+ * l'abandonne et en prépare un nouveau (partagé avec les générateurs). Rend l'identifiant du fichier à rattacher.
+ */
+export async function openPdfDeposit(sb: SupabaseClient, input: { companyId: string; name: string; size: number; fileId: string | null; category?: string }) {
+  const pending = input.fileId
+    ? check<{ storage_path: string; mime_type: string } | null>(await sb.from("company_files").select("storage_path, mime_type").eq("id", input.fileId).maybeSingle())
     : null;
-  if (pending && pending.mime_type !== PDF_TYPE) await abortUpload(sb, v.file_id!);
+  if (pending && pending.mime_type !== PDF_TYPE) await abortUpload(sb, input.fileId!);
   if (!pending || pending.mime_type !== PDF_TYPE) {
-    const file = await startUpload(sb, { companyId: v.company_id, name, type: PDF_TYPE, size, category: "Présentation" });
-    await rpc(sb, "diagnostic_version_attach", { p_version: v.id, p_file: file.id });
-    return { version: v.version, uploadUrl: file.signedUrl, name };
+    const file = await startUpload(sb, { companyId: input.companyId, name: input.name, type: PDF_TYPE, size: input.size, category: input.category ?? "Présentation" });
+    return { fileId: file.id, uploadUrl: file.signedUrl };
   }
   const { data, error } = await sb.storage.from(COMPANY_BUCKET).createSignedUploadUrl(pending.storage_path, { upsert: true });
   if (error || !data) throw new CrmError(`Préparation de l'envoi impossible : ${error?.message ?? "réponse vide"}`);
-  return { version: v.version, uploadUrl: data.signedUrl, name };
+  return { fileId: input.fileId!, uploadUrl: data.signedUrl };
 }
 
 export const PDF_FIX = "Exportez le support en PDF (une slide par page, paysage 16:9), puis refaites le dépôt : start_diagnostic_version, envoi avec Content-Type: application/pdf, confirm_diagnostic_version.";
@@ -302,11 +318,11 @@ export const PDF_FIX = "Exportez le support en PDF (une slide par page, paysage 
  * Contrôle du contenu réellement reçu : un PDF lisible, et son format de page. Le stockage ne vérifie que le type
  * déclaré à l'envoi, pas les octets. Refuse tout autre format avec un message que la session peut appliquer.
  */
-export async function checkDeckPdf(data: Uint8Array): Promise<{ pages: number; format: string; avertissement?: string }> {
+export async function checkDeckPdf(data: Uint8Array, fix = PDF_FIX, what = "Le livrable du diagnostic"): Promise<{ pages: number; format: string; avertissement?: string }> {
   const head = new TextDecoder("latin1").decode(data.subarray(0, 1024));
   if (!head.includes("%PDF-")) {
     const kind = data[0] === 0x50 && data[1] === 0x4b ? "un fichier Office ou une archive (PowerPoint .pptx ?)" : "un fichier qui n'est pas un PDF";
-    throw new CrmError(`Version refusée : le fichier déposé est ${kind}. Le livrable du diagnostic doit être un PDF. ${PDF_FIX}`);
+    throw new CrmError(`Version refusée : le fichier déposé est ${kind}. ${what} doit être un PDF. ${fix}`);
   }
   let pages: number;
   let w: number;
@@ -318,9 +334,9 @@ export async function checkDeckPdf(data: Uint8Array): Promise<{ pages: number; f
     const vp = (await pdf.getPage(1)).getViewport({ scale: 1 });
     [w, h] = [vp.width, vp.height];
   } catch {
-    throw new CrmError(`Version refusée : le PDF déposé est illisible ou incomplet. ${PDF_FIX}`);
+    throw new CrmError(`Version refusée : le PDF déposé est illisible ou incomplet. ${fix}`);
   }
-  if (!pages) throw new CrmError(`Version refusée : le PDF déposé ne contient aucune page. ${PDF_FIX}`);
+  if (!pages) throw new CrmError(`Version refusée : le PDF déposé ne contient aucune page. ${fix}`);
   const ratio = w / h;
   const format = `${pages} page(s), ${Math.round(w)} × ${Math.round(h)} pt`;
   if (Math.abs(ratio - 16 / 9) > 0.02)
@@ -337,15 +353,21 @@ export async function confirmVersion(sb: SupabaseClient, id: string, version: nu
     await sb.from("diagnostic_versions").select("file_id").eq("diagnostic_id", uuid.parse(id)).eq("version", version).eq("status", "uploading").maybeSingle(),
   );
   if (!row?.file_id) throw new CrmError("Aucun dépôt en cours pour cette version.");
-  const file = check<{ storage_path: string }>(await sb.from("company_files").select("storage_path").eq("id", row.file_id).single());
-  const { data, error } = await sb.storage.from(COMPANY_BUCKET).download(file.storage_path);
-  if (error || !data || !data.size) throw new CrmError("Le fichier n'a pas été reçu par le stockage. Refaites le dépôt avec start_diagnostic_version.");
-  const size = data.size;
-  const pdf = await checkDeckPdf(new Uint8Array(await data.arrayBuffer()));
-  await confirmUpload(sb, row.file_id);
-  check(await sb.from("company_files").update({ size_bytes: size, mime_type: PDF_TYPE }).eq("id", row.file_id));
+  const { size, pdf } = await receivePdf(sb, row.file_id, "Le fichier n'a pas été reçu par le stockage. Refaites le dépôt avec start_diagnostic_version.");
   await rpc(sb, "diagnostic_version_ready", { p_id: id, p_version: version });
   return { version, taille_recue: size, format: pdf.format, ...(pdf.avertissement ? { avertissement: pdf.avertissement } : {}) };
+}
+
+/** Contrôle le PDF réellement reçu, puis marque le fichier prêt avec sa taille réelle (partagé avec les générateurs). */
+export async function receivePdf(sb: SupabaseClient, fileId: string, missing: string, fix = PDF_FIX, what = "Le livrable du diagnostic") {
+  const file = check<{ storage_path: string }>(await sb.from("company_files").select("storage_path").eq("id", fileId).single());
+  const { data, error } = await sb.storage.from(COMPANY_BUCKET).download(file.storage_path);
+  if (error || !data || !data.size) throw new CrmError(missing);
+  const size = data.size;
+  const pdf = await checkDeckPdf(new Uint8Array(await data.arrayBuffer()), fix, what);
+  await confirmUpload(sb, fileId);
+  check(await sb.from("company_files").update({ size_bytes: size, mime_type: PDF_TYPE }).eq("id", fileId));
+  return { size, pdf };
 }
 
 export const reportFailure = (sb: SupabaseClient, id: string, message: string) =>
