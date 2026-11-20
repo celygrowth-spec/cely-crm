@@ -64,7 +64,7 @@ async function fail(res: Response, what: string): Promise<never> {
 export function authorizationUrl(p: { redirectUri: string; state: string; codeChallenge: string }): string {
   const q = new URLSearchParams({
     client_id: config().clientId, redirect_uri: p.redirectUri, response_type: "code", scope: GSC_SCOPE,
-    access_type: "offline", prompt: "consent", state: p.state, code_challenge: p.codeChallenge, code_challenge_method: "S256",
+    access_type: "offline", prompt: "consent select_account", state: p.state, code_challenge: p.codeChallenge, code_challenge_method: "S256",
   });
   // pas d'include_granted_scopes : le jeton reste limité à la lecture de Search Console
   return `https://accounts.google.com/o/oauth2/v2/auth?${q.toString()}`;
