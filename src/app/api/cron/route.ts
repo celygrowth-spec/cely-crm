@@ -7,9 +7,11 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ensureServerKey } from "@/lib/appointments/owner";
 import { requestOrigin } from "@/lib/appointments/http";
+import { serverRpcKey } from "@/lib/appointments/secrets";
 import { firefliesApiKey } from "@/lib/fireflies/config";
 import { drainImports, rematchPending, syncRecent } from "@/lib/fireflies/worker";
 import { agendaJob, gmailJob, remindersJob, runJob, type JobName } from "@/lib/jobs/run";
+import { seoJob } from "@/lib/tracking/seo/job";
 import { trashJob } from "@/lib/trash/job";
 
 export const maxDuration = 60;
@@ -30,7 +32,7 @@ async function ownerSession() {
   return data === true;
 }
 
-const ALL: JobName[] = ["agenda", "rappels", "gmail", "fireflies", "corbeille"];
+const ALL: JobName[] = ["agenda", "rappels", "gmail", "fireflies", "corbeille", "seo"];
 
 async function handle(req: Request) {
   if (!cronAuthorized(req) && !(await ownerSession())) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
@@ -49,6 +51,19 @@ async function handle(req: Request) {
       }));
     }
     if (job === "corbeille") results.push(await runJob(job, trashJob));
+    // en dernier : avance par lots dans un temps borné et reprend au passage suivant
+    if (job === "seo") {
+      results.push(await runJob(job, async (sb) => {
+        // Tracking site : identifiants de visiteurs de plus de 13 mois supprimés (leurs visites restent, anonymes)
+        let purged = 0;
+        try {
+          purged = Number((await sb.rpc("site_purge", { p_server_key: serverRpcKey() })).data ?? 0);
+        } catch {
+          // secret serveur absent : la synchronisation ci-dessous le signale
+        }
+        return { ...(await seoJob(sb)), visiteurs_expires: purged };
+      }));
+    }
   }
   return NextResponse.json({ results }, { headers: { "Cache-Control": "private, no-store" } });
 }

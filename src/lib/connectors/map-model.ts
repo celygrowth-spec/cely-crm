@@ -65,6 +65,8 @@ const DIRECTION: Record<string, Direction> = {
   fireflies: "in",
   ubersuggest: "none",
   make: "both",
+  search_console: "in",
+  bing_webmaster: "in",
 };
 const ICONS: Record<string, MapIcon> = { gmail: "gmail", google_calendar: "google_calendar", fireflies: "fireflies", ubersuggest: "ubersuggest", make: "make" };
 
