@@ -248,6 +248,13 @@ export async function bookPublic(input: BookingRequest, origin?: string | null, 
   if (res.status === "unavailable") return { status: "unavailable", alternatives: await alternatives(req.slug, start) };
 
   const bookingId = res.id ?? id;
+  // Tracking site : source et UTM de la visite en cours, source déclarée. Jamais bloquant, sans effet au second envoi.
+  if (req.tracking?.visit_id || req.declared?.source || req.declared?.detail) {
+    await sb.rpc("site_attach_booking", {
+      p_server_key: key, p_booking: bookingId, p_visit: req.tracking?.visit_id ?? null, p_visitor: req.tracking?.visitor_id ?? null,
+      p_declared_source: req.declared?.source ?? null, p_declared_detail: req.declared?.detail ?? null,
+    }).then(() => undefined, () => undefined);
+  }
   const ref = manageRef(bookingId);
   const tokenHash = tokenHashFor(bookingId);
   const read = () => rpc<PublicBooking>(sb, "appt_public_booking", { p_server_key: key, p_id: bookingId, p_token_hash: tokenHash });

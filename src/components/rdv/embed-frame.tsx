@@ -8,7 +8,7 @@ import { useEffect, useRef } from "react";
 const isEmbedded = () => typeof window !== "undefined" && window.parent !== window;
 
 /** Message au script d'intégration. Contenu non sensible : il peut être lu par n'importe quel site hôte. */
-export function notifyHost(type: "ready" | "resize" | "step" | "close", extra?: { height: number }) {
+export function notifyHost(type: "ready" | "resize" | "step" | "close" | "booked", extra?: { height: number }) {
   if (!isEmbedded()) return;
   try {
     window.parent.postMessage({ celyRdv: 1, type, ...extra }, "*");

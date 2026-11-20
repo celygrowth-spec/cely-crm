@@ -103,6 +103,10 @@ export const bookingRequestSchema = z.object({
   idempotency_key: z.string().min(8).max(200).regex(/^[A-Za-z0-9_-]+$/),
   /** champ piège invisible : rempli seulement par un robot (C09) */
   fax: z.string().max(200).optional(),
+  /** Tracking site : visite du site pendant laquelle le rendez-vous est pris (et visiteur s'il a consenti) */
+  tracking: z.object({ visit_id: z.uuid().optional(), visitor_id: z.uuid().optional() }).optional(),
+  /** « Comment m'avez-vous connu ? » (facultatif) */
+  declared: z.object({ source: z.string().trim().max(60).optional(), detail: z.string().trim().max(300).optional() }).optional(),
 });
 export type BookingRequest = z.input<typeof bookingRequestSchema>;
 
