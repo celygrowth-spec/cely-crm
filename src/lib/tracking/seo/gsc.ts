@@ -61,11 +61,16 @@ async function fail(res: Response, what: string): Promise<never> {
 // OAuth (code + PKCE, accès hors ligne) : même déroulé que Google Agenda
 // ---------------------------------------------------------------------------
 
-export function authorizationUrl(p: { redirectUri: string; state: string; codeChallenge: string }): string {
+/**
+ * `loginHint` : compte Google à ouvrir d'office (celui déjà connecté à Google Agenda), même si le navigateur est
+ * connecté par défaut à un autre compte. Sans lui, Google affiche le choix du compte.
+ */
+export function authorizationUrl(p: { redirectUri: string; state: string; codeChallenge: string; loginHint?: string | null }): string {
   const q = new URLSearchParams({
     client_id: config().clientId, redirect_uri: p.redirectUri, response_type: "code", scope: GSC_SCOPE,
-    access_type: "offline", prompt: "consent select_account", state: p.state, code_challenge: p.codeChallenge, code_challenge_method: "S256",
+    access_type: "offline", prompt: p.loginHint ? "consent" : "consent select_account", state: p.state, code_challenge: p.codeChallenge, code_challenge_method: "S256",
   });
+  if (p.loginHint) q.set("login_hint", p.loginHint);
   // pas d'include_granted_scopes : le jeton reste limité à la lecture de Search Console
   return `https://accounts.google.com/o/oauth2/v2/auth?${q.toString()}`;
 }
