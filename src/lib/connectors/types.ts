@@ -1,8 +1,9 @@
 // Espace Connecteurs : types partagés (serveur et navigateur). Aucun secret n'y transite :
 // uniquement des états, des dates, des comptes affichables et des messages lisibles.
 import type { MakeDetail } from "@/lib/make/rules";
+import type { SeoDetail } from "@/lib/tracking/seo/rules";
 
-export type ConnectorKey = "gmail" | "google_calendar" | "fireflies" | "claude_mcp" | "ubersuggest" | "make";
+export type ConnectorKey = "gmail" | "google_calendar" | "fireflies" | "claude_mcp" | "ubersuggest" | "make" | "search_console" | "bing_webmaster";
 
 export type ConnectorState =
   | "connected" // autorisation active confirmée
@@ -65,5 +66,7 @@ export type Connector = {
   external: string | null; // ce qui se règle hors du CRM
   /** scénarios Make (sans leur adresse) et journal court des appels */
   make?: MakeDetail;
+  /** Search Console et Bing : site suivi, propriétés proposées, avancement de l'import (aucun secret) */
+  seo?: SeoDetail;
   mcp?: { url: string; auth: string; grants: McpGrant[] | null; grantsError: string | null; lastWrite: string | null; shared: boolean };
 };

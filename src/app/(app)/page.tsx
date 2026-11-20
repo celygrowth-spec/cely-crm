@@ -59,6 +59,8 @@ export default async function HomePage() {
   const c = (counters.data ?? {}) as { replies?: number; calls?: number; emails?: number };
   // parcours des clients (diagnostic, proposition, signature, onboarding) : ce qui attend une action de ma part
   const journey = await ok(listJourney(supabase));
+  // Tracking site : prospects identifiés revenus sur celygrowth.com ces 7 derniers jours
+  const returns = ((await supabase.rpc("site_return_signals", { p_days: 7 })).data ?? []) as { company_id: string; company_name: string; visits: number; intent: boolean; intent_page: string | null }[];
 
   // --- Finance du mois ---
   const from = monthStart(today), to = monthEnd(today);
@@ -86,6 +88,10 @@ export default async function HomePage() {
     (c.replies ?? 0) > 0 && { href: "/prospection/reponses", text: `${c.replies} réponse(s) de prospection à traiter`, key: "replies" },
     lemlist.unread > 0 && { href: "/messages", text: `${lemlist.unread} nouvelle(s) réponse(s) lemlist sur les comptes clients`, key: "messages" },
     (c.emails ?? 0) > 0 && { href: "/mail/a-rattacher", text: `${c.emails} email(s) reçu(s) à rattacher à une fiche`, key: "emails" },
+    ...returns.slice(0, 5).map((r) => ({
+      href: `/fiches/${r.company_id}`, key: `site-${r.company_id}`,
+      text: r.intent ? `${r.company_name} est revenu sur le site${r.intent_page ? ` (${r.intent_page})` : ""} : forte intention` : `${r.company_name} est revenu sur le site`,
+    })),
   ].filter(Boolean) as { href: string; text: string; key: string }[];
   const nothing = !followups.length && !myTasks.length && !todays.length && !alerts.length && !(c.calls ?? 0);
 

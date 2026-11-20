@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, FolderKanban, Home, LayoutGrid, LogOut, Search, Settings, Users, Wallet, X } from "lucide-react";
+import { ChartSpline, ChevronDown, FolderKanban, Home, LayoutGrid, LogOut, Search, Settings, Users, Wallet, X } from "lucide-react";
 import type { LeadSource, List, PipelineWithStages } from "@/lib/crm/types";
 import { signOutAction } from "@/app/actions";
 import { QueryProvider, apiGet, useFlushRouterOnNavigate } from "@/lib/client/query";
@@ -70,7 +70,7 @@ export const PRODUCTIVITE_NAV = [
 // Navigation en six entrées. Chaque écran existant reste accessible : les sous-pages des espaces (Prospection,
 // Finance, Agenda, Productivité) sont dans les onglets de leur page.
 export type NavItem = { href: string; label: string; match?: string[]; exact?: boolean };
-export type NavSection = { key: string; label: string; icon: typeof Users; href?: string; items?: NavItem[] };
+export type NavSection = { key: string; label: string; /** libellé court de la barre du téléphone */ short?: string; icon: typeof Users; href?: string; items?: NavItem[] };
 export const NAV: NavSection[] = [
   { key: "accueil", label: "Accueil", icon: Home, href: "/" },
   { key: "commerce", label: "Commerce", icon: Users, items: [
@@ -89,6 +89,7 @@ export const NAV: NavSection[] = [
     { href: "/finance/revenus?vue=factures", label: "Factures" },
     { href: "/finance/revenus?vue=paiements", label: "Règlements" },
   ] },
+  { key: "tracking", label: "Tracking site", short: "Tracking", icon: ChartSpline, href: "/tracking-site" },
   { key: "autres", label: "Autres", icon: LayoutGrid, items: [
     { href: "/rendez-vous/agenda", label: "Agenda", match: ["/rendez-vous"] },
     { href: "/mail", label: "Mail" },
@@ -268,7 +269,7 @@ function Shell({
                     className={cn("flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-sm font-semibold", on ? "bg-violet-soft text-ink" : "text-muted hover:bg-surface hover:text-ink")}>
                     <Icon size={17} className={on ? "text-violet-strong" : undefined} />
                     <span className="flex-1">{sec.label}</span>
-                    {homeCount > 0 && <span className="rounded-full bg-violet px-1.5 font-label text-[10px] text-white">{homeCount}</span>}
+                    {sec.key === "accueil" && homeCount > 0 && <span className="rounded-full bg-violet px-1.5 font-label text-[10px] text-white">{homeCount}</span>}
                   </Link>
                 );
               }
@@ -376,7 +377,7 @@ function MobileNav({ pathname, search, homeCount, badges, onSignOut }: { pathnam
           const inner = (
             <>
               <Icon size={18} className={active ? "text-violet-strong" : undefined} />
-              <span className="max-w-full truncate">{s.label}</span>
+              <span className="max-w-full truncate">{s.short ?? s.label}</span>
               {badge > 0 && <span className="absolute top-0.5 right-[calc(50%-1.25rem)] rounded-full bg-violet px-1 font-label text-[9px] leading-tight text-white">{badge}</span>}
             </>
           );

@@ -10,6 +10,7 @@ import type { RecordCtx } from "./company-record";
 import { EntryRow, useActivityEntries } from "./record-entry";
 import { RecordTodos } from "./todo/record-todos";
 import { Skeleton, cn } from "./ui";
+import { RecordSiteJourney } from "./record-site-journey";
 
 export function RecordOverview({ ctx }: { ctx: RecordCtx }) {
   const { entries, bookings, loading } = useActivityEntries(ctx, false);
@@ -36,6 +37,8 @@ export function RecordOverview({ ctx }: { ctx: RecordCtx }) {
       )}
 
       <Context ctx={ctx} />
+
+      <RecordSiteJourney companyId={ctx.detail.company.id} />
 
       <section>
         <div className="mb-1 flex items-center justify-between gap-2">

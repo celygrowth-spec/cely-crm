@@ -6,13 +6,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowUpRight, Bot, CalendarDays, Check, Copy, ExternalLink, Mail, Mic, RefreshCw, Search, Workflow, X } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Bot, CalendarDays, Check, Copy, ExternalLink, Mail, Mic, RefreshCw, Search, TrendingUp, Workflow, X } from "lucide-react";
 import { disconnectConnectorAction, revokeMcpGrantAction, verifyConnectorAction } from "@/app/connecteurs-actions";
 import { Badge, Button, Spinner, cn } from "@/components/ui";
 import { MakeDetail } from "./make-detail";
+import { SeoDetail } from "./seo-detail";
 import { STATE_LABEL, groupOf, type Connector, type ConnectorGroup, type ConnectorKey, type ConnectorState } from "@/lib/connectors/types";
 
-const ICON: Record<ConnectorKey, typeof Mail> = { gmail: Mail, google_calendar: CalendarDays, fireflies: Mic, claude_mcp: Bot, ubersuggest: Search, make: Workflow };
+const ICON: Record<ConnectorKey, typeof Mail> = { gmail: Mail, google_calendar: CalendarDays, fireflies: Mic, claude_mcp: Bot, ubersuggest: Search, make: Workflow, search_console: TrendingUp, bing_webmaster: TrendingUp };
 const TONE: Record<ConnectorState, "success" | "danger" | "warning" | "violet" | "neutral" | "ink"> = {
   connected: "success", reconnect: "danger", sync_error: "warning", to_verify: "violet", not_connected: "neutral", claude: "neutral", unknown: "warning",
 };
@@ -70,7 +71,7 @@ export function ConnectorsView({ initial, initialOpen = null }: { initial: Conne
           </section>
         );
       })}
-      {current && <Panel c={current} busy={busy === current.key} onClose={() => setOpen(null)} onVerify={() => verify(current.key)} onChanged={refresh} />}
+      {current && <Panel c={current} busy={busy === current.key} onClose={() => setOpen(null)} onVerify={() => verify(current.key)} onChanged={refresh} onUpdated={(n) => setList((l) => l.map((c) => (c.key === n.key ? n : c)))} />}
       <p className="text-xs text-muted">États enregistrés par le CRM à l&apos;ouverture de la page ; « Vérifier » interroge le service concerné, lui seul.</p>
     </div>
   );
@@ -111,7 +112,7 @@ function Primary({ c, busy, onVerify, onManage }: { c: Connector; busy: boolean;
 // Panneau « Gérer »
 // ---------------------------------------------------------------------------
 
-function Panel({ c, busy, onClose, onVerify, onChanged }: { c: Connector; busy: boolean; onClose: () => void; onVerify: () => void; onChanged: () => void }) {
+function Panel({ c, busy, onClose, onVerify, onChanged, onUpdated }: { c: Connector; busy: boolean; onClose: () => void; onVerify: () => void; onChanged: () => void; onUpdated: (c: Connector) => void }) {
   const [pending, start] = useTransition();
   const Icon = ICON[c.key];
   const disconnect = () => {
@@ -119,7 +120,8 @@ function Panel({ c, busy, onClose, onVerify, onChanged }: { c: Connector; busy: 
     start(async () => {
       const r = await disconnectConnectorAction(c.key);
       if (!r.ok) return void toast.error(r.error);
-      toast.success(r.data.revoked ? "Déconnecté, accès révoqué chez le fournisseur." : "Déconnecté. La révocation chez le fournisseur n'a pas pu être confirmée : retirez l'accès depuis votre compte Google.");
+      if (c.seo) toast.success(r.data.revoked ? "Déconnecté, accès révoqué chez Google." : c.seo.provider === "bing" ? "Déconnecté. La clé reste valable chez Bing : supprimez-la dans Bing Webmaster Tools si elle ne sert plus." : "Déconnecté, jeton effacé du CRM. Pour retirer aussi l'autorisation, passez par votre compte Google (Sécurité › Accès tiers).");
+      else toast.success(r.data.revoked ? "Déconnecté, accès révoqué chez le fournisseur." : "Déconnecté. La révocation chez le fournisseur n'a pas pu être confirmée : retirez l'accès depuis votre compte Google.");
       onClose();
       onChanged();
     });
@@ -151,6 +153,7 @@ function Panel({ c, busy, onClose, onVerify, onChanged }: { c: Connector; busy: 
         </Section>
 
         {c.make && <MakeDetail initial={c.make} onChanged={onChanged} />}
+        {c.seo && <SeoDetail key={`${c.key}:${c.seo.siteUrl ?? ""}`} detail={c.seo} onUpdated={onUpdated} />}
         {c.mcp ? <McpDetail c={c} onChanged={onChanged} /> : (
           <>
             {(c.account || c.permissions.length > 0) && (

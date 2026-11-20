@@ -8,6 +8,7 @@ import { appointmentsSecretOrNull, googleConfig } from "@/lib/appointments/confi
 import { firefliesApiKey, firefliesWebhookSecret } from "@/lib/fireflies/config";
 import { mailConfig } from "@/lib/mail/service";
 import { makeDetail } from "@/lib/make/service";
+import { SEO_BASE, seoConnector } from "@/lib/tracking/seo/status";
 import type { Connector, ConnectorKey, McpGrant } from "./types";
 
 type Row = Record<string, unknown>;
@@ -321,6 +322,8 @@ export async function loadConnectors(sb: SupabaseClient, mcpUrl: string): Promis
     safe(fireflies(sb, c), FF),
     safe(claude(sb, c, mcpUrl), MCP),
     safe(make(sb, mcpUrl), MAKE),
+    safe(seoConnector(sb, "gsc", c.search_console ?? null), SEO_BASE.gsc),
+    safe(seoConnector(sb, "bing", c.bing_webmaster ?? null), SEO_BASE.bing),
     Promise.resolve(ubersuggest()),
   ]);
 }

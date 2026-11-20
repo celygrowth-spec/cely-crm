@@ -3,6 +3,7 @@ import type { Person } from "@/lib/crm/types";
 import { personName } from "@/lib/format";
 import type { CampaignStep, CampaignWorkspace, Draft, ParticipantRow } from "./service";
 import { STEP_META, hasContactFor, renderTemplate, type VariableContext } from "./steps";
+import { prospectionUtm, tagTextLinks } from "@/lib/tracking/mail-utm";
 
 export function contextFor(p: ParticipantRow, person: Person | null | undefined): VariableContext {
   return {
@@ -73,10 +74,12 @@ export function readiness(p: ParticipantRow, steps: CampaignStep[], people: Pers
 }
 
 /** Message à préparer pour l'étape courante : brouillon s'il existe, sinon modèle personnalisé. */
-export function preparedMessage(step: CampaignStep, draft: Draft | null | undefined, ctx: VariableContext) {
+export function preparedMessage(step: CampaignStep, draft: Draft | null | undefined, ctx: VariableContext, campaignName?: string | null) {
   const subjectSrc = draft?.subject ?? step.subject ?? "";
   const bodySrc = draft?.body ?? step.message ?? "";
   const s = renderTemplate(subjectSrc, ctx);
   const b = renderTemplate(bodySrc, ctx);
-  return { subject: s.text, body: b.text, missing: [...new Set([...s.missing, ...b.missing])], fromDraft: !!draft };
+  // Tracking site : dans une campagne, les liens vers celygrowth.com portent le nom de la campagne et le canal
+  const body = campaignName ? tagTextLinks(b.text, prospectionUtm(campaignName, step.channel)) : b.text;
+  return { subject: s.text, body, missing: [...new Set([...s.missing, ...b.missing])], fromDraft: !!draft };
 }

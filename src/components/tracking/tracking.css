@@ -1,0 +1,102 @@
+/* Espace Tracking site : jetons de couleur locaux, en mode clair et en mode sombre (réglage du système).
+   Le reste du CRM n'a pas de mode sombre : ces jetons ne s'appliquent qu'à l'intérieur de .trk. Les classes
+   habituelles (text-ink, bg-surface, border-line…) suivent, puisqu'elles lisent les mêmes variables. */
+.trk {
+  --trk-card: #ffffff;
+  --trk-grid: #eee8f6;
+  --trk-axis: #6b6178;
+  --trk-track: #f1ecf8;
+  --trk-shadow: 0 1px 2px rgb(26 17 40 / 0.04), 0 8px 24px -16px rgb(26 17 40 / 0.18);
+  --trk-up: #17804a;
+  --trk-down: #b5386a;
+  --trk-c-direct: #2a78d6;
+  --trk-c-campaign: #eb6834;
+  --trk-c-organic: #1baf7a;
+  --trk-c-social: #eda100;
+  --trk-c-email: #e87ba4;
+  --trk-c-referral: #008300;
+  --trk-c-ai: #6250d6;
+  --trk-c-paid: #e34948;
+  --trk-seq-0: #f1ecf8;
+  --trk-seq-1: #d9cbfb;
+  --trk-seq-2: #b79bff;
+  --trk-seq-3: #8b5bff;
+  --trk-seq-4: #5a25d8;
+  --trk-seq-5: #3a1496;
+  color: var(--ink);
+  background: var(--background);
+}
+
+@media (prefers-color-scheme: dark) {
+  .trk {
+    color-scheme: dark;
+    --background: #120e1f;
+    --surface: #1f1936;
+    --ink: #f1edf9;
+    --muted: #a9a1ba;
+    --border: #322a4a;
+    --violet: #a384ff;
+    --violet-strong: #b9a0ff;
+    --violet-soft: #2a2145;
+    --violet-line: #43356f;
+    --success: #3fca84;
+    --danger: #f07aa5;
+    --warning: #e0b04a;
+    --trk-card: #1a1530;
+    --trk-grid: #2a2342;
+    --trk-axis: #a9a1ba;
+    --trk-track: #261f3f;
+    --trk-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -18px rgb(0 0 0 / 0.7);
+    --trk-up: #3fca84;
+    --trk-down: #f07aa5;
+    --trk-c-direct: #3987e5;
+    --trk-c-campaign: #d95926;
+    --trk-c-organic: #199e70;
+    --trk-c-social: #c98500;
+    --trk-c-email: #d55181;
+    --trk-c-referral: #0ca30c;
+    --trk-c-ai: #9085e9;
+    --trk-c-paid: #e66767;
+    --trk-seq-0: #261f3f;
+    --trk-seq-1: #3a2c6b;
+    --trk-seq-2: #5438a8;
+    --trk-seq-3: #7a55e6;
+    --trk-seq-4: #a384ff;
+    --trk-seq-5: #cdbcff;
+  }
+}
+
+.trk-card {
+  background: var(--trk-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--trk-shadow);
+}
+.trk-field {
+  height: 2.25rem;
+  border-radius: 0.625rem;
+  border: 1px solid var(--border);
+  background: var(--trk-card);
+  color: var(--ink);
+  padding: 0 0.625rem;
+  font-size: 0.8125rem;
+}
+.trk-field:focus-visible { outline: 2px solid var(--violet); outline-offset: 1px; }
+/* rechargement : le contenu reste en place, légèrement estompé (ni saut de page ni clignotement) */
+.trk-stale { opacity: 0.55; transition: opacity 180ms ease; }
+.trk-fresh { opacity: 1; transition: opacity 220ms ease; }
+.trk-row { transition: background-color 120ms ease; }
+.trk-row:hover, .trk-row:focus-visible { background: var(--surface); }
+.trk-bar { transition: width 380ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+.trk-live { animation: trk-pulse 2s ease-out infinite; }
+@keyframes trk-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--success) 55%, transparent); }
+  100% { box-shadow: 0 0 0 10px transparent; }
+}
+.trk-country { transition: fill 240ms ease, opacity 160ms ease; stroke: var(--trk-card); stroke-width: 0.6; cursor: pointer; }
+.trk-country:hover, .trk-country:focus-visible { opacity: 0.75; outline: none; }
+.trk .recharts-surface:focus, .trk .recharts-wrapper:focus, .trk .recharts-wrapper *:focus { outline: none; }
+@media (prefers-reduced-motion: reduce) {
+  .trk-stale, .trk-fresh, .trk-bar, .trk-country { transition: none; }
+  .trk-live { animation: none; }
+}

@@ -9,6 +9,7 @@ import { z } from "zod";
 import type { ActionResult } from "@/lib/action";
 import { requireAppOwner } from "@/lib/auth";
 import * as google from "@/lib/appointments/google";
+import { ensureServerKey } from "@/lib/appointments/owner";
 import { googleCreds } from "@/lib/appointments/server";
 import { serverRpcKey } from "@/lib/appointments/secrets";
 import { CrmError } from "@/lib/crm/service";
@@ -16,11 +17,13 @@ import { fetchAccount, FirefliesFailure } from "@/lib/fireflies/client";
 import { disconnectAccount, verifyAccount } from "@/lib/mail/service";
 import { listMcpGrants, loadConnectors } from "@/lib/connectors/status";
 import * as makeSvc from "@/lib/make/service";
+import { disconnectProvider, verifyProvider } from "@/lib/tracking/seo/job";
+import { providerOfKey } from "@/lib/tracking/seo/rules";
 import type { MakeDetail } from "@/lib/make/rules";
 import type { Connector, ConnectorKey } from "@/lib/connectors/types";
 import { disconnectGoogleAction } from "@/app/rendez-vous-actions";
 
-const KEY = z.enum(["gmail", "google_calendar", "fireflies", "claude_mcp"]);
+const KEY = z.enum(["gmail", "google_calendar", "fireflies", "claude_mcp", "search_console", "bing_webmaster"]);
 
 async function owned<T>(fn: (sb: SupabaseClient) => Promise<T>): Promise<ActionResult<T>> {
   const { supabase } = await requireAppOwner();
@@ -91,6 +94,11 @@ async function check(sb: SupabaseClient, k: z.infer<typeof KEY>): Promise<{ ok: 
       return { ok: false, message: e instanceof FirefliesFailure ? e.message : "Fireflies n'a pas répondu." };
     }
   }
+  const seo = providerOfKey(k);
+  if (seo) {
+    await ensureServerKey(sb);
+    return verifyProvider(sb, seo);
+  }
   const g = await listMcpGrants(sb, 8000);
   if (!g.grants) return { ok: false, message: g.error ?? "Liste des accès indisponible." };
   return { ok: true, message: g.grants.length ? `${g.grants.length} accès accordé(s) à Claude.` : "Aucun accès accordé à Claude." };
@@ -99,7 +107,12 @@ async function check(sb: SupabaseClient, k: z.infer<typeof KEY>): Promise<{ ok: 
 /** Déconnexion, en réutilisant la fonction du module (révocation chez Google comprise). */
 export async function disconnectConnectorAction(key: string): Promise<ActionResult<{ revoked: boolean }>> {
   return owned(async (sb) => {
-    const k = z.enum(["gmail", "google_calendar"]).parse(key);
+    const k = z.enum(["gmail", "google_calendar", "search_console", "bing_webmaster"]).parse(key);
+    const seo = providerOfKey(k);
+    if (seo) {
+      await ensureServerKey(sb);
+      return disconnectProvider(sb, seo);
+    }
     if (k === "gmail") {
       const { data } = await sb.from("mail_accounts").select("id").neq("status", "disconnected").order("is_default", { ascending: false }).limit(1).maybeSingle();
       if (!data) throw new CrmError("Aucun compte Gmail connecté.");

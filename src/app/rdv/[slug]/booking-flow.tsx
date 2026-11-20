@@ -13,9 +13,13 @@ import { notifyHost } from "@/components/rdv/embed-frame";
 import { SlotPicker, TimeZoneSelect } from "@/components/rdv/slot-picker";
 import { browserTimeZone, formatRange, formatTimeShort, formatLongDate, isValidTimeZone, timeZoneLabel } from "@/lib/appointments/time";
 import type { PublicBooking, PublicEvent, Question } from "@/lib/appointments/types";
+import { DECLARED_SOURCES } from "@/lib/tracking/declared";
 
-type Form = { first_name: string; last_name: string; email: string; company_name: string; website: string; phone: string; answers: Record<string, string> };
-const EMPTY: Form = { first_name: "", last_name: "", email: "", company_name: "", website: "", phone: "", answers: {} };
+type Form = { first_name: string; last_name: string; email: string; company_name: string; website: string; phone: string; answers: Record<string, string>; declared: string; declared_detail: string };
+const EMPTY: Form = { first_name: "", last_name: "", email: "", company_name: "", website: "", phone: "", answers: {}, declared: "", declared_detail: "" };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const uuidOrUndefined = (v: unknown) => (typeof v === "string" && UUID.test(v) ? v : undefined);
 
 type BookResponse =
   | { status: "confirmed"; ref: string; booking: PublicBooking }
@@ -44,6 +48,21 @@ export function BookingFlow({ event }: { event: PublicEvent }) {
   const [done, setDone] = useState<{ ref: string; booking: PublicBooking } | null>(null);
   const attemptKey = useRef<string | null>(null);
   const errorRef = useRef<HTMLDivElement>(null);
+  // Tracking site : visite du site d'où vient le visiteur (lien « ?sv= » ou message du site hôte), pour rattacher
+  // le rendez-vous à sa source. Rien d'autre n'est lu ; sans ces valeurs la réservation fonctionne à l'identique.
+  const tracking = useRef<{ visit_id?: string; visitor_id?: string }>({});
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    tracking.current = { visit_id: uuidOrUndefined(q.get("sv")), visitor_id: uuidOrUndefined(q.get("su")) };
+    const onMessage = (e: MessageEvent) => {
+      const d = e.data as { celyMesure?: number; visit?: unknown; visitor?: unknown } | null;
+      if (e.source !== window.parent || !d || d.celyMesure !== 1) return;
+      const visit = uuidOrUndefined(d.visit);
+      if (visit) tracking.current = { visit_id: visit, visitor_id: uuidOrUndefined(d.visitor) };
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
 
   // fuseau du visiteur détecté après le premier rendu (aucune différence serveur / navigateur)
   useEffect(() => {
@@ -82,12 +101,15 @@ export function BookingFlow({ event }: { event: PublicEvent }) {
           answers: form.answers,
           idempotency_key: attemptKey.current,
           fax: honeypot.current?.value || undefined,
+          tracking: tracking.current.visit_id ? tracking.current : undefined,
+          declared: form.declared || form.declared_detail.trim() ? { source: form.declared || undefined, detail: form.declared_detail.trim() || undefined } : undefined,
         }),
       });
       const body = (await res.json().catch(() => ({ error: "Réponse illisible du serveur" }))) as BookResponse;
       if ("status" in body && body.status === "confirmed") {
         setDone({ ref: body.ref, booking: body.booking });
         setStep("done");
+        notifyHost("booked");
         toTop();
         return;
       }
@@ -207,6 +229,30 @@ export function BookingFlow({ event }: { event: PublicEvent }) {
             {event.questions.map((q) => (
               <QuestionField key={q.id} q={q} value={form.answers[q.id] ?? ""} onChange={(v) => setForm({ ...form, answers: { ...form.answers, [q.id]: v } })} />
             ))}
+            <div>
+              <label htmlFor="f-declared" className="mb-1 block text-xs font-semibold text-muted">
+                Comment m&apos;avez-vous connu ? <span className="font-normal">(facultatif)</span>
+              </label>
+              <select
+                id="f-declared"
+                value={form.declared}
+                onChange={(e) => setForm({ ...form, declared: e.target.value })}
+                className="h-11 w-full rounded-lg border border-line bg-white px-3 text-base text-ink focus:border-violet focus:ring-2 focus:ring-violet/20 focus:outline-none sm:text-sm"
+              >
+                <option value="">Choisir…</option>
+                {DECLARED_SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+              {form.declared && (
+                <input
+                  aria-label="Précision (facultatif)"
+                  placeholder="Une précision ? (facultatif)"
+                  value={form.declared_detail}
+                  maxLength={300}
+                  onChange={(e) => setForm({ ...form, declared_detail: e.target.value })}
+                  className="mt-2 h-11 w-full rounded-lg border border-line bg-white px-3 text-base text-ink focus:border-violet focus:ring-2 focus:ring-violet/20 focus:outline-none sm:text-sm"
+                />
+              )}
+            </div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
               <TimeZoneSelect value={tz} onChange={setTz} id="rdv-tz-form" />
               <button

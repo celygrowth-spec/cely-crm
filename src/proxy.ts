@@ -8,7 +8,8 @@ import { NextResponse, type NextRequest } from "next/server";
 // /api/fireflies/webhook (signature), /api/fireflies/cron, /api/cron et /api/rendez-vous/reconcile (CRON_SECRET ou
 // session du propriétaire, vérifiés dans la route) : appelés par le planificateur, sans session (C07)
 // /api/make/retour : retour d'un scénario Make (secret partagé vérifié dans la route)
-const PUBLIC_PATHS = ["/login", "/api/mcp", "/.well-known", "/auth", "/rdv", "/api/rdv", "/portail", "/api/portail", "/api/fireflies/webhook", "/api/fireflies/cron", "/api/cron", "/api/rendez-vous/reconcile", "/api/make/retour"];
+// /api/site : mesure d'audience de celygrowth.com (origine du site ou secret partagé vérifiés dans les routes)
+const PUBLIC_PATHS = ["/login", "/api/mcp", "/.well-known", "/auth", "/rdv", "/api/rdv", "/portail", "/api/portail", "/api/fireflies/webhook", "/api/fireflies/cron", "/api/cron", "/api/rendez-vous/reconcile", "/api/make/retour", "/api/site"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
