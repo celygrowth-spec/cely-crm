@@ -22,6 +22,9 @@ de prospection aux pipelines sans jamais être copiée.
 - **Projets et portail client** : projets liés aux fiches CRM (planning, points de suivi, récapitulatifs,
   tâches, fichiers, idées) et espace client `/portail` accessible par code individuel, limité aux contenus
   publiés. Guide : `docs/projets-portail-client.md`.
+- **Tracking site** : mesure propriétaire de l'acquisition de celygrowth.com (sources, campagnes UTM, pages,
+  prospects, mots-clés Google et Bing, IA, géographie), parcours de chaque prospect jusqu'à son rendez-vous,
+  recommandations. Sans service tiers. Voir `docs/tracking-site.md`.
 - **Paramètres** : sources du lead, connexion à Claude, compte.
 - **Connecteur Claude (MCP)** : rechercher, consulter, créer, noter, déplacer, lister les relances, gérer les
   espaces client, depuis Claude.

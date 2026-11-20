@@ -16,6 +16,7 @@ import { registerProjectTools } from "./project-tools";
 import { registerOnboardingTools } from "./onboarding-tools";
 import { registerGeneratorTools } from "./generator-tools";
 import { registerTrashTools } from "./trash-tools";
+import { registerTrackingTools } from "./tracking-tools";
 import { registerAdvanceTools } from "./advance-tools";
 
 const TASKS_REMOVED = "Les tâches de fiche ont été retirées de Cely Growth. Pour noter une suite, l'utilisateur ajoute un élément à sa To do list dans l'application (Autres › To do list).";
@@ -626,4 +627,5 @@ export function registerTools(server: McpServer, client: GetClient) {
   registerGeneratorTools(tool);
   registerTrashTools(tool);
   registerAdvanceTools(tool);
+  registerTrackingTools(tool);
 }
