@@ -49,7 +49,7 @@ export function FocusSession({ items, campaignName }: { items: FocusItem[]; camp
       const existing = edits[it.participant.id];
       if (existing) return existing;
       const person = it.people.find((x) => x.id === it.participant.person_id) ?? null;
-      const msg = preparedMessage(it.step, it.draft, contextFor(it.participant, person));
+      const msg = preparedMessage(it.step, it.draft, contextFor(it.participant, person), it.campaign.name);
       return { subject: msg.subject, body: msg.body, personId: it.participant.person_id ?? "", doneAt: null, key: crypto.randomUUID() };
     },
     [edits],

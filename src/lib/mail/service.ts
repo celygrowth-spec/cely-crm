@@ -11,6 +11,7 @@ import { buildMime } from "./mime";
 import { MAX_ATTACHMENTS_BYTES, MAX_ATTACHMENTS_LABEL, isEmail, withSignature, type MailAccount, type MailMessage, type MailOrigin } from "./types";
 import { htmlToText, renderEmailHtml, textToHtml } from "./render";
 import { labelOf, resolveVariables, usedVariables, type VarContext } from "./variables";
+import { MAIL_UTM, tagHtmlLinks, tagTextLinks } from "@/lib/tracking/mail-utm";
 
 const BUCKET = "company-files";
 
@@ -290,9 +291,10 @@ export async function sendStored(sb: SupabaseClient, id: string, opts: { allowDo
       cc: m.cc_addrs,
       bcc: m.bcc_addrs,
       subject: m.subject,
-      text: withSignature(m.body_text, m.signature),
+      // Tracking site : les liens vers celygrowth.com reçoivent leurs UTM (ceux qui en ont déjà restent tels quels)
+      text: tagTextLinks(withSignature(m.body_text, m.signature), MAIL_UTM),
       // même rendu que l'aperçu du composeur : styles en ligne, signature une seule fois
-      html: m.body_html ? renderEmailHtml(safeHtml(m.body_html), m.signature) : null,
+      html: m.body_html ? tagHtmlLinks(renderEmailHtml(safeHtml(m.body_html), m.signature), MAIL_UTM) : null,
       inReplyTo: m.in_reply_to,
       references: m.references_hdr,
       messageId: m.rfc_message_id,
