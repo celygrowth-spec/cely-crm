@@ -23,7 +23,10 @@ describe("mail", () => {
   });
   test("texte brut : adresse avec ou sans https, ponctuation finale préservée, autres domaines ignorés", () => {
     expect(tagTextLinks("Détails : https://www.celygrowth.com/services.", MAIL_UTM)).toBe(`Détails : https://www.celygrowth.com/services?${Q}.`);
-    expect(tagTextLinks("Mon site (celygrowth.com) et exemple.fr", MAIL_UTM)).toBe(`Mon site (https://celygrowth.com/?${Q}) et exemple.fr`);
+    expect(tagTextLinks("Voir (celygrowth.com/growth) et exemple.fr", MAIL_UTM)).toBe(`Voir (https://celygrowth.com/growth?${Q}) et exemple.fr`);
+    // une simple mention du domaine (signature) n'est pas transformée en longue adresse
+    expect(tagTextLinks("Célien\ncelygrowth.com", MAIL_UTM)).toBe("Célien\ncelygrowth.com");
+    expect(tagTextLinks("www.celygrowth.com", MAIL_UTM)).toBe(`https://www.celygrowth.com/?${Q}`);
     expect(tagTextLinks("moi@celygrowth.com", MAIL_UTM)).toBe("moi@celygrowth.com");
     expect(tagTextLinks("https://moncelygrowth.com/x", MAIL_UTM)).toBe("https://moncelygrowth.com/x");
     expect(tagTextLinks("https://www.celygrowth.com/?utm_source=x", MAIL_UTM)).toBe("https://www.celygrowth.com/?utm_source=x");

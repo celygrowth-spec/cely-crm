@@ -2,6 +2,7 @@
 
 // Prospects : visiteurs identifiés et convertis, avec leur première et leur dernière source, la source déclarée,
 // leurs visites et leur rendez-vous. Une ligne rattachée à une fiche ouvre cette fiche.
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, UserRoundSearch } from "lucide-react";
 import { cn } from "@/components/ui";
@@ -51,6 +52,8 @@ const HEAD = ["Fiche", "Première source", "Dernière source", "Source déclaré
 
 export function ProspectsTab({ s }: { s: TrackingState }) {
   const router = useRouter();
+  // la liste s'ouvre sur les plus récents ; la suite s'affiche à la demande
+  const [shown, setShown] = useState(40);
   const { data, loading, stale, error, refetch } = useReport<ProspectsReport>("prospects", s);
   if (error) return <ErrorNote message={error} retry={refetch} />;
   if (loading || !data) return <TabSkeleton />;
@@ -74,7 +77,7 @@ export function ProspectsTab({ s }: { s: TrackingState }) {
       <ChannelChip channel={t.channel} detail={detail(t)} onClick={t.channel ? () => s.setFilter("channel", channel === t.channel ? null : t.channel) : undefined} />
     </span>
   );
-  const cell = "px-4 py-2.5 align-middle sm:px-5";
+  const cell = "py-2.5 align-middle px-1.5 first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5";
 
   return (
     <div className={cn("grid gap-4", stale ? "trk-stale" : "trk-fresh")}>
@@ -93,12 +96,12 @@ export function ProspectsTab({ s }: { s: TrackingState }) {
             <thead>
               <tr className="border-b border-line text-left">
                 {HEAD.map((h, i) => (
-                  <th key={i} scope="col" aria-label={h ? undefined : "Ouvrir la fiche"} className={cn("px-4 py-2 font-label text-[11px] font-bold tracking-wide whitespace-nowrap text-muted uppercase sm:px-5", h === "Visites" && "text-right")}>{h}</th>
+                  <th key={i} scope="col" aria-label={h ? undefined : "Ouvrir la fiche"} className={cn("py-2 font-label text-[11px] font-bold tracking-wide whitespace-nowrap text-muted uppercase px-1.5 first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5", h === "Visites" && "text-right")}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map((p) => {
+              {rows.slice(0, shown).map((p) => {
                 const open = p.company_id ? () => router.push(`/fiches/${p.company_id}`) : undefined;
                 return (
                   <tr key={p.key} tabIndex={open ? 0 : undefined} onClick={open}
@@ -130,6 +133,13 @@ export function ProspectsTab({ s }: { s: TrackingState }) {
             </tbody>
           </table>
         </div>
+        {rows.length > shown && (
+          <div className="pt-3 text-center">
+            <button type="button" onClick={() => setShown(shown + 60)} className="h-9 rounded-[10px] border border-line px-4 text-[13px] font-semibold text-ink hover:border-violet">
+              Afficher la suite ({num(rows.length - shown)} autres)
+            </button>
+          </div>
+        )}
         {rows.length >= 300 && <p className="pt-2 text-xs text-muted">Seuls les 300 prospects les plus récents sont affichés : affine la période ou les filtres.</p>}
       </Panel>
     </div>

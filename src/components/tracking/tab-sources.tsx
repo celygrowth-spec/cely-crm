@@ -46,7 +46,6 @@ export function SourcesTab({ s }: { s: TrackingState }) {
   const detailCols: Column<Detail>[] = [
     { key: "s", label: "Détail", render: (r) => <ChannelChip channel={r.channel} detail={sourceName(r.source) || "sans détail"} /> },
     { key: "v", label: "Visites", align: "right", render: (r) => num(r.visits) },
-    { key: "u", label: "Visiteurs", align: "right", render: (r) => num(r.visitors) },
     { key: "f", label: "RDV · première", align: "right", render: (r) => num(r.bookings_first) },
     { key: "l", label: "RDV · dernière", align: "right", render: (r) => num(r.bookings_last) },
   ];
@@ -118,7 +117,7 @@ export function SourcesTab({ s }: { s: TrackingState }) {
                   <tr className="border-b border-line">
                     <th scope="col" className="px-4 py-2 text-left font-label text-[11px] font-bold tracking-wide text-muted uppercase sm:px-5">Déclarée ↓ · Mesurée →</th>
                     {measuredCols.map((m) => (
-                      <th key={m} scope="col" className="px-3 py-2 text-right text-xs font-semibold whitespace-nowrap text-ink">
+                      <th key={m} scope="col" className="px-2 py-2 text-right text-xs font-semibold whitespace-nowrap text-ink">
                         {m === "unknown" ? "Non mesurée" : <span className="inline-flex items-center gap-1.5"><ChannelDot channel={m} />{channelLabel(m)}</span>}
                       </th>
                     ))}
@@ -132,7 +131,7 @@ export function SourcesTab({ s }: { s: TrackingState }) {
                         const n = cell(d, m);
                         const same = DECLARED_CHANNEL[d as DeclaredSource] === m;
                         return (
-                          <td key={m} className="px-3 py-2 text-right tabular-nums">
+                          <td key={m} className="px-2 py-2 text-right tabular-nums">
                             {n > 0
                               ? <span className={cn("inline-block min-w-8 rounded-md px-2 py-0.5", same ? "bg-violet-soft font-bold text-ink" : "text-ink")} title={same ? "Déclaration et mesure concordent" : undefined}>{num(n)}</span>
                               : <span className="text-muted">·</span>}

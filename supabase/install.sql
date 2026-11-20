@@ -20298,3 +20298,1739 @@ create or replace view public.company_journey with (security_invoker = true) as
           or exists (select 1 from public.appt_bookings b where b.company_id = c.id and b.status = 'confirmed' and b.ends_at < now() and coalesce(b.outcome, 'done') = 'done'));
 revoke all on public.company_journey from public, anon, authenticated;
 grant select on public.company_journey to authenticated;
+
+
+-- ===== 20261125140100_tracking_collecte.sql =====
+-- Tracking site · lot 1 : collecte des visites de celygrowth.com.
+--
+-- Principes :
+-- - mesure propriétaire : tout reste dans cette base, aucune donnée n'est envoyée à un service tiers ;
+-- - avant consentement, une visite n'a aucun identifiant persistant (visitor_id nul) ; l'adresse IP n'est jamais
+--   stockée (seules des empreintes salées servent à limiter les abus et à écarter les visites du propriétaire) ;
+-- - le point de collecte public n'écrit que par site_collect / site_bot_hit, protégées par la clé serveur ;
+-- - lecture réservée au propriétaire (RLS).
+-- Rejouable : peut être appliquée plusieurs fois et dans n'importe quel ordre vis-à-vis des autres branches.
+
+-- ---------------------------------------------------------------------------
+-- Visiteurs consentants : identifiant persistant créé par le site, 13 mois au plus
+-- ---------------------------------------------------------------------------
+create table if not exists public.site_visitors (
+  id uuid primary key,
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  expires_at timestamptz not null default (now() + interval '13 months'),
+  -- adresse donnée par le visiteur lui-même (formulaire du site), utilisée pour retrouver sa fiche
+  email_norm text check (email_norm is null or char_length(email_norm) <= 254),
+  demo boolean not null default false
+);
+create index if not exists site_visitors_email on public.site_visitors (email_norm) where email_norm is not null;
+
+-- ---------------------------------------------------------------------------
+-- Visites humaines
+-- ---------------------------------------------------------------------------
+create table if not exists public.site_visits (
+  id uuid primary key,
+  visitor_id uuid references public.site_visitors (id) on delete set null,
+  started_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  channel text not null default 'direct'
+    check (channel in ('campaign','organic','ai','social','email','paid','referral','direct')),
+  source text check (source is null or char_length(source) <= 120),
+  referrer_host text check (referrer_host is null or char_length(referrer_host) <= 120),
+  -- UTM normalisés (regroupement) et valeurs d'origine (jamais perdues)
+  utm_source text check (utm_source is null or char_length(utm_source) <= 120),
+  utm_medium text check (utm_medium is null or char_length(utm_medium) <= 120),
+  utm_campaign text check (utm_campaign is null or char_length(utm_campaign) <= 120),
+  utm_content text check (utm_content is null or char_length(utm_content) <= 120),
+  utm_term text check (utm_term is null or char_length(utm_term) <= 120),
+  utm_raw jsonb,
+  country text check (country is null or country ~ '^[A-Z]{2}$'),
+  device text not null default 'desktop' check (device in ('desktop','mobile','tablet')),
+  browser text check (browser is null or char_length(browser) <= 40),
+  entry_page text not null check (char_length(entry_page) between 1 and 300),
+  exit_page text not null check (char_length(exit_page) between 1 and 300),
+  is_returning boolean not null default false,
+  pageviews int not null default 0,
+  duration_s int not null default 0,
+  max_scroll smallint not null default 0,
+  cta_clicks int not null default 0,
+  forms int not null default 0,
+  demo boolean not null default false
+);
+create index if not exists site_visits_started on public.site_visits (started_at desc);
+create index if not exists site_visits_visitor on public.site_visits (visitor_id, started_at) where visitor_id is not null;
+create index if not exists site_visits_campaign on public.site_visits (utm_campaign, started_at) where utm_campaign is not null;
+create index if not exists site_visits_last_seen on public.site_visits (last_seen_at desc);
+
+create table if not exists public.site_pageviews (
+  id uuid primary key,
+  visit_id uuid not null references public.site_visits (id) on delete cascade,
+  at timestamptz not null default now(),
+  path text not null check (char_length(path) between 1 and 300),
+  duration_s int not null default 0,
+  scroll_pct smallint not null default 0
+);
+create index if not exists site_pageviews_visit on public.site_pageviews (visit_id, at);
+create index if not exists site_pageviews_at on public.site_pageviews (at desc);
+create index if not exists site_pageviews_path on public.site_pageviews (path, at);
+
+-- Clic vers la prise de rendez-vous, formulaire envoyé, rendez-vous confirmé (vu depuis le site)
+create table if not exists public.site_events (
+  id uuid primary key,
+  visit_id uuid not null references public.site_visits (id) on delete cascade,
+  at timestamptz not null default now(),
+  kind text not null check (kind in ('cta','form','booking')),
+  path text not null check (char_length(path) between 1 and 300),
+  label text check (label is null or char_length(label) <= 120),
+  -- « Comment m'avez-vous connu ? » saisi dans un formulaire du site
+  declared_source text check (declared_source is null or char_length(declared_source) <= 60),
+  declared_detail text check (declared_detail is null or char_length(declared_detail) <= 300)
+);
+create index if not exists site_events_visit on public.site_events (visit_id, at);
+create index if not exists site_events_kind on public.site_events (kind, at desc);
+
+-- ---------------------------------------------------------------------------
+-- Robots (moteurs de recherche et IA) : un compteur par jour, robot, statut et page
+-- ---------------------------------------------------------------------------
+create table if not exists public.site_bot_hits (
+  day date not null,
+  bot text not null check (char_length(bot) between 1 and 60),
+  kind text not null check (kind in ('ai','search','other')),
+  -- verified : origine confirmée ; unverified : nom connu mais origine démentie (usurpation probable) ;
+  -- unverifiable : l'éditeur du robot ne publie aucun moyen de contrôle
+  status text not null check (status in ('verified','unverified','unverifiable')),
+  path text not null check (char_length(path) between 1 and 300),
+  hits int not null default 1,
+  last_at timestamptz not null default now(),
+  demo boolean not null default false,
+  primary key (day, bot, status, path)
+);
+create index if not exists site_bot_hits_bot on public.site_bot_hits (bot, day);
+
+-- ---------------------------------------------------------------------------
+-- Technique : limites d'abus et exclusion des visites du propriétaire (empreintes, jamais l'adresse)
+-- ---------------------------------------------------------------------------
+create table if not exists public.site_rate (
+  bucket text not null check (char_length(bucket) between 1 and 80),
+  minute timestamptz not null,
+  n int not null default 1,
+  primary key (bucket, minute)
+);
+create table if not exists public.site_excluded_ips (
+  ip_hash text primary key check (char_length(ip_hash) between 16 and 80),
+  seen_at timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------------------------
+-- RLS : lecture par le propriétaire uniquement, aucune écriture directe
+-- ---------------------------------------------------------------------------
+do $$
+declare t text;
+begin
+  foreach t in array array['site_visitors','site_visits','site_pageviews','site_events','site_bot_hits','site_rate','site_excluded_ips']
+  loop
+    execute format('alter table public.%I enable row level security', t);
+    execute format('revoke all on public.%I from anon, authenticated', t);
+    execute format('drop policy if exists owner_select on public.%I', t);
+  end loop;
+  foreach t in array array['site_visitors','site_visits','site_pageviews','site_events','site_bot_hits']
+  loop
+    execute format('grant select on public.%I to authenticated', t);
+    execute format('create policy owner_select on public.%I for select to authenticated using ((select public.is_app_owner()))', t);
+  end loop;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- Fonctions
+-- ---------------------------------------------------------------------------
+create schema if not exists site_private;
+revoke all on schema site_private from public, anon, authenticated;
+
+create or replace function site_private.txt(p jsonb, p_key text, p_max int)
+returns text
+language sql
+immutable
+set search_path = ''
+as $$ select nullif(left(btrim(p ->> p_key), p_max), ''); $$;
+
+create or replace function site_private.uuid_or_null(p text)
+returns uuid
+language plpgsql
+immutable
+set search_path = ''
+as $$
+begin
+  if p is null or p !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then return null; end if;
+  return p::uuid;
+end;
+$$;
+
+-- Limite d'abus : au plus p_max événements par minute pour une empreinte. Faux = refusé.
+create or replace function site_private.rate_ok(p_bucket text, p_max int)
+returns boolean
+language plpgsql
+set search_path = ''
+as $$
+declare v_n int; v_minute timestamptz := date_trunc('minute', now());
+begin
+  if p_bucket is null then return true; end if;
+  insert into public.site_rate (bucket, minute) values (left(p_bucket, 80), v_minute)
+  on conflict (bucket, minute) do update set n = public.site_rate.n + 1
+  returning n into v_n;
+  if random() < 0.02 then delete from public.site_rate where minute < now() - interval '1 hour'; end if;
+  return v_n <= p_max;
+end;
+$$;
+
+-- Visiteur consentant : créé à la première vue, durée de vie de 13 mois non prolongée.
+create or replace function site_private.touch_visitor(p_id uuid)
+returns void
+language sql
+set search_path = ''
+as $$
+  insert into public.site_visitors (id) values (p_id)
+  on conflict (id) do update set last_seen_at = now();
+$$;
+
+/**
+ * Point d'entrée unique de la collecte. p_event (déjà validé et classé par le serveur) :
+ *   type : pv | pe | cta | form | booking | consent | withdraw
+ *   visit_id, visitor_id?, pageview_id?, event_id?, path, duration_s?, scroll_pct?, label?, email?,
+ *   declared_source?, declared_detail?, visit : { channel, source, referrer_host, utm_*, utm_raw, country, device, browser }
+ * p_ip_hash : empreinte stable de l'adresse (exclusion du propriétaire) ; p_rate_hash : empreinte du jour (abus).
+ * Retour : ok | excluded | rate_limited | ignored. N'écrit que dans les tables site_*.
+ */
+create or replace function public.site_collect(p_server_key text, p_event jsonb, p_ip_hash text default null, p_rate_hash text default null)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_type text := p_event ->> 'type';
+  v_visit uuid := site_private.uuid_or_null(p_event ->> 'visit_id');
+  v_visitor uuid := site_private.uuid_or_null(p_event ->> 'visitor_id');
+  v_pv uuid := site_private.uuid_or_null(p_event ->> 'pageview_id');
+  v_event uuid := site_private.uuid_or_null(p_event ->> 'event_id');
+  v_path text := coalesce(site_private.txt(p_event, 'path', 300), '/');
+  v jsonb := coalesce(p_event -> 'visit', '{}'::jsonb);
+  v_new boolean := false;
+  v_old_d int; v_old_s int; v_d int; v_s int; v_rows int;
+  v_kind text;
+begin
+  perform appt_private.assert_server(p_server_key);
+  if v_visit is null or v_type is null then return 'ignored'; end if;
+  if p_ip_hash is not null and exists (
+    select 1 from public.site_excluded_ips where ip_hash = p_ip_hash and seen_at > now() - interval '30 days') then
+    return 'excluded';
+  end if;
+  if not site_private.rate_ok('ip:' || p_rate_hash, 90) or not site_private.rate_ok('all', 3000) then return 'rate_limited'; end if;
+
+  -- un identifiant expiré n'est plus rattaché : la visite reste anonyme
+  if v_visitor is not null and exists (select 1 from public.site_visitors where id = v_visitor and expires_at < now()) then
+    v_visitor := null;
+  end if;
+
+  if v_type = 'pv' then
+    if v_pv is null then return 'ignored'; end if;
+    if v_visitor is not null then perform site_private.touch_visitor(v_visitor); end if;
+    insert into public.site_visits (id, visitor_id, channel, source, referrer_host, utm_source, utm_medium, utm_campaign,
+      utm_content, utm_term, utm_raw, country, device, browser, entry_page, exit_page, is_returning)
+    values (v_visit, v_visitor,
+      case when v ->> 'channel' in ('campaign','organic','ai','social','email','paid','referral','direct') then v ->> 'channel' else 'direct' end,
+      site_private.txt(v, 'source', 120), site_private.txt(v, 'referrer_host', 120),
+      site_private.txt(v, 'utm_source', 120), site_private.txt(v, 'utm_medium', 120), site_private.txt(v, 'utm_campaign', 120),
+      site_private.txt(v, 'utm_content', 120), site_private.txt(v, 'utm_term', 120),
+      case when jsonb_typeof(v -> 'utm_raw') = 'object' and pg_column_size(v -> 'utm_raw') <= 1200 then v -> 'utm_raw' end,
+      case when v ->> 'country' ~ '^[A-Z]{2}$' then v ->> 'country' end,
+      case when v ->> 'device' in ('desktop','mobile','tablet') then v ->> 'device' else 'desktop' end,
+      site_private.txt(v, 'browser', 40), v_path, v_path,
+      v_visitor is not null and exists (select 1 from public.site_visits o where o.visitor_id = v_visitor and o.id <> v_visit))
+    on conflict (id) do nothing;
+    get diagnostics v_rows = row_count;
+    v_new := v_rows > 0;
+    insert into public.site_pageviews (id, visit_id, path) values (v_pv, v_visit, v_path) on conflict (id) do nothing;
+    get diagnostics v_rows = row_count;
+    if v_rows > 0 then
+      update public.site_visits set pageviews = pageviews + 1, exit_page = v_path, last_seen_at = now(),
+        visitor_id = coalesce(visitor_id, v_visitor)
+      where id = v_visit;
+    end if;
+    return 'ok';
+  end if;
+
+  -- les autres événements portent sur une visite déjà ouverte
+  if not exists (select 1 from public.site_visits where id = v_visit) then return 'ignored'; end if;
+
+  if v_type = 'pe' then
+    v_d := least(greatest(coalesce((p_event ->> 'duration_s')::int, 0), 0), 3600);
+    v_s := least(greatest(coalesce((p_event ->> 'scroll_pct')::int, 0), 0), 100);
+    select duration_s, scroll_pct into v_old_d, v_old_s from public.site_pageviews where id = v_pv and visit_id = v_visit for update;
+    if not found then return 'ignored'; end if;
+    update public.site_pageviews set duration_s = greatest(v_old_d, v_d), scroll_pct = greatest(v_old_s, v_s) where id = v_pv;
+    update public.site_visits set duration_s = duration_s + greatest(v_d - v_old_d, 0),
+      max_scroll = greatest(max_scroll, v_s), last_seen_at = now()
+    where id = v_visit;
+    return 'ok';
+  end if;
+
+  if v_type in ('cta', 'form', 'booking') then
+    if v_event is null then return 'ignored'; end if;
+    v_kind := v_type;
+    insert into public.site_events (id, visit_id, kind, path, label, declared_source, declared_detail)
+    values (v_event, v_visit, v_kind, v_path, site_private.txt(p_event, 'label', 120),
+      site_private.txt(p_event, 'declared_source', 60), site_private.txt(p_event, 'declared_detail', 300))
+    on conflict (id) do nothing;
+    get diagnostics v_rows = row_count;
+    if v_rows > 0 then
+      update public.site_visits set last_seen_at = now(),
+        cta_clicks = cta_clicks + (v_kind = 'cta')::int, forms = forms + (v_kind = 'form')::int
+      where id = v_visit;
+      -- l'adresse saisie dans un formulaire ne relie le parcours à une fiche que si le visiteur a consenti
+      if v_kind = 'form' and site_private.txt(p_event, 'email', 254) is not null then
+        update public.site_visitors set email_norm = lower(site_private.txt(p_event, 'email', 254))
+        where id = (select visitor_id from public.site_visits where id = v_visit);
+      end if;
+    end if;
+    return 'ok';
+  end if;
+
+  if v_type = 'consent' then
+    -- consentement donné en cours de visite : le rattachement commence ici
+    if v_visitor is null then return 'ignored'; end if;
+    perform site_private.touch_visitor(v_visitor);
+    update public.site_visits set visitor_id = v_visitor, last_seen_at = now(),
+      is_returning = exists (select 1 from public.site_visits o where o.visitor_id = v_visitor and o.id <> v_visit)
+    where id = v_visit and visitor_id is null;
+    return 'ok';
+  end if;
+
+  if v_type = 'withdraw' then
+    -- consentement retiré : l'identifiant disparaît, ses visites redeviennent anonymes
+    if v_visitor is null then return 'ignored'; end if;
+    if not exists (select 1 from public.site_visits where id = v_visit and visitor_id = v_visitor) then return 'ignored'; end if;
+    delete from public.site_visitors where id = v_visitor; -- visitor_id des visites remis à nul par la clé étrangère
+    return 'ok';
+  end if;
+
+  return 'ignored';
+exception when invalid_text_representation or numeric_value_out_of_range then
+  return 'ignored';
+end;
+$$;
+
+-- Passage d'un robot, signalé par le serveur du site.
+create or replace function public.site_bot_hit(p_server_key text, p_bot text, p_kind text, p_status text, p_path text)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform appt_private.assert_server(p_server_key);
+  if not site_private.rate_ok('bots', 1200) then return 'rate_limited'; end if;
+  insert into public.site_bot_hits (day, bot, kind, status, path)
+  values ((now() at time zone 'Europe/Paris')::date, left(btrim(p_bot), 60), p_kind, p_status, left(coalesce(nullif(btrim(p_path), ''), '/'), 300))
+  on conflict (day, bot, status, path) do update set hits = public.site_bot_hits.hits + 1, last_at = now();
+  return 'ok';
+end;
+$$;
+
+-- Le propriétaire utilise le CRM depuis cette connexion : ses visites du site ne sont pas comptées.
+create or replace function public.site_exclude_ip(p_ip_hash text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform public.assert_owner();
+  if p_ip_hash is null or char_length(p_ip_hash) not between 16 and 80 then return; end if;
+  insert into public.site_excluded_ips (ip_hash) values (p_ip_hash)
+  on conflict (ip_hash) do update set seen_at = now() where public.site_excluded_ips.seen_at < now() - interval '1 hour';
+  delete from public.site_excluded_ips where seen_at < now() - interval '60 days';
+end;
+$$;
+
+-- Purge : identifiants de plus de 13 mois (les visites restent, anonymes). Appelée par le passage quotidien.
+create or replace function public.site_purge(p_server_key text)
+returns int
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare v_n int;
+begin
+  perform appt_private.assert_server(p_server_key);
+  delete from public.site_visitors where expires_at < now() and not demo;
+  get diagnostics v_n = row_count;
+  delete from public.site_rate where minute < now() - interval '1 hour';
+  return v_n;
+end;
+$$;
+
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'public.site_collect(text, jsonb, text, text)', 'public.site_bot_hit(text, text, text, text, text)', 'public.site_purge(text)']
+  loop
+    execute format('revoke execute on function %s from public', f);
+    execute format('grant execute on function %s to anon, authenticated', f);
+  end loop;
+end $$;
+revoke execute on function public.site_exclude_ip(text) from public, anon;
+grant execute on function public.site_exclude_ip(text) to authenticated;
+revoke execute on all functions in schema site_private from public, anon, authenticated;
+
+
+-- ===== 20261125140200_tracking_liens_utm.sql =====
+-- Tracking site · lot 2 : liens UTM créés dans le Générateur de liens UTM.
+-- Chaque lien garde un nom lisible ; le même lien enregistré deux fois n'en crée qu'un (son nom est mis à jour).
+-- Les visites sont rapprochées d'un lien par leurs UTM normalisés : aucune redirection, aucun identifiant dans le lien.
+-- Rejouable.
+
+create table if not exists public.site_utm_links (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (char_length(btrim(name)) between 1 and 120),
+  path text not null check (char_length(path) between 1 and 300 and path ~ '^/'),
+  utm_source text not null check (utm_source ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and char_length(utm_source) <= 80),
+  utm_medium text not null check (utm_medium ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and char_length(utm_medium) <= 80),
+  utm_campaign text not null check (utm_campaign ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and char_length(utm_campaign) <= 80),
+  utm_content text check (utm_content is null or (utm_content ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and char_length(utm_content) <= 80)),
+  utm_term text check (utm_term is null or (utm_term ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and char_length(utm_term) <= 80)),
+  url text not null check (char_length(url) <= 1000),
+  created_at timestamptz not null default now(),
+  demo boolean not null default false
+);
+create unique index if not exists site_utm_links_url on public.site_utm_links (url);
+create index if not exists site_utm_links_campaign on public.site_utm_links (utm_campaign);
+
+alter table public.site_utm_links enable row level security;
+revoke all on public.site_utm_links from anon, authenticated;
+grant select on public.site_utm_links to authenticated;
+drop policy if exists owner_select on public.site_utm_links;
+create policy owner_select on public.site_utm_links for select to authenticated using ((select public.is_app_owner()));
+
+-- La convention de nommage est imposée ici aussi (contraintes ci-dessus) : une valeur non conforme est refusée,
+-- même si l'appel ne vient pas du générateur.
+create or replace function public.site_utm_link_save(p jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare v public.site_utm_links;
+begin
+  perform public.assert_owner();
+  insert into public.site_utm_links (name, path, utm_source, utm_medium, utm_campaign, utm_content, utm_term, url)
+  values (btrim(p ->> 'name'), p ->> 'path', p ->> 'utm_source', p ->> 'utm_medium', p ->> 'utm_campaign',
+    nullif(p ->> 'utm_content', ''), nullif(p ->> 'utm_term', ''), p ->> 'url')
+  on conflict (url) do update set name = excluded.name
+  returning * into v;
+  return to_jsonb(v);
+exception when check_violation or not_null_violation then
+  raise exception 'Lien invalide : nom, page, source, support et campagne sont obligatoires (minuscules, sans accents, tirets).' using errcode = '22023';
+end;
+$$;
+
+create or replace function public.site_utm_link_delete(p_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform public.assert_owner();
+  if public.current_actor() <> 'user' then raise exception 'Suppression réservée à l''application' using errcode = '42501'; end if;
+  delete from public.site_utm_links where id = p_id;
+end;
+$$;
+
+revoke execute on function public.site_utm_link_save(jsonb), public.site_utm_link_delete(uuid) from public, anon;
+grant execute on function public.site_utm_link_save(jsonb), public.site_utm_link_delete(uuid) to authenticated;
+
+
+-- ===== 20261125140300_tracking_rattachement.sql =====
+-- Tracking site · lots 3 et 4 : rattachement des rendez-vous à leur source, parcours dans la fiche, source déclarée,
+-- signal « un prospect revient sur le site ».
+--
+-- - Un rendez-vous pris par la réservation publique reçoit la source et les UTM de la visite en cours, même sans
+--   consentement (aucun identifiant : seule la visite est citée). Avec consentement, les visites précédentes du
+--   visiteur donnent la première source.
+-- - Une seule attribution par rendez-vous (double envoi sans effet). Annulation ou échec : le rendez-vous n'est plus
+--   compté, sans rien supprimer ; les statistiques lisent le statut courant du rendez-vous.
+-- - La source de la fiche est remplie avec la première source quand elle est vide, jamais remplacée.
+-- Rejouable.
+
+create table if not exists public.site_attributions (
+  id uuid primary key default gen_random_uuid(),
+  -- nul uniquement pour le jeu de données fictives
+  booking_id uuid references public.appt_bookings (id) on delete cascade,
+  visit_id uuid references public.site_visits (id) on delete set null,
+  visitor_id uuid references public.site_visitors (id) on delete set null,
+  converted_at timestamptz not null default now(),
+  first_visit_id uuid references public.site_visits (id) on delete set null,
+  first_at timestamptz,
+  first_channel text, first_source text, first_campaign text, first_medium text,
+  last_channel text, last_source text, last_campaign text, last_medium text,
+  entry_page text,
+  visits_before int not null default 0,
+  -- « Comment m'avez-vous connu ? »
+  declared_source text check (declared_source is null or char_length(declared_source) <= 60),
+  declared_detail text check (declared_detail is null or char_length(declared_detail) <= 300),
+  company_id uuid references public.companies (id) on delete set null,
+  person_id uuid references public.people (id) on delete set null,
+  demo boolean not null default false
+);
+create unique index if not exists site_attributions_booking on public.site_attributions (booking_id) where booking_id is not null;
+create index if not exists site_attributions_converted on public.site_attributions (converted_at desc);
+create index if not exists site_attributions_company on public.site_attributions (company_id) where company_id is not null;
+create index if not exists site_attributions_visitor on public.site_attributions (visitor_id) where visitor_id is not null;
+create index if not exists site_attributions_visit on public.site_attributions (visit_id) where visit_id is not null;
+
+alter table public.site_attributions enable row level security;
+revoke all on public.site_attributions from anon, authenticated;
+grant select on public.site_attributions to authenticated;
+drop policy if exists owner_select on public.site_attributions;
+create policy owner_select on public.site_attributions for select to authenticated using ((select public.is_app_owner()));
+
+-- ---------------------------------------------------------------------------
+-- Source de la fiche : première source mesurée → source du lead (créée si elle n'existe pas encore)
+-- ---------------------------------------------------------------------------
+create or replace function site_private.lead_source_for(p_channel text, p_source text)
+returns uuid
+language plpgsql
+set search_path = ''
+as $$
+declare v_name text; v_id uuid;
+begin
+  v_name := case
+    when p_source = 'linkedin' then 'LinkedIn'
+    when p_channel = 'campaign' and p_source in ('email', 'newsletter', 'signature') then 'Email'
+    when p_channel = 'campaign' and p_source = 'prospection' then 'Email sortant'
+    when p_channel = 'campaign' then 'Campagne'
+    when p_channel = 'organic' then 'Recherche organique'
+    when p_channel = 'ai' then 'IA générative'
+    when p_channel = 'social' then 'Réseaux sociaux'
+    when p_channel = 'email' then 'Email'
+    when p_channel = 'paid' then 'Publicité'
+    when p_channel = 'referral' then 'Site référent'
+    when p_channel = 'direct' then 'Site web'
+    else null end;
+  if v_name is null then return null; end if;
+  select id into v_id from public.lead_sources where lower(btrim(name)) = lower(v_name);
+  if v_id is null then
+    insert into public.lead_sources (name, position)
+    values (v_name, coalesce((select max(position) + 1 from public.lead_sources), 0))
+    on conflict do nothing returning id into v_id;
+    if v_id is null then select id into v_id from public.lead_sources where lower(btrim(name)) = lower(v_name); end if;
+  end if;
+  return v_id;
+end;
+$$;
+
+-- Recopie la fiche du rendez-vous sur l'attribution et remplit la source de la fiche si elle est vide.
+create or replace function site_private.apply_fiche(p_booking uuid)
+returns void
+language plpgsql
+set search_path = ''
+as $$
+declare a public.site_attributions; v_company uuid; v_person uuid;
+begin
+  select * into a from public.site_attributions where booking_id = p_booking;
+  if not found then return; end if;
+  select company_id, person_id into v_company, v_person from public.appt_bookings where id = p_booking;
+  if v_company is null then return; end if;
+  update public.site_attributions set company_id = v_company, person_id = v_person
+   where id = a.id and (company_id is distinct from v_company or person_id is distinct from v_person);
+  -- jamais de remplacement : seule une source vide est remplie
+  if a.first_channel is not null then
+    update public.companies set source_id = site_private.lead_source_for(a.first_channel, a.first_source)
+     where id = v_company and source_id is null;
+  end if;
+end;
+$$;
+
+/**
+ * Rattache un rendez-vous de la réservation publique à la visite du site pendant laquelle il a été pris.
+ * Sans visite connue (réservation ouverte directement), seule la source déclarée est gardée.
+ */
+create or replace function public.site_attach_booking(p_server_key text, p_booking uuid, p_visit uuid default null,
+  p_visitor uuid default null, p_declared_source text default null, p_declared_detail text default null)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v public.site_visits; f public.site_visits; l public.site_visits;
+  v_visitor uuid; v_before int := 0;
+  v_ds text := nullif(left(btrim(p_declared_source), 60), '');
+  v_dd text := nullif(left(btrim(p_declared_detail), 300), '');
+begin
+  perform appt_private.assert_server(p_server_key);
+  if not exists (select 1 from public.appt_bookings where id = p_booking) then return 'ignored'; end if;
+  if exists (select 1 from public.site_attributions where booking_id = p_booking) then return 'existing'; end if;
+
+  select * into v from public.site_visits where id = p_visit;
+  if found then
+    -- l'identifiant n'est retenu que s'il est celui de la visite (consentement donné) : jamais sur simple déclaration
+    v_visitor := v.visitor_id;
+    l := v;
+    f := v;
+    if v_visitor is not null then
+      select * into f from public.site_visits where visitor_id = v_visitor order by started_at, id limit 1;
+      select count(*) into v_before from public.site_visits where visitor_id = v_visitor and id <> v.id;
+      update public.site_visitors set email_norm = coalesce(email_norm, (select email_norm from public.appt_bookings where id = p_booking))
+       where id = v_visitor;
+    end if;
+  elsif v_ds is null and v_dd is null then
+    return 'ignored';
+  end if;
+
+  insert into public.site_attributions (booking_id, visit_id, visitor_id, first_visit_id, first_at,
+    first_channel, first_source, first_campaign, first_medium, last_channel, last_source, last_campaign, last_medium,
+    entry_page, visits_before, declared_source, declared_detail)
+  values (p_booking, l.id, v_visitor, f.id, f.started_at,
+    f.channel, f.source, f.utm_campaign, f.utm_medium, l.channel, l.source, l.utm_campaign, l.utm_medium,
+    f.entry_page, v_before, v_ds, v_dd)
+  on conflict do nothing;
+  perform site_private.apply_fiche(p_booking);
+  return 'ok';
+end;
+$$;
+
+revoke execute on function public.site_attach_booking(text, uuid, uuid, uuid, text, text) from public;
+grant execute on function public.site_attach_booking(text, uuid, uuid, uuid, text, text) to anon, authenticated;
+
+-- La fiche est souvent rattachée après la réservation (confirmation, ou rattachement à la main) : on suit.
+create or replace function site_private.tg_booking_fiche()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.company_id is not null then perform site_private.apply_fiche(new.id); end if;
+  return null;
+end;
+$$;
+drop trigger if exists site_booking_fiche on public.appt_bookings;
+create trigger site_booking_fiche after update of company_id, person_id on public.appt_bookings
+  for each row when (new.company_id is distinct from old.company_id or new.person_id is distinct from old.person_id)
+  execute function site_private.tg_booking_fiche();
+
+-- ---------------------------------------------------------------------------
+-- Lectures (exécutées avec les droits de l'appelant : la RLS réserve tout au propriétaire)
+-- ---------------------------------------------------------------------------
+
+-- Un rendez-vous compte tant qu'il n'est ni annulé, ni en échec, ni expiré.
+create or replace view public.site_conversions with (security_invoker = true) as
+select a.*, coalesce(b.company_id, a.company_id) as fiche_company_id, coalesce(b.person_id, a.person_id) as fiche_person_id,
+       b.starts_at as booking_starts_at, b.status as booking_status,
+       (a.booking_id is null or b.status in ('pending', 'confirmed')) as counted
+  from public.site_attributions a
+  left join public.appt_bookings b on b.id = a.booking_id;
+
+-- Visiteurs consentants reliés à une fiche : par leur rendez-vous, sinon par l'adresse donnée dans un formulaire.
+create or replace view public.site_identified with (security_invoker = true) as
+select distinct on (u.id) u.id as visitor_id, coalesce(c.fiche_company_id, p.company_id) as company_id, coalesce(c.fiche_person_id, p.id) as person_id
+  from public.site_visitors u
+  left join public.site_conversions c on c.visitor_id = u.id and c.fiche_company_id is not null
+  left join public.people p on u.email_norm is not null and p.email_norm = u.email_norm
+ where coalesce(c.fiche_company_id, p.company_id) is not null
+ order by u.id, c.converted_at nulls last, p.created_at;
+
+revoke all on public.site_conversions, public.site_identified from anon, authenticated;
+grant select on public.site_conversions, public.site_identified to authenticated;
+
+/** Parcours site d'une fiche : première et dernière source, visites (UTM, pages, temps), rendez-vous, source déclarée. */
+create or replace function public.site_company_journey(p_company uuid)
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  with conv as (
+    select c.* from public.site_conversions c where c.fiche_company_id = p_company
+  ),
+  visitors as (
+    select visitor_id, person_id from public.site_identified where company_id = p_company
+  ),
+  visits as (
+    select v.*, (select i.person_id from visitors i where i.visitor_id = v.visitor_id) as person_id
+      from public.site_visits v
+     where v.visitor_id in (select visitor_id from visitors)
+        or v.id in (select visit_id from conv where visit_id is not null)
+  ),
+  first_touch as (select * from visits order by started_at, id limit 1)
+  select jsonb_build_object(
+    'first', (select jsonb_build_object('at', started_at, 'channel', channel, 'source', source, 'campaign', utm_campaign, 'medium', utm_medium, 'entry_page', entry_page) from first_touch),
+    'last', (select jsonb_build_object('at', coalesce(v.started_at, c.converted_at), 'channel', c.last_channel, 'source', c.last_source, 'campaign', c.last_campaign, 'medium', c.last_medium)
+               from conv c left join public.site_visits v on v.id = c.visit_id
+              where c.last_channel is not null order by c.converted_at desc limit 1),
+    'declared', coalesce((select jsonb_agg(jsonb_build_object('source', d.declared_source, 'detail', d.declared_detail, 'at', d.at) order by d.at)
+                  from (
+                    select declared_source, declared_detail, converted_at as at from conv where declared_source is not null or declared_detail is not null
+                    union all
+                    select e.declared_source, e.declared_detail, e.at from public.site_events e
+                     where e.visit_id in (select id from visits) and (e.declared_source is not null or e.declared_detail is not null)
+                  ) d), '[]'::jsonb),
+    'visits', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', v.id, 'at', v.started_at, 'channel', v.channel, 'source', v.source, 'referrer_host', v.referrer_host,
+        'utm', jsonb_strip_nulls(jsonb_build_object('source', v.utm_source, 'medium', v.utm_medium, 'campaign', v.utm_campaign, 'content', v.utm_content, 'term', v.utm_term)),
+        'device', v.device, 'country', v.country, 'duration_s', v.duration_s, 'pageviews', v.pageviews, 'person_id', v.person_id,
+        'pages', coalesce((select jsonb_agg(jsonb_build_object('path', p.path, 'at', p.at, 'duration_s', p.duration_s, 'scroll_pct', p.scroll_pct) order by p.at, p.id)
+                             from public.site_pageviews p where p.visit_id = v.id), '[]'::jsonb),
+        'events', coalesce((select jsonb_agg(jsonb_build_object('kind', e.kind, 'at', e.at, 'path', e.path, 'label', e.label) order by e.at, e.id)
+                              from public.site_events e where e.visit_id = v.id), '[]'::jsonb)
+      ) order by v.started_at, v.id) from visits v), '[]'::jsonb),
+    'bookings', coalesce((select jsonb_agg(jsonb_build_object(
+        'booking_id', c.booking_id, 'visit_id', c.visit_id, 'at', c.converted_at, 'starts_at', c.booking_starts_at, 'status', c.booking_status,
+        'counted', c.counted, 'person_id', c.fiche_person_id) order by c.converted_at) from conv c), '[]'::jsonb),
+    'people', coalesce((select jsonb_agg(jsonb_build_object('id', p.id, 'name', nullif(btrim(coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, '')), '')))
+                 from public.people p
+                where p.company_id = p_company
+                  and (p.id in (select person_id from visitors) or p.id in (select fiche_person_id from conv))), '[]'::jsonb)
+  );
+$$;
+
+/**
+ * Aujourd'hui : prospects identifiés revenus sur le site ces p_days derniers jours, après leur premier rendez-vous
+ * ou leur formulaire. « intent » : au moins une page à forte intention (offres, tarifs, réservation, contact).
+ */
+create or replace function public.site_return_signals(p_days int default 7)
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  with ident as (
+    select i.visitor_id, i.company_id,
+           least((select min(c.converted_at) from public.site_conversions c where c.visitor_id = i.visitor_id),
+                 (select min(e.at) from public.site_events e join public.site_visits v on v.id = e.visit_id
+                   where v.visitor_id = i.visitor_id and e.kind = 'form')) as known_at
+      from public.site_identified i
+  ),
+  back as (
+    select i.company_id, v.id, v.started_at, v.pageviews,
+           exists (select 1 from public.site_pageviews p
+                    where p.visit_id = v.id and p.path ~* '(^/services|^/contact|^/audit|^/rdv|tarif|offre|prix|devis)') as intent,
+           (select p.path from public.site_pageviews p
+             where p.visit_id = v.id and p.path ~* '(^/services|^/contact|^/audit|^/rdv|tarif|offre|prix|devis)' order by p.at limit 1) as intent_page
+      from ident i
+      join public.site_visits v on v.visitor_id = i.visitor_id
+     where v.started_at > now() - make_interval(days => least(greatest(coalesce(p_days, 7), 1), 90))
+       and i.known_at is not null and v.started_at > i.known_at + interval '1 hour'
+  )
+  select coalesce(jsonb_agg(row order by (row ->> 'intent')::boolean desc, row ->> 'last_at' desc), '[]'::jsonb)
+    from (
+      select jsonb_build_object('company_id', c.id, 'company_name', c.name, 'visits', count(*), 'last_at', max(b.started_at),
+               'intent', bool_or(b.intent), 'intent_page', (array_agg(b.intent_page order by b.started_at desc) filter (where b.intent_page is not null))[1]) as row
+        from back b join public.companies c on c.id = b.company_id
+       where c.merged_into_id is null and c.archived_at is null
+       group by c.id, c.name
+    ) s;
+$$;
+
+revoke execute on function public.site_company_journey(uuid), public.site_return_signals(int) from public, anon;
+grant execute on function public.site_company_journey(uuid), public.site_return_signals(int) to authenticated;
+revoke execute on all functions in schema site_private from public, anon, authenticated;
+
+
+-- ===== 20261125140400_tracking_seo.sql =====
+-- Tracking du site, lot 5 — Google Search Console et Bing Webmaster Tools (lecture seule).
+--
+--   * seo_connections : une ligne par fournisseur ('gsc', 'bing') : propriété suivie, état, dernière synchronisation,
+--     curseur de reprise. Aucun secret dans cette table.
+--   * seo_connection_secrets : jeton de rafraîchissement Google ou clé API Bing, CHIFFRÉ par le serveur avant
+--     l'écriture (AES-256-GCM, clé dérivée de APPOINTMENTS_SECRET). Aucune lecture possible depuis le navigateur :
+--     ni politique, ni droit. Le texte chiffré ne sort que par seo_server_connection (clé serveur).
+--   * seo_daily : clics, impressions et position moyenne par jour, page et requête. Le CTR se calcule
+--     (clics / impressions), il n'est pas stocké. Une ligne par (fournisseur, jour, page, requête) : relancer une
+--     synchronisation remplace les mêmes lignes, sans doublon.
+--     Niveaux : page et requête renseignées = croisement ; page = '' : total d'une requête ; requête = '' : total
+--     d'une page ; les deux vides : total du site. Search Console n'écrit que des croisements ; Bing écrit les
+--     quatre niveaux (son API ne croise pas tout) : ne jamais additionner des niveaux différents.
+--
+-- Migration additive et rejouable : aucune table ni fonction existante n'est modifiée, sauf deux listes autorisées
+-- complétées sans rien retirer (connector_checks.key, scheduled_jobs.job).
+
+create table if not exists public.seo_connections (
+  provider text primary key check (provider in ('gsc', 'bing')),
+  site_url text check (site_url is null or char_length(site_url) between 1 and 500),
+  account_label text check (account_label is null or char_length(account_label) <= 200),
+  -- propriétés proposées au choix (Search Console) : adresses seulement
+  sites jsonb not null default '[]',
+  status text not null default 'connected' check (status in ('connected', 'reconnect', 'error')),
+  last_error text check (last_error is null or char_length(last_error) <= 300),
+  connected_at timestamptz not null default now(),
+  last_sync_at timestamptz,
+  history_done_at timestamptz,
+  cursor jsonb not null default '{}',
+  updated_at timestamptz not null default now()
+);
+drop trigger if exists set_updated_at on public.seo_connections;
+create trigger set_updated_at before update on public.seo_connections
+  for each row execute function public.tg_set_updated_at();
+
+alter table public.seo_connections enable row level security;
+drop policy if exists owner_select on public.seo_connections;
+create policy owner_select on public.seo_connections for select to authenticated using ((select public.is_app_owner()));
+revoke all on public.seo_connections from anon;
+revoke insert, update, delete, truncate on public.seo_connections from authenticated;
+
+create table if not exists public.seo_connection_secrets (
+  provider text primary key references public.seo_connections (provider) on delete cascade,
+  secret_enc text not null check (secret_enc like 'v1.%' and char_length(secret_enc) <= 4000),
+  updated_at timestamptz not null default now()
+);
+-- RLS sans aucune politique, et aucun droit : la table n'est lisible que par les fonctions ci-dessous
+alter table public.seo_connection_secrets enable row level security;
+revoke all on public.seo_connection_secrets from public, anon, authenticated;
+
+create table if not exists public.seo_daily (
+  provider text not null check (provider in ('gsc', 'bing')),
+  day date not null,
+  page text not null default '' check (char_length(page) <= 500),
+  query text not null default '' check (char_length(query) <= 500),
+  clicks integer not null default 0 check (clicks >= 0),
+  impressions integer not null default 0 check (impressions >= 0),
+  position numeric(7,2) check (position is null or position >= 0),
+  demo boolean not null default false,
+  constraint seo_daily_unique unique (provider, day, page, query)
+);
+create index if not exists seo_daily_day_idx on public.seo_daily (day);
+create index if not exists seo_daily_query_idx on public.seo_daily (provider, query, day);
+
+alter table public.seo_daily enable row level security;
+drop policy if exists owner_select on public.seo_daily;
+create policy owner_select on public.seo_daily for select to authenticated using ((select public.is_app_owner()));
+revoke all on public.seo_daily from anon;
+revoke insert, update, delete, truncate on public.seo_daily from authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Propriétaire, dans l'application : connecter, choisir la propriété, déconnecter
+-- ---------------------------------------------------------------------------
+create schema if not exists seo_private;
+revoke all on schema seo_private from public, anon, authenticated;
+
+create or replace function seo_private.assert_owner_user()
+returns void
+language plpgsql
+stable
+set search_path = ''
+as $$
+begin
+  perform public.assert_owner();
+  if public.current_actor() <> 'user' then
+    raise exception 'Les connecteurs se règlent dans l''application.' using errcode = '42501';
+  end if;
+end;
+$$;
+
+create or replace function seo_private.provider(p_provider text)
+returns text
+language plpgsql
+immutable
+set search_path = ''
+as $$
+begin
+  if p_provider is null or p_provider not in ('gsc', 'bing') then
+    raise exception 'Fournisseur inconnu' using errcode = '22023';
+  end if;
+  return p_provider;
+end;
+$$;
+
+-- Enregistre une connexion (jeton ou clé déjà chiffrés par le serveur). Reconnexion de la même propriété : le
+-- curseur et l'historique sont conservés. Propriété différente : l'import repart de zéro (voir seo_set_site).
+create or replace function public.seo_connect(
+  p_provider text, p_secret_enc text, p_account_label text default null, p_site_url text default null, p_sites jsonb default '[]')
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_provider text;
+  v_site text := nullif(btrim(coalesce(p_site_url, '')), '');
+  v_old text;
+begin
+  perform seo_private.assert_owner_user();
+  v_provider := seo_private.provider(p_provider);
+  if p_secret_enc is null or p_secret_enc not like 'v1.%' then
+    raise exception 'Secret non chiffré' using errcode = '22023';
+  end if;
+  select site_url into v_old from public.seo_connections where provider = v_provider;
+  -- même compte reconnecté sans propriété imposée : la propriété déjà choisie est gardée si elle est encore proposée
+  if v_site is null and v_old is not null and coalesce(p_sites, '[]') @> to_jsonb(v_old) then
+    v_site := v_old;
+  end if;
+  insert into public.seo_connections as c (provider, site_url, account_label, sites, status, last_error, connected_at)
+  values (v_provider, v_site, nullif(btrim(coalesce(p_account_label, '')), ''), coalesce(p_sites, '[]'), 'connected', null, now())
+  on conflict (provider) do update set
+    site_url = excluded.site_url, account_label = excluded.account_label, sites = excluded.sites,
+    status = 'connected', last_error = null, connected_at = now(),
+    cursor = case when c.site_url is not distinct from excluded.site_url then c.cursor else '{}'::jsonb end,
+    history_done_at = case when c.site_url is not distinct from excluded.site_url then c.history_done_at end,
+    last_sync_at = case when c.site_url is not distinct from excluded.site_url then c.last_sync_at end;
+  if v_old is not null and v_old is distinct from v_site then
+    delete from public.seo_daily where provider = v_provider and not demo;
+  end if;
+  insert into public.seo_connection_secrets (provider, secret_enc) values (v_provider, p_secret_enc)
+  on conflict (provider) do update set secret_enc = excluded.secret_enc, updated_at = now();
+end;
+$$;
+
+-- Choix de la propriété suivie. En changer efface les chiffres importés de l'ancienne (ils ne décrivent pas le même
+-- site) et relance l'import complet ; les lignes de démonstration ne sont pas touchées.
+create or replace function public.seo_set_site(p_provider text, p_site_url text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_provider text;
+  v_site text := nullif(btrim(coalesce(p_site_url, '')), '');
+  v_row public.seo_connections;
+begin
+  perform seo_private.assert_owner_user();
+  v_provider := seo_private.provider(p_provider);
+  select * into v_row from public.seo_connections where provider = v_provider for update;
+  if not found then raise exception 'Connecteur non connecté' using errcode = 'P0002'; end if;
+  if v_site is null or char_length(v_site) > 500 then
+    raise exception 'Propriété invalide' using errcode = '22023';
+  end if;
+  if v_provider = 'gsc' and not (v_row.sites @> to_jsonb(v_site)) then
+    raise exception 'Cette propriété ne fait pas partie de celles du compte connecté' using errcode = '22023';
+  end if;
+  if v_row.site_url is not distinct from v_site then return; end if;
+  if v_row.site_url is not null then
+    delete from public.seo_daily where provider = v_provider and not demo;
+  end if;
+  update public.seo_connections
+     set site_url = v_site, cursor = '{}', history_done_at = null, last_sync_at = null,
+         status = case when status = 'error' then 'connected' else status end,
+         last_error = case when status = 'error' then null else last_error end
+   where provider = v_provider;
+end;
+$$;
+
+-- Déconnexion : le secret est effacé, les chiffres déjà importés restent.
+create or replace function public.seo_disconnect(p_provider text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform seo_private.assert_owner_user();
+  delete from public.seo_connections where provider = seo_private.provider(p_provider);
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Serveur de l'application (clé serveur) : passage quotidien et vérifications
+-- ---------------------------------------------------------------------------
+
+-- Connexion et secret chiffré ; null si le fournisseur n'est pas connecté.
+create or replace function public.seo_server_connection(p_server_key text, p_provider text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  perform appt_private.assert_server(p_server_key);
+  return (select jsonb_build_object('provider', c.provider, 'site_url', c.site_url, 'status', c.status, 'cursor', c.cursor,
+                                    'history_done_at', c.history_done_at, 'last_sync_at', c.last_sync_at, 'secret_enc', s.secret_enc)
+            from public.seo_connections c join public.seo_connection_secrets s using (provider)
+           where c.provider = seo_private.provider(p_provider));
+end;
+$$;
+
+-- Écrit un lot de lignes [{day, page, query, clicks, impressions, position}]. La même ligne reçue deux fois est
+-- remplacée, jamais doublée. p_replace_days : ces jours sont d'abord vidés (hors démonstration) dans la même
+-- transaction, pour qu'une ligne disparue chez le fournisseur (données provisoires) ne reste pas.
+-- Renvoie le nombre de lignes écrites. Au plus 60 000 lignes par appel.
+create or replace function public.seo_server_upsert(p_server_key text, p_provider text, p_rows jsonb, p_replace_days date[] default null)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_provider text;
+  v_count integer := 0;
+begin
+  perform appt_private.assert_server(p_server_key);
+  v_provider := seo_private.provider(p_provider);
+  if not exists (select 1 from public.seo_connections where provider = v_provider) then
+    raise exception 'Connecteur non connecté' using errcode = 'P0002';
+  end if;
+  if p_rows is not null and jsonb_typeof(p_rows) <> 'array' then
+    raise exception 'Lot invalide' using errcode = '22023';
+  end if;
+  if jsonb_array_length(coalesce(p_rows, '[]')) > 60000 then
+    raise exception 'Lot trop volumineux' using errcode = '22023';
+  end if;
+  if p_replace_days is not null then
+    delete from public.seo_daily where provider = v_provider and day = any (p_replace_days) and not demo;
+  end if;
+  insert into public.seo_daily as d (provider, day, page, query, clicks, impressions, position, demo)
+  select distinct on (r.day, r.page, r.query) v_provider, r.day, r.page, r.query, r.clicks, r.impressions, r.position, false
+    from (select (x ->> 'day')::date as day,
+                 left(coalesce(x ->> 'page', ''), 500) as page,
+                 left(coalesce(x ->> 'query', ''), 500) as query,
+                 greatest(0, round(coalesce((x ->> 'clicks')::numeric, 0)))::integer as clicks,
+                 greatest(0, round(coalesce((x ->> 'impressions')::numeric, 0)))::integer as impressions,
+                 case when (x ->> 'position') is null then null
+                      else least(99999.99, greatest(0, round((x ->> 'position')::numeric, 2))) end as position
+            from jsonb_array_elements(coalesce(p_rows, '[]')) x) r
+   where r.day is not null
+   order by r.day, r.page, r.query, r.impressions desc
+  on conflict (provider, day, page, query) do update
+    set clicks = excluded.clicks, impressions = excluded.impressions, position = excluded.position, demo = false;
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$$;
+
+-- Avance de la synchronisation. p_cursor null : curseur inchangé. Toute avance confirme que l'accès fonctionne.
+create or replace function public.seo_server_progress(
+  p_server_key text, p_provider text, p_cursor jsonb default null, p_history_done boolean default false, p_synced boolean default false)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform appt_private.assert_server(p_server_key);
+  update public.seo_connections
+     set cursor = coalesce(p_cursor, cursor),
+         history_done_at = case when p_history_done then coalesce(history_done_at, now()) else history_done_at end,
+         last_sync_at = case when p_synced then now() else last_sync_at end,
+         status = 'connected', last_error = null
+   where provider = seo_private.provider(p_provider);
+end;
+$$;
+
+-- Échec : 'reconnect' (accès refusé, expiré ou révoqué : à reconnecter) ou 'error' (panne passagère). Le message
+-- est écrit par le serveur de l'application : jamais de jeton, de clé ni d'adresse appelée.
+create or replace function public.seo_server_fail(p_server_key text, p_provider text, p_status text, p_error text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform appt_private.assert_server(p_server_key);
+  if p_status is null or p_status not in ('reconnect', 'error') then
+    raise exception 'État invalide' using errcode = '22023';
+  end if;
+  update public.seo_connections
+     set status = p_status, last_error = left(coalesce(nullif(btrim(p_error), ''), 'Erreur inconnue.'), 300)
+   where provider = seo_private.provider(p_provider);
+end;
+$$;
+
+revoke execute on all functions in schema seo_private from public, anon, authenticated;
+revoke execute on function public.seo_connect(text, text, text, text, jsonb) from public, anon;
+revoke execute on function public.seo_set_site(text, text) from public, anon;
+revoke execute on function public.seo_disconnect(text) from public, anon;
+grant execute on function public.seo_connect(text, text, text, text, jsonb) to authenticated;
+grant execute on function public.seo_set_site(text, text) to authenticated;
+grant execute on function public.seo_disconnect(text) to authenticated;
+
+revoke execute on function public.seo_server_connection(text, text) from public;
+revoke execute on function public.seo_server_upsert(text, text, jsonb, date[]) from public;
+revoke execute on function public.seo_server_progress(text, text, jsonb, boolean, boolean) from public;
+revoke execute on function public.seo_server_fail(text, text, text, text) from public;
+grant execute on function public.seo_server_connection(text, text) to anon, authenticated;
+grant execute on function public.seo_server_upsert(text, text, jsonb, date[]) to anon, authenticated;
+grant execute on function public.seo_server_progress(text, text, jsonb, boolean, boolean) to anon, authenticated;
+grant execute on function public.seo_server_fail(text, text, text, text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Listes autorisées complétées sans retirer ce qu'une autre migration a ajouté entre-temps :
+-- vérifications à la demande (Connecteurs) et passage planifié « seo ».
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  v text;
+  k text;
+begin
+  foreach k in array array['search_console', 'bing_webmaster'] loop
+    select pg_get_constraintdef(oid) into v from pg_constraint
+     where conrelid = 'public.connector_checks'::regclass and conname = 'connector_checks_key_check';
+    if v is not null and v not like '%''' || k || '''%' and v like '%ARRAY[%' then
+      alter table public.connector_checks drop constraint connector_checks_key_check;
+      execute 'alter table public.connector_checks add constraint connector_checks_key_check '
+        || replace(v, 'ARRAY[', 'ARRAY[''' || k || '''::text, ');
+    end if;
+  end loop;
+
+  select pg_get_constraintdef(oid) into v from pg_constraint
+   where conrelid = 'public.scheduled_jobs'::regclass and conname = 'scheduled_jobs_job_check';
+  if v is not null and v not like '%''seo''%' and v like '%ARRAY[%' then
+    alter table public.scheduled_jobs drop constraint scheduled_jobs_job_check;
+    execute 'alter table public.scheduled_jobs add constraint scheduled_jobs_job_check ' || replace(v, 'ARRAY[', 'ARRAY[''seo''::text, ');
+  end if;
+end $$;
+
+
+-- ===== 20261125140500_tracking_stats.sql =====
+-- Tracking site · lot 6 : agrégats de l'espace Tracking site.
+--
+-- Tous les calculs sont faits ici, côté base : le navigateur ne reçoit que des agrégats, même avec un an de données.
+-- Les fonctions s'exécutent avec les droits de l'appelant : la RLS réserve chaque ligne au propriétaire (un autre
+-- compte obtient des agrégats vides). Les périodes sont des jours de Paris, bornes comprises.
+-- Filtres (p_f) : channel, source, campaign, page, country, device. Rejouable.
+
+-- Visites de la période qui passent les filtres.
+create or replace function public.site_f_visits(p_from date, p_to date, p_f jsonb)
+returns setof public.site_visits
+language sql
+stable
+set search_path = ''
+as $$
+  select v.*
+    from public.site_visits v
+   where v.started_at >= (p_from::timestamp at time zone 'Europe/Paris')
+     and v.started_at < ((p_to + 1)::timestamp at time zone 'Europe/Paris')
+     and (nullif(p_f ->> 'channel', '') is null or v.channel = p_f ->> 'channel')
+     and (nullif(p_f ->> 'source', '') is null or v.source = p_f ->> 'source')
+     and (nullif(p_f ->> 'campaign', '') is null or v.utm_campaign = p_f ->> 'campaign')
+     and (nullif(p_f ->> 'country', '') is null or v.country = p_f ->> 'country')
+     and (nullif(p_f ->> 'device', '') is null or v.device = p_f ->> 'device')
+     and (nullif(p_f ->> 'page', '') is null or exists (
+           select 1 from public.site_pageviews p where p.visit_id = v.id and p.path = p_f ->> 'page'));
+$$;
+
+-- Rendez-vous comptés de la période (ni annulés ni en échec) ; avec un filtre, seuls ceux dont la visite le passe.
+create or replace function public.site_f_conversions(p_from date, p_to date, p_f jsonb)
+returns setof public.site_conversions
+language sql
+stable
+set search_path = ''
+as $$
+  select c.*
+    from public.site_conversions c
+    left join public.site_visits v on v.id = c.visit_id
+   where c.counted
+     and c.converted_at >= (p_from::timestamp at time zone 'Europe/Paris')
+     and c.converted_at < ((p_to + 1)::timestamp at time zone 'Europe/Paris')
+     and (nullif(p_f ->> 'channel', '') is null or v.channel = p_f ->> 'channel')
+     and (nullif(p_f ->> 'source', '') is null or v.source = p_f ->> 'source')
+     and (nullif(p_f ->> 'campaign', '') is null or v.utm_campaign = p_f ->> 'campaign')
+     and (nullif(p_f ->> 'country', '') is null or v.country = p_f ->> 'country')
+     and (nullif(p_f ->> 'device', '') is null or v.device = p_f ->> 'device')
+     and (nullif(p_f ->> 'page', '') is null or exists (
+           select 1 from public.site_pageviews p where p.visit_id = v.id and p.path = p_f ->> 'page'));
+$$;
+
+-- Pas des courbes : le jour jusqu'à trois mois, la semaine au-delà (une année = 53 points).
+create or replace function public.site_bucket(p_from date, p_to date)
+returns text
+language sql
+immutable
+set search_path = ''
+as $$ select case when p_to - p_from <= 92 then 'day' else 'week' end; $$;
+
+create or replace function public.site_day(p_at timestamptz, p_bucket text)
+returns date
+language sql
+immutable
+set search_path = ''
+as $$ select date_trunc(p_bucket, p_at at time zone 'Europe/Paris')::date; $$;
+
+-- Chiffres clés d'une période : visiteurs (un visiteur anonyme compte pour une visite), visites, rendez-vous…
+create or replace function public.site_kpis(p_from date, p_to date, p_f jsonb)
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'visits', v.visits, 'visitors', v.visitors, 'ai_visits', v.ai, 'cta_visits', v.cta, 'pageviews', v.pageviews,
+    'bookings', c.n,
+    'rate', case when v.visits > 0 then round(100.0 * c.n / v.visits, 2) else 0 end)
+  from (select count(*) as visits, count(distinct coalesce(visitor_id, id)) as visitors,
+               count(*) filter (where channel = 'ai') as ai, count(*) filter (where cta_clicks > 0) as cta,
+               coalesce(sum(pageviews), 0) as pageviews
+          from public.site_f_visits(p_from, p_to, p_f)) v,
+       (select count(*) as n from public.site_f_conversions(p_from, p_to, p_f)) c;
+$$;
+
+-- Courbe de la période : par pas, visites par source, visiteurs, rendez-vous. Les pas sans donnée valent zéro.
+create or replace function public.site_series(p_from date, p_to date, p_f jsonb)
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  with params as (select public.site_bucket(p_from, p_to) as b),
+  steps as (
+    select generate_series(date_trunc(b, p_from::timestamp), p_to::timestamp, ('1 ' || b)::interval)::date as d from params
+  ),
+  vis as (
+    select public.site_day(v.started_at, (select b from params)) as d, v.channel, count(*) as n,
+           count(distinct coalesce(v.visitor_id, v.id)) as u
+      from public.site_f_visits(p_from, p_to, p_f) v group by 1, 2
+  ),
+  tot as (
+    select public.site_day(v.started_at, (select b from params)) as d, count(distinct coalesce(v.visitor_id, v.id)) as u
+      from public.site_f_visits(p_from, p_to, p_f) v group by 1
+  ),
+  conv as (
+    select public.site_day(c.converted_at, (select b from params)) as d, count(*) as n
+      from public.site_f_conversions(p_from, p_to, p_f) c group by 1
+  )
+  select jsonb_build_object('bucket', (select b from params), 'points', coalesce(jsonb_agg(jsonb_build_object(
+      'd', s.d,
+      'visits', coalesce((select sum(n) from vis where vis.d = s.d), 0),
+      'visitors', coalesce((select u from tot where tot.d = s.d), 0),
+      'bookings', coalesce((select n from conv where conv.d = s.d), 0),
+      'by', coalesce((select jsonb_object_agg(channel, n) from vis where vis.d = s.d), '{}'::jsonb)
+    ) order by s.d), '[]'::jsonb))
+  from steps s;
+$$;
+
+/** Vue d'ensemble : chiffres clés (période et période précédente de même durée), courbe, entonnoir. */
+create or replace function public.site_stats_overview(p_from date, p_to date, p_f jsonb default '{}')
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'from', p_from, 'to', p_to,
+    'previous_from', p_from - (p_to - p_from + 1), 'previous_to', p_from - 1,
+    'kpis', public.site_kpis(p_from, p_to, p_f),
+    'previous', public.site_kpis(p_from - (p_to - p_from + 1), p_from - 1, p_f),
+    'series', public.site_series(p_from, p_to, p_f),
+    'has_data', exists (select 1 from public.site_visits));
+$$;
+
+/** En direct : visites actives ces cinq dernières minutes et pages en cours de lecture. */
+create or replace function public.site_live()
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'visitors', count(*),
+    'pages', coalesce((select jsonb_agg(jsonb_build_object('path', path, 'n', n) order by n desc, path)
+                         from (select exit_page as path, count(*) as n from public.site_visits
+                                where last_seen_at > now() - interval '5 minutes' group by 1 order by 2 desc limit 5) p), '[]'::jsonb))
+    from public.site_visits where last_seen_at > now() - interval '5 minutes';
+$$;
+
+/** Sources : répartition, rendez-vous en première et en dernière source, sites référents, déclaré contre mesuré. */
+create or replace function public.site_stats_sources(p_from date, p_to date, p_f jsonb default '{}')
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  with v as (select * from public.site_f_visits(p_from, p_to, p_f)),
+  pv as (select * from public.site_f_visits(p_from - (p_to - p_from + 1), p_from - 1, p_f)),
+  c as (select * from public.site_f_conversions(p_from, p_to, p_f)),
+  channels as (
+    select ch.channel,
+           (select count(*) from v where v.channel = ch.channel) as visits,
+           (select count(distinct coalesce(visitor_id, id)) from v where v.channel = ch.channel) as visitors,
+           (select count(*) from pv where pv.channel = ch.channel) as previous_visits,
+           (select count(*) from c where c.first_channel = ch.channel) as bookings_first,
+           (select count(*) from c where c.last_channel = ch.channel) as bookings_last
+      from unnest(array['direct','campaign','organic','social','email','referral','ai','paid']) as ch(channel)
+  ),
+  details as (
+    select g.*,
+           (select count(*) from c where c.first_channel = g.channel and coalesce(c.first_source, '') = g.source) as bookings_first,
+           (select count(*) from c where c.last_channel = g.channel and coalesce(c.last_source, '') = g.source) as bookings_last
+      from (select v.channel, coalesce(v.source, '') as source, count(*) as visits, count(distinct coalesce(v.visitor_id, v.id)) as visitors
+              from v group by 1, 2) g
+  ),
+  referrers as (
+    select g.*, (select count(*) from c join public.site_visits lv on lv.id = c.visit_id where lv.referrer_host = g.host) as bookings
+      from (select v.referrer_host as host, count(*) as visits, count(distinct coalesce(v.visitor_id, v.id)) as visitors
+              from v where v.channel = 'referral' and v.referrer_host is not null group by 1) g
+  ),
+  decl as (
+    select coalesce(c.declared_source, 'Non renseignée') as declared, coalesce(c.first_channel, 'unknown') as measured, count(*) as n
+      from c group by 1, 2
+  )
+  select jsonb_build_object(
+    'channels', (select jsonb_agg(to_jsonb(channels)) from channels),
+    'details', coalesce((select jsonb_agg(to_jsonb(d) order by d.visits desc, d.source) from (select * from details order by visits desc limit 60) d), '[]'::jsonb),
+    'referrers', coalesce((select jsonb_agg(to_jsonb(r) order by r.visits desc, r.host) from (select * from referrers order by visits desc limit 40) r), '[]'::jsonb),
+    'declared', coalesce((select jsonb_agg(to_jsonb(decl) order by decl.n desc) from decl), '[]'::jsonb),
+    'bookings', (select count(*) from c),
+    'series', public.site_series(p_from, p_to, p_f));
+$$;
+
+/** Campagnes : performances de chaque campagne et de chaque lien UTM, courbes des campagnes les plus actives. */
+create or replace function public.site_stats_campaigns(p_from date, p_to date, p_f jsonb default '{}')
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  with v as (select * from public.site_f_visits(p_from, p_to, p_f) where channel = 'campaign'),
+  c as (select c.*, lv.utm_source as v_source, lv.utm_medium as v_medium, lv.utm_campaign as v_campaign, lv.utm_content as v_content
+          from public.site_f_conversions(p_from, p_to, p_f) c join public.site_visits lv on lv.id = c.visit_id),
+  campaigns as (
+    select g.*,
+           (select count(*) from c where coalesce(c.v_campaign, '(sans nom)') = g.campaign) as bookings,
+           (select count(*) from public.site_conversions fc
+             where fc.counted and fc.first_channel = 'campaign' and coalesce(fc.first_campaign, '(sans nom)') = g.campaign
+               and fc.converted_at >= (p_from::timestamp at time zone 'Europe/Paris')
+               and fc.converted_at < ((p_to + 1)::timestamp at time zone 'Europe/Paris')) as bookings_first
+      from (select coalesce(v.utm_campaign, '(sans nom)') as campaign, count(*) as visits, count(distinct coalesce(v.visitor_id, v.id)) as visitors,
+                   sum(v.pageviews) as pageviews, round(avg(v.duration_s)) as avg_duration,
+                   array_agg(distinct v.utm_source) filter (where v.utm_source is not null) as sources,
+                   array_agg(distinct v.utm_medium) filter (where v.utm_medium is not null) as mediums
+              from v group by 1) g
+  ),
+  links as (
+    select l.id, l.name, l.url, l.path, l.utm_source, l.utm_medium, l.utm_campaign, l.utm_content, l.created_at,
+           lv.visits, lv.visitors, lv.pageviews,
+           (select count(*) from c where c.v_source = l.utm_source and c.v_medium = l.utm_medium and c.v_campaign = l.utm_campaign
+               and (l.utm_content is null or c.v_content = l.utm_content)) as bookings
+      from public.site_utm_links l
+      cross join lateral (
+        select count(*) as visits, count(distinct coalesce(v.visitor_id, v.id)) as visitors, coalesce(sum(v.pageviews), 0) as pageviews
+          from v where v.utm_source = l.utm_source and v.utm_medium = l.utm_medium and v.utm_campaign = l.utm_campaign
+                   and (l.utm_content is null or v.utm_content = l.utm_content)) lv
+  ),
+  top as (select campaign from campaigns order by visits desc, campaign limit 6),
+  b as (select public.site_bucket(p_from, p_to) as b),
+  steps as (select generate_series(date_trunc(b, p_from::timestamp), p_to::timestamp, ('1 ' || b)::interval)::date as d from b),
+  pts as (
+    select public.site_day(v.started_at, (select b from b)) as d, coalesce(v.utm_campaign, '(sans nom)') as campaign, count(*) as n
+      from v where coalesce(v.utm_campaign, '(sans nom)') in (select campaign from top) group by 1, 2
+  )
+  select jsonb_build_object(
+    'campaigns', coalesce((select jsonb_agg(to_jsonb(x) order by x.visits desc, x.campaign) from (select * from campaigns order by visits desc limit 100) x), '[]'::jsonb),
+    'links', coalesce((select jsonb_agg(to_jsonb(links) order by links.created_at desc) from links), '[]'::jsonb),
+    'top', coalesce((select jsonb_agg(campaign) from top), '[]'::jsonb),
+    'series', jsonb_build_object('bucket', (select b from b), 'points', coalesce((select jsonb_agg(jsonb_build_object(
+        'd', s.d, 'by', coalesce((select jsonb_object_agg(campaign, n) from pts where pts.d = s.d), '{}'::jsonb)) order by s.d) from steps s), '[]'::jsonb)));
+$$;
+
+/** Pages : entrées, vues, temps passé, défilement, pages qui convertissent et pages qui font fuir. */
+create or replace function public.site_stats_pages(p_from date, p_to date, p_f jsonb default '{}')
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  with v as (select * from public.site_f_visits(p_from, p_to, p_f)),
+  c as (select * from public.site_f_conversions(p_from, p_to, p_f)),
+  views as (
+    select p.path, count(*) as views, count(distinct p.visit_id) as visits, round(avg(p.duration_s)) as avg_duration,
+           round(avg(p.scroll_pct)) as avg_scroll,
+           count(distinct p.visit_id) filter (where p.visit_id in (select visit_id from c)) as converting_visits
+      from public.site_pageviews p join v on v.id = p.visit_id group by p.path
+  ),
+  entries as (select entry_page as path, count(*) as entries, count(*) filter (where pageviews = 1) as bounces from v group by 1),
+  exits as (select exit_page as path, count(*) as exits from v group by 1)
+  select jsonb_build_object('pages', coalesce((select jsonb_agg(jsonb_build_object(
+      'path', w.path, 'views', w.views, 'visits', w.visits, 'avg_duration', w.avg_duration, 'avg_scroll', w.avg_scroll,
+      'entries', coalesce(e.entries, 0), 'bounces', coalesce(e.bounces, 0), 'exits', coalesce(x.exits, 0),
+      'exit_rate', case when w.visits > 0 then round(100.0 * coalesce(x.exits, 0) / w.visits, 1) else 0 end,
+      'bookings', w.converting_visits,
+      'rate', case when w.visits > 0 then round(100.0 * w.converting_visits / w.visits, 2) else 0 end
+    ) order by w.views desc, w.path) from (select * from views order by views desc limit 200) w
+      left join entries e on e.path = w.path left join exits x on x.path = w.path), '[]'::jsonb),
+    'visits', (select count(*) from v));
+$$;
+
+/** Prospects : visiteurs identifiés et convertis, première et dernière source, visites, rendez-vous. */
+create or replace function public.site_stats_prospects(p_from date, p_to date, p_f jsonb default '{}')
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  with conv as (
+    select c.id, c.visitor_id, c.visit_id, c.converted_at, c.booking_starts_at, c.booking_status, c.counted, c.fiche_company_id as company_id,
+           c.fiche_person_id as person_id, c.first_channel, c.first_source, c.first_campaign, c.last_channel, c.last_source, c.last_campaign,
+           c.declared_source
+      from public.site_conversions c
+      left join public.site_visits v on v.id = c.visit_id
+     where c.converted_at >= (p_from::timestamp at time zone 'Europe/Paris')
+       and c.converted_at < ((p_to + 1)::timestamp at time zone 'Europe/Paris')
+       and (nullif(p_f ->> 'channel', '') is null or v.channel = p_f ->> 'channel' or c.first_channel = p_f ->> 'channel')
+       and (nullif(p_f ->> 'campaign', '') is null or v.utm_campaign = p_f ->> 'campaign' or c.first_campaign = p_f ->> 'campaign')
+       and (nullif(p_f ->> 'country', '') is null or v.country = p_f ->> 'country')
+       and (nullif(p_f ->> 'device', '') is null or v.device = p_f ->> 'device')
+  ),
+  -- visiteurs identifiés par un formulaire, sans rendez-vous sur la période
+  leads as (
+    select i.visitor_id, i.company_id, i.person_id
+      from public.site_identified i
+     where not exists (select 1 from conv where conv.visitor_id = i.visitor_id)
+       and exists (select 1 from public.site_f_visits(p_from, p_to, p_f) v where v.visitor_id = i.visitor_id)
+  ),
+  rows as (
+    select conv.id::text as key, conv.company_id, conv.person_id, conv.visitor_id, conv.converted_at, conv.booking_starts_at, conv.booking_status,
+           conv.counted, true as booked, conv.first_channel, conv.first_source, conv.first_campaign, conv.last_channel, conv.last_source,
+           conv.last_campaign, conv.declared_source
+      from conv
+    union all
+    select l.visitor_id::text, l.company_id, l.person_id, l.visitor_id, null, null, null, false, false,
+           f.channel, f.source, f.utm_campaign, la.channel, la.source, la.utm_campaign, null
+      from leads l
+      left join lateral (select * from public.site_visits v where v.visitor_id = l.visitor_id order by started_at, id limit 1) f on true
+      left join lateral (select * from public.site_visits v where v.visitor_id = l.visitor_id order by started_at desc, id desc limit 1) la on true
+  )
+  select jsonb_build_object('prospects', coalesce(jsonb_agg(jsonb_build_object(
+      'key', r.key, 'company_id', r.company_id, 'company_name', co.name,
+      'person_name', nullif(btrim(coalesce(pe.first_name, '') || ' ' || coalesce(pe.last_name, '')), ''),
+      'booked', r.booked, 'counted', r.counted, 'converted_at', r.converted_at, 'booking_starts_at', r.booking_starts_at, 'booking_status', r.booking_status,
+      'first', jsonb_build_object('channel', r.first_channel, 'source', r.first_source, 'campaign', r.first_campaign),
+      'last', jsonb_build_object('channel', r.last_channel, 'source', r.last_source, 'campaign', r.last_campaign),
+      'declared_source', r.declared_source,
+      'visits', case when r.visitor_id is not null then (select count(*) from public.site_visits v where v.visitor_id = r.visitor_id) else 1 end,
+      'last_visit_at', case when r.visitor_id is not null then (select max(started_at) from public.site_visits v where v.visitor_id = r.visitor_id)
+                            else r.converted_at end
+    ) order by coalesce(r.converted_at, now()) desc), '[]'::jsonb))
+    from (select * from rows order by converted_at desc nulls last limit 300) r
+    left join public.companies co on co.id = r.company_id
+    left join public.people pe on pe.id = r.person_id;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- SEO. Search Console n'écrit que des lignes page × requête ; Bing écrit quatre niveaux (site, requête, page,
+-- page × requête) qu'il ne faut jamais additionner entre eux.
+-- ---------------------------------------------------------------------------
+create or replace view public.seo_queries with (security_invoker = true) as
+  select provider, day, query, sum(clicks) as clicks, sum(impressions) as impressions,
+         sum(position * impressions) / nullif(sum(impressions) filter (where position is not null), 0) as position
+    from public.seo_daily
+   where query <> '' and ((provider = 'gsc' and page <> '') or (provider <> 'gsc' and page = ''))
+   group by provider, day, query;
+
+create or replace view public.seo_pages with (security_invoker = true) as
+  select provider, day, page, sum(clicks) as clicks, sum(impressions) as impressions,
+         sum(position * impressions) / nullif(sum(impressions) filter (where position is not null), 0) as position
+    from public.seo_daily
+   where page <> '' and ((provider = 'gsc' and query <> '') or (provider <> 'gsc' and query = ''))
+   group by provider, day, page;
+
+create or replace view public.seo_totals with (security_invoker = true) as
+  select provider, day, sum(clicks) as clicks, sum(impressions) as impressions,
+         sum(position * impressions) / nullif(sum(impressions) filter (where position is not null), 0) as position
+    from public.seo_daily
+   where (provider = 'gsc' and page <> '' and query <> '') or (provider <> 'gsc' and page = '' and query = '')
+   group by provider, day;
+
+revoke all on public.seo_queries, public.seo_pages, public.seo_totals from anon, authenticated;
+grant select on public.seo_queries, public.seo_pages, public.seo_totals to authenticated;
+
+/**
+ * SEO : mots-clés Google et Bing (clics, impressions, position et tendance), courbe des clics, pages, et
+ * rapprochement mot-clé → page → rendez-vous (rendez-vous des visites de recherche organique entrées par la page).
+ * p_f : provider (gsc | bing), page, query (courbe de position de ce mot-clé).
+ */
+create or replace function public.site_stats_seo(p_from date, p_to date, p_f jsonb default '{}')
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  with prm as (select nullif(p_f ->> 'provider', '') as provider, nullif(p_f ->> 'page', '') as page, nullif(p_f ->> 'query', '') as query,
+                      p_from - (p_to - p_from + 1) as pfrom, p_from - 1 as pto),
+  q as (
+    select s.provider, s.query, sum(s.clicks) as clicks, sum(s.impressions) as impressions,
+           round((sum(s.position * s.impressions) / nullif(sum(s.impressions) filter (where s.position is not null), 0))::numeric, 1) as position
+      from public.seo_queries s, prm
+     where s.day between p_from and p_to and (prm.provider is null or s.provider = prm.provider)
+       and (prm.page is null or exists (select 1 from public.seo_daily d where d.provider = s.provider and d.query = s.query and d.page = prm.page and d.day between p_from and p_to))
+     group by s.provider, s.query
+  ),
+  qp as (
+    select s.provider, s.query, sum(s.clicks) as clicks,
+           round((sum(s.position * s.impressions) / nullif(sum(s.impressions) filter (where s.position is not null), 0))::numeric, 1) as position
+      from public.seo_queries s, prm
+     where s.day between prm.pfrom and prm.pto and (prm.provider is null or s.provider = prm.provider)
+     group by s.provider, s.query
+  ),
+  best as (
+    select distinct on (d.provider, d.query) d.provider, d.query, d.page
+      from public.seo_daily d, prm
+     where d.day between p_from and p_to and d.page <> '' and d.query <> '' and (prm.provider is null or d.provider = prm.provider)
+     group by d.provider, d.query, d.page
+     order by d.provider, d.query, sum(d.clicks) desc, sum(d.impressions) desc
+  ),
+  organic as (
+    select v.entry_page as page, count(*) as visits,
+           count(*) filter (where v.id in (select visit_id from public.site_f_conversions(p_from, p_to, '{}'::jsonb))) as bookings
+      from public.site_f_visits(p_from, p_to, '{"channel":"organic"}'::jsonb) v group by v.entry_page
+  ),
+  pages as (
+    select s.provider, s.page, sum(s.clicks) as clicks, sum(s.impressions) as impressions,
+           round((sum(s.position * s.impressions) / nullif(sum(s.impressions) filter (where s.position is not null), 0))::numeric, 1) as position
+      from public.seo_pages s, prm
+     where s.day between p_from and p_to and (prm.provider is null or s.provider = prm.provider)
+     group by s.provider, s.page
+  ),
+  b as (select public.site_bucket(p_from, p_to) as b),
+  steps as (select generate_series(date_trunc(b, p_from::timestamp), p_to::timestamp, ('1 ' || b)::interval)::date as d from b),
+  tot as (
+    select date_trunc((select b from b), t.day::timestamp)::date as d, t.provider, sum(t.clicks) as clicks, sum(t.impressions) as impressions
+      from public.seo_totals t, prm
+     where t.day between p_from and p_to and (prm.provider is null or t.provider = prm.provider) group by 1, 2
+  ),
+  pos as (
+    select date_trunc((select b from b), s.day::timestamp)::date as d, s.provider,
+           round((sum(s.position * s.impressions) / nullif(sum(s.impressions) filter (where s.position is not null), 0))::numeric, 1) as position,
+           sum(s.clicks) as clicks, sum(s.impressions) as impressions
+      from public.seo_queries s, prm
+     where prm.query is not null and s.query = prm.query and s.day between p_from and p_to group by 1, 2
+  )
+  select jsonb_build_object(
+    'connections', coalesce((select jsonb_agg(jsonb_build_object('provider', provider, 'status', status, 'site_url', site_url,
+        'last_sync_at', last_sync_at, 'history_done', history_done_at is not null, 'last_error', last_error)) from public.seo_connections), '[]'::jsonb),
+    'has_data', exists (select 1 from public.seo_daily),
+    'totals', jsonb_build_object(
+      'clicks', coalesce((select sum(clicks) from tot), 0), 'impressions', coalesce((select sum(impressions) from tot), 0),
+      'previous_clicks', coalesce((select sum(t.clicks) from public.seo_totals t, prm where t.day between prm.pfrom and prm.pto and (prm.provider is null or t.provider = prm.provider)), 0),
+      'previous_impressions', coalesce((select sum(t.impressions) from public.seo_totals t, prm where t.day between prm.pfrom and prm.pto and (prm.provider is null or t.provider = prm.provider)), 0)),
+    'series', jsonb_build_object('bucket', (select b from b), 'points', coalesce((select jsonb_agg(jsonb_build_object(
+        'd', s.d, 'by', coalesce((select jsonb_object_agg(provider, clicks) from tot where tot.d = s.d), '{}'::jsonb),
+        'impressions', coalesce((select sum(impressions) from tot where tot.d = s.d), 0)) order by s.d) from steps s), '[]'::jsonb)),
+    'queries', coalesce((select jsonb_agg(jsonb_build_object(
+        'provider', x.provider, 'query', x.query, 'clicks', x.clicks, 'impressions', x.impressions, 'position', x.position,
+        'ctr', case when x.impressions > 0 then round(100.0 * x.clicks / x.impressions, 1) else 0 end,
+        'previous_position', (select position from qp where qp.provider = x.provider and qp.query = x.query),
+        'previous_clicks', (select clicks from qp where qp.provider = x.provider and qp.query = x.query),
+        'page', (select page from best where best.provider = x.provider and best.query = x.query),
+        'page_bookings', (select o.bookings from organic o join best on best.page = o.page where best.provider = x.provider and best.query = x.query)
+      ) order by x.clicks desc, x.impressions desc, x.query)
+      from (select * from q order by clicks desc, impressions desc limit 250) x), '[]'::jsonb),
+    'pages', coalesce((select jsonb_agg(jsonb_build_object(
+        'provider', x.provider, 'page', x.page, 'clicks', x.clicks, 'impressions', x.impressions, 'position', x.position,
+        'visits', coalesce((select o.visits from organic o where o.page = x.page), 0),
+        'bookings', coalesce((select o.bookings from organic o where o.page = x.page), 0),
+        'queries', (select count(distinct d.query) from public.seo_daily d where d.provider = x.provider and d.page = x.page and d.query <> '' and d.day between p_from and p_to)
+      ) order by x.clicks desc, x.impressions desc, x.page)
+      from (select * from pages order by clicks desc, impressions desc limit 100) x), '[]'::jsonb),
+    'query', (select query from prm),
+    'positions', coalesce((select jsonb_agg(jsonb_build_object('d', s.d,
+        'by', coalesce((select jsonb_object_agg(provider, position) from pos where pos.d = s.d and pos.position is not null), '{}'::jsonb),
+        'clicks', coalesce((select sum(clicks) from pos where pos.d = s.d), 0)) order by s.d)
+      from steps s where (select query from prm) is not null), '[]'::jsonb));
+$$;
+
+/** IA : visites venues de chaque IA générative et leurs rendez-vous ; robots (pages lues, fréquence, origine). */
+create or replace function public.site_stats_ai(p_from date, p_to date, p_f jsonb default '{}')
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  with v as (select * from public.site_f_visits(p_from, p_to, p_f || '{"channel":"ai"}'::jsonb)),
+  c as (select c.*, lv.source as v_source from public.site_f_conversions(p_from, p_to, p_f || '{"channel":"ai"}'::jsonb) c
+          join public.site_visits lv on lv.id = c.visit_id),
+  first_c as (
+    select fc.first_source as source, count(*) as n from public.site_conversions fc
+     where fc.counted and fc.first_channel = 'ai'
+       and fc.converted_at >= (p_from::timestamp at time zone 'Europe/Paris') and fc.converted_at < ((p_to + 1)::timestamp at time zone 'Europe/Paris')
+     group by 1
+  ),
+  engines as (
+    select g.*, (select count(*) from c where coalesce(c.v_source, 'autre') = g.source) as bookings
+      from (select coalesce(v.source, 'autre') as source, count(*) as visits, count(distinct coalesce(v.visitor_id, v.id)) as visitors,
+                   round(avg(v.duration_s)) as avg_duration, round(avg(v.pageviews), 1) as avg_pages
+              from v group by 1) g
+  ),
+  landing as (select entry_page as path, count(*) as visits from v group by 1 order by 2 desc limit 15),
+  b as (select public.site_bucket(p_from, p_to) as b),
+  steps as (select generate_series(date_trunc(b, p_from::timestamp), p_to::timestamp, ('1 ' || b)::interval)::date as d from b),
+  pts as (select public.site_day(v.started_at, (select b from b)) as d, coalesce(v.source, 'autre') as source, count(*) as n from v group by 1, 2),
+  hits as (
+    select h.* from public.site_bot_hits h
+     where h.day between p_from and p_to and (nullif(p_f ->> 'page', '') is null or h.path = p_f ->> 'page')
+  ),
+  bots as (
+    select bot, kind, sum(hits) as hits, sum(hits) filter (where status = 'verified') as verified,
+           sum(hits) filter (where status = 'unverified') as unverified, sum(hits) filter (where status = 'unverifiable') as unverifiable,
+           count(distinct path) as pages, count(distinct day) as days, max(last_at) as last_at
+      from hits group by bot, kind
+  ),
+  bot_pages as (
+    select bot, path, sum(hits) as hits, count(distinct day) as days, max(last_at) as last_at
+      from hits where status <> 'unverified' group by bot, path
+  ),
+  bot_pts as (
+    select date_trunc((select b from b), h.day::timestamp)::date as d, h.kind, sum(h.hits) as n
+      from hits h where h.status <> 'unverified' group by 1, 2
+  ),
+  human_pages as (
+    select p.path, count(*) as views from public.site_pageviews p
+     where p.at >= (p_from::timestamp at time zone 'Europe/Paris') and p.at < ((p_to + 1)::timestamp at time zone 'Europe/Paris')
+     group by p.path
+  )
+  select jsonb_build_object(
+    'engines', coalesce((select jsonb_agg(jsonb_build_object('source', e.source, 'visits', e.visits, 'visitors', e.visitors, 'avg_duration', e.avg_duration,
+        'avg_pages', e.avg_pages, 'bookings', e.bookings, 'bookings_first', coalesce((select n from first_c where coalesce(first_c.source, 'autre') = e.source), 0))
+        order by e.visits desc, e.source) from engines e), '[]'::jsonb),
+    'landing', coalesce((select jsonb_agg(to_jsonb(landing)) from landing), '[]'::jsonb),
+    'series', jsonb_build_object('bucket', (select b from b), 'points', coalesce((select jsonb_agg(jsonb_build_object(
+        'd', s.d, 'by', coalesce((select jsonb_object_agg(source, n) from pts where pts.d = s.d), '{}'::jsonb)) order by s.d) from steps s), '[]'::jsonb)),
+    'bots', coalesce((select jsonb_agg(to_jsonb(bots) order by bots.hits desc, bots.bot) from bots), '[]'::jsonb),
+    'bot_pages', coalesce((select jsonb_agg(to_jsonb(x) order by x.hits desc, x.path) from (select * from bot_pages order by hits desc limit 300) x), '[]'::jsonb),
+    'bot_series', jsonb_build_object('bucket', (select b from b), 'points', coalesce((select jsonb_agg(jsonb_build_object(
+        'd', s.d, 'by', coalesce((select jsonb_object_agg(kind, n) from bot_pts where bot_pts.d = s.d), '{}'::jsonb)) order by s.d) from steps s), '[]'::jsonb)),
+    -- pages vues par des visiteurs mais jamais lues par un robot d'IA sur la période
+    'unread', coalesce((select jsonb_agg(jsonb_build_object('path', hp.path, 'views', hp.views) order by hp.views desc)
+        from (select * from human_pages hp where not exists (select 1 from hits h where h.kind = 'ai' and h.status <> 'unverified' and h.path = hp.path)
+               order by views desc limit 20) hp), '[]'::jsonb),
+    'has_bots', exists (select 1 from public.site_bot_hits));
+$$;
+
+/** Géographie : pays, appareils, navigateurs. */
+create or replace function public.site_stats_geo(p_from date, p_to date, p_f jsonb default '{}')
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  with v as (select * from public.site_f_visits(p_from, p_to, p_f)),
+  c as (select c.*, lv.country as v_country, lv.device as v_device from public.site_f_conversions(p_from, p_to, p_f) c
+          join public.site_visits lv on lv.id = c.visit_id)
+  select jsonb_build_object(
+    'visits', (select count(*) from v),
+    'countries', coalesce((select jsonb_agg(to_jsonb(x) order by x.visits desc, x.country) from (
+        select g.*, (select count(*) from c where coalesce(c.v_country, '??') = g.country) as bookings
+          from (select coalesce(country, '??') as country, count(*) as visits, count(distinct coalesce(visitor_id, id)) as visitors from v group by 1) g) x), '[]'::jsonb),
+    'devices', coalesce((select jsonb_agg(to_jsonb(x) order by x.visits desc) from (
+        select g.*, (select count(*) from c where c.v_device = g.device) as bookings
+          from (select device, count(*) as visits, round(avg(duration_s)) as avg_duration from v group by 1) g) x), '[]'::jsonb),
+    'browsers', coalesce((select jsonb_agg(to_jsonb(x) order by x.visits desc) from (
+        select coalesce(browser, 'Autre') as browser, count(*) as visits from v group by 1) x), '[]'::jsonb),
+    'returning', (select count(*) from v where is_returning));
+$$;
+
+/** Valeurs proposées par les filtres (campagnes, pages, pays présents sur les treize derniers mois). */
+create or replace function public.site_filter_options()
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  with v as (select * from public.site_visits where started_at > now() - interval '13 months')
+  select jsonb_build_object(
+    'campaigns', coalesce((select jsonb_agg(x.c order by x.n desc) from (select utm_campaign as c, count(*) as n from v where utm_campaign is not null group by 1 order by 2 desc limit 100) x), '[]'::jsonb),
+    'pages', coalesce((select jsonb_agg(x.p order by x.n desc) from (select entry_page as p, count(*) as n from v group by 1 order by 2 desc limit 100) x), '[]'::jsonb),
+    'countries', coalesce((select jsonb_agg(x.c order by x.n desc) from (select country as c, count(*) as n from v where country is not null group by 1 order by 2 desc limit 60) x), '[]'::jsonb));
+$$;
+
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'public.site_f_visits(date, date, jsonb)', 'public.site_f_conversions(date, date, jsonb)', 'public.site_bucket(date, date)',
+    'public.site_day(timestamptz, text)', 'public.site_kpis(date, date, jsonb)', 'public.site_series(date, date, jsonb)',
+    'public.site_stats_overview(date, date, jsonb)', 'public.site_live()', 'public.site_stats_sources(date, date, jsonb)',
+    'public.site_stats_campaigns(date, date, jsonb)', 'public.site_stats_pages(date, date, jsonb)',
+    'public.site_stats_prospects(date, date, jsonb)', 'public.site_stats_seo(date, date, jsonb)', 'public.site_stats_ai(date, date, jsonb)',
+    'public.site_stats_geo(date, date, jsonb)', 'public.site_filter_options()']
+  loop
+    execute format('revoke execute on function %s from public, anon', f);
+    execute format('grant execute on function %s to authenticated', f);
+  end loop;
+end $$;
+
+
+-- ===== 20261125140600_tracking_recommandations.sql =====
+-- Tracking site · lot 7 : bloc « À faire » de la Vue d'ensemble.
+-- Quelques actions concrètes tirées des données de la période ; chacune porte de quoi renvoyer vers son détail.
+-- Exécutée avec les droits de l'appelant (RLS : propriétaire seul). Rejouable.
+
+create or replace function public.site_recommendations(p_from date, p_to date)
+returns jsonb
+language sql
+stable
+set search_path = ''
+as $$
+  with len as (select p_to - p_from + 1 as n, p_from - (p_to - p_from + 1) as pfrom, p_from - 1 as pto),
+  v as (select * from public.site_f_visits(p_from, p_to, '{}'::jsonb)),
+  pv as (select * from public.site_f_visits((select pfrom from len), (select pto from len), '{}'::jsonb)),
+  c as (select * from public.site_f_conversions(p_from, p_to, '{}'::jsonb)),
+  -- 1. mots-clés en position 5 à 15 avec des impressions : un effort de contenu peut les faire monter
+  kw as (
+    select 'keyword' as kind, 10 as weight, jsonb_build_object('query', q.query, 'provider', q.provider, 'position', q.position, 'impressions', q.impressions,
+             'clicks', q.clicks) as data
+      from (select provider, query, sum(clicks) as clicks, sum(impressions) as impressions,
+                   round((sum(position * impressions) / nullif(sum(impressions) filter (where position is not null), 0))::numeric, 1) as position
+              from public.seo_queries where day between p_from and p_to group by 1, 2) q
+     where q.position between 5 and 15 and q.impressions >= 20
+     order by q.impressions desc limit 3
+  ),
+  -- 2. pages très visitées qui ne mènent à aucun rendez-vous
+  page_stats as (
+    select p.path, count(distinct p.visit_id) as visits,
+           count(distinct p.visit_id) filter (where p.visit_id in (select visit_id from c)) as bookings
+      from public.site_pageviews p join v on v.id = p.visit_id group by p.path
+  ),
+  pages as (
+    select 'page' as kind, 20 as weight, jsonb_build_object('path', path, 'visits', visits) as data
+      from page_stats
+     where bookings = 0 and visits >= greatest(30, (select count(*) from v) / 20)
+       and path !~* '(mentions|confidentialite|cookies|cgu|cgv)'
+     order by visits desc limit 2
+  ),
+  -- 3. source ou campagne en forte hausse ou en forte baisse par rapport à la période précédente
+  moves as (
+    select 'trend' as kind, 30 as weight, jsonb_build_object('scope', x.scope, 'name', x.name, 'visits', x.cur, 'previous', x.prev,
+             'change', round(100.0 * (x.cur - x.prev) / nullif(x.prev, 0))) as data
+      from (
+        select 'channel' as scope, ch as name, (select count(*) from v where channel = ch) as cur, (select count(*) from pv where channel = ch) as prev
+          from unnest(array['direct','campaign','organic','social','email','referral','ai','paid']) ch
+        union all
+        select 'campaign', k.name, (select count(*) from v where utm_campaign = k.name), (select count(*) from pv where utm_campaign = k.name)
+          from (select utm_campaign as name from v where utm_campaign is not null union select utm_campaign from pv where utm_campaign is not null) k
+      ) x
+     -- une période précédente presque vide ne dit rien d'une tendance
+     where greatest(x.cur, x.prev) >= 20 and x.prev >= 10 and abs(x.cur - x.prev) >= 0.4 * x.prev
+     order by abs(x.cur - x.prev) desc limit 3
+  ),
+  -- 4. visites arrivées depuis un réseau social ou une messagerie sans lien UTM : des liens partagés sans marquage
+  untagged as (
+    select 'untagged' as kind, 40 as weight, jsonb_build_object('channel', channel, 'source', source, 'visits', count(*)) as data
+      from v where channel in ('social', 'email') group by channel, source having count(*) >= 10
+     order by count(*) desc limit 2
+  ),
+  -- 5. pages lues par des visiteurs mais jamais par un robot d'IA
+  unread as (
+    select 'ai_unread' as kind, 50 as weight, jsonb_build_object('path', ps.path, 'visits', ps.visits) as data
+      from page_stats ps
+     where exists (select 1 from public.site_bot_hits where day between p_from and p_to and kind = 'ai')
+       and not exists (select 1 from public.site_bot_hits h where h.day between p_from and p_to and h.kind = 'ai' and h.status <> 'unverified' and h.path = ps.path)
+       and ps.visits >= 10 and ps.path !~* '(mentions|confidentialite|cookies|cgu|cgv)'
+     order by ps.visits desc limit 2
+  ),
+  -- 6. connecteurs à brancher ou à reconnecter : sans eux, pas de mots-clés
+  seo as (
+    select 'connector' as kind, 5 as weight, jsonb_build_object('provider', p.provider, 'status', coalesce(s.status, 'missing')) as data
+      from unnest(array['gsc', 'bing']) p(provider) left join public.seo_connections s on s.provider = p.provider
+     where s.provider is null or s.status <> 'connected'
+  ),
+  everything as (
+    select * from seo union all select * from kw union all select * from pages union all select * from moves
+    union all select * from untagged union all select * from unread
+  )
+  select coalesce(jsonb_agg(jsonb_build_object('kind', kind, 'data', data) order by weight), '[]'::jsonb) from everything;
+$$;
+
+revoke execute on function public.site_recommendations(date, date) from public, anon;
+grant execute on function public.site_recommendations(date, date) to authenticated;

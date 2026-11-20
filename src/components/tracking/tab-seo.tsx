@@ -71,14 +71,14 @@ export function SeoTab({ s }: { s: TrackingState }) {
   const setQuery = (q: string | null) => s.set({ q });
 
   const cols: Column<Query>[] = [
-    { key: "q", label: "Mot-clé", className: "max-w-[20rem]", render: (r) => <span className={cn("block truncate font-semibold", query === r.query && "text-violet-strong")}>{r.query}</span> },
+    { key: "q", label: "Mot-clé", className: "max-w-[17rem]", render: (r) => <span className={cn("block truncate font-semibold", query === r.query && "text-violet-strong")}>{r.query}</span> },
     { key: "e", label: "Moteur", render: (r) => <span className="inline-flex items-center gap-1.5"><span className="inline-block size-2.5 rounded-full" style={{ background: ENGINE_COLOR[r.provider] }} aria-hidden />{ENGINE[r.provider as "gsc" | "bing"] ?? r.provider}</span> },
     { key: "c", label: "Clics", align: "right", render: (r) => num(r.clicks) },
     { key: "i", label: "Impressions", align: "right", render: (r) => num(r.impressions) },
     { key: "t", label: "Taux de clic", align: "right", render: (r) => percent(r.ctr) },
     { key: "p", label: "Position", align: "right", render: (r) => pos(r.position) },
     { key: "d", label: "Tendance", align: "right", render: (r) => <PositionTrend current={r.position} previous={r.previous_position} /> },
-    { key: "g", label: "Page", className: "max-w-[14rem]", render: (r) => (r.page ? <span className="block truncate text-muted">{r.page}</span> : <span className="text-muted">–</span>) },
+    { key: "g", label: "Page", className: "max-w-[12rem]", render: (r) => (r.page ? <span className="block truncate text-muted">{r.page}</span> : <span className="text-muted">–</span>) },
     { key: "b", label: "RDV de la page", align: "right", render: (r) => (r.page_bookings == null ? <span className="text-muted">–</span> : num(r.page_bookings)) },
   ];
   const pageCols: Column<PageRow>[] = [

@@ -108,7 +108,7 @@ export function DataTable<T>({ rows, columns, rowKey, onRow, rowTitle, empty = "
         <thead>
           <tr className="border-b border-line text-left">
             {columns.map((c) => (
-              <th key={c.key} scope="col" className={cn("px-4 py-2 font-label text-[11px] font-bold tracking-wide whitespace-nowrap text-muted uppercase sm:px-5", c.align === "right" && "text-right")}>{c.label}</th>
+              <th key={c.key} scope="col" className={cn("py-2 font-label text-[11px] font-bold tracking-wide whitespace-nowrap text-muted uppercase px-2.5 first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5", c.align === "right" && "text-right")}>{c.label}</th>
             ))}
           </tr>
         </thead>
@@ -119,7 +119,7 @@ export function DataTable<T>({ rows, columns, rowKey, onRow, rowTitle, empty = "
               onKeyDown={onRow ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onRow(r); } } : undefined}
               className={cn("border-b border-line/60 last:border-0", onRow && "trk-row cursor-pointer")}>
               {columns.map((c) => (
-                <td key={c.key} className={cn("px-4 py-2 align-middle sm:px-5", c.align === "right" && "text-right tabular-nums", c.className)}>{c.render(r)}</td>
+                <td key={c.key} className={cn("py-2 align-middle px-2.5 first:pl-4 last:pr-4 sm:first:pl-5 sm:last:pr-5", c.align === "right" && "text-right tabular-nums", c.className)}>{c.render(r)}</td>
               ))}
             </tr>
           ))}

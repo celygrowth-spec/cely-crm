@@ -26,7 +26,7 @@ export function tagHtmlLinks(html: string, utm: Utm): string {
   });
 }
 
-// adresse du site écrite en clair, avec ou sans « https:// » ; la ponctuation finale n'en fait pas partie
+// adresse du site écrite en clair (avec « https:// », « www. » ou un chemin) ; la ponctuation finale n'en fait pas partie
 const TEXT_URL = /(^|[\s(<«"'])((?:https?:\/\/)?(?:www\.)?celygrowth\.com(?:[/?#][^\s<>»"')\]]*)?)/gi;
 
 /** Texte brut (mail sans mise en forme, message LinkedIn copié) : les adresses du site reçoivent leurs UTM. */
@@ -34,6 +34,8 @@ export function tagTextLinks(text: string, utm: Utm): string {
   return text.replace(TEXT_URL, (_m, before: string, url: string) => {
     const trail = /[.,;:!?…]+$/.exec(url)?.[0] ?? "";
     const core = trail ? url.slice(0, -trail.length) : url;
+    // une simple mention du nom de domaine (signature, phrase) n'est pas un lien : elle reste telle quelle
+    if (/^celygrowth\.com\/?$/i.test(core)) return `${before}${url}`;
     const tagged = tagSiteUrl(/^https?:\/\//i.test(core) ? core : `https://${core}`, utm);
     return `${before}${tagged}${trail}`;
   });
