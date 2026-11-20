@@ -316,3 +316,20 @@ describe("client Bing", () => {
     expect(await listSites(API_KEY, fetcher)).toEqual(["https://celygrowth.com/"]);
   });
 });
+
+describe("connexion Google : compte ouvert d'office", () => {
+  test("avec le compte de l'agenda, Google l'ouvre directement ; sans lui, il propose le choix du compte", async () => {
+    vi.stubEnv("GOOGLE_SEARCH_CONSOLE_CLIENT_ID", "client");
+    vi.stubEnv("GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET", "secret");
+    const { authorizationUrl } = await import("@/lib/tracking/seo/gsc");
+    const base = { redirectUri: "https://crm.example.test/api/tracking/seo/google/callback", state: "s", codeChallenge: "c" };
+    const hinted = new URL(authorizationUrl({ ...base, loginHint: "moi@example.test" })).searchParams;
+    expect(hinted.get("login_hint")).toBe("moi@example.test");
+    expect(hinted.get("prompt")).toBe("consent");
+    const plain = new URL(authorizationUrl(base)).searchParams;
+    expect(plain.get("login_hint")).toBeNull();
+    expect(plain.get("prompt")).toBe("consent select_account");
+    expect(plain.get("scope")).toBe("https://www.googleapis.com/auth/webmasters.readonly");
+    vi.unstubAllEnvs();
+  });
+});
