@@ -4,7 +4,7 @@ import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
-import { AlertCircle, Archive, ArchiveRestore, ArrowLeft, Check, File, FileText, Flag, Folder, FolderInput, ImageOff, Inbox, Mail, MailOpen, OctagonAlert, Paperclip, RefreshCw, Search, Send, ShieldCheck, Star, Tag, Tags, Trash2, X } from "lucide-react";
+import { AlertCircle, Archive, ArchiveRestore, ArrowLeft, Check, File, FileText, Flag, Folder, FolderInput, ImageOff, Inbox, Mail, MailOpen, OctagonAlert, Paperclip, Pencil, RefreshCw, Reply, ReplyAll, Forward, Search, Send, ShieldCheck, Star, Tag, Tags, Trash2, X } from "lucide-react";
 import { Badge, Button, EmptyState, Input, Select, Skeleton, cn } from "@/components/ui";
 import { mailCall } from "@/lib/client/mail";
 import { apiGet } from "@/lib/client/query";
@@ -12,6 +12,7 @@ import { TZ } from "@/lib/format";
 import { CATEGORY_FOLDERS, SYSTEM_FOLDERS, applyBoxAction, inFolder, type BoxAction, type BoxActionResult, type BoxFolder, type BoxOpenMessage, type BoxOpenThread, type BoxThread, type BoxThreadPage } from "@/lib/mail/box-types";
 import { BOX_TONE } from "../box-status";
 import { BOX_KEY, useBoxSync } from "../use-box-sync";
+import { Composer, type ComposeRequest } from "./composer";
 
 const ICONS: Record<string, typeof Inbox> = { INBOX: Inbox, STARRED: Star, IMPORTANT: Flag, SENT: Send, DRAFT: FileText, ALL: Archive, SPAM: OctagonAlert, TRASH: Trash2 };
 /** Dossiers dont le compteur est le total (et non les non-lus), comme dans Gmail. */
@@ -128,6 +129,10 @@ export function Mailbox() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const { act } = useBoxActions(run);
+  const [compose, setCompose] = useState<ComposeRequest | null>(null);
+  const [composeKey, setComposeKey] = useState(0);
+  const write = useCallback((r: ComposeRequest) => { setCompose(r); setComposeKey((k) => k + 1); }, []);
+  const refresh = useCallback(() => { void run(); }, [run]);
 
   const list = useInfiniteQuery({
     queryKey: [...BOX_KEY, "threads", query ? { q: query } : { label }],
@@ -178,6 +183,7 @@ export function Mailbox() {
             <button type="button" onClick={() => { setTyped(""); setQuery(""); }} aria-label="Effacer la recherche" className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-1 text-muted hover:text-ink"><X size={14} /></button>
           )}
         </form>
+        {status.can_modify && <Button variant="primary" onClick={() => write({ kind: "new" })}><Pencil size={14} /> <span className="hidden sm:inline">Nouveau message</span></Button>}
         <Badge tone={BOX_TONE[status.state].tone}>{BOX_TONE[status.state].label}</Badge>
         <Button variant="secondary" onClick={() => run()} disabled={syncing} aria-label="Synchroniser la boîte">
           <RefreshCw size={14} className={syncing ? "animate-spin" : undefined} /> <span className="hidden sm:inline">{syncing ? "Synchronisation…" : "Synchroniser"}</span>
@@ -224,9 +230,10 @@ export function Mailbox() {
 
         {/* Fil ouvert */}
         <section aria-label="Message" className={cn("min-h-0 min-w-0 overflow-y-auto", !openId && "hidden lg:block")}>
-          {openId ? <Reader key={openId} id={openId} onBack={() => setOpenId(null)} summary={threads.find((t) => t.thread_id === openId) ?? null} context={context} labels={folders.labels} act={status.can_modify ? act : null} onGone={after} /> : <p className="p-8 text-center text-sm text-muted">Choisissez un message pour le lire.</p>}
+          {openId ? <Reader key={openId} id={openId} onBack={() => setOpenId(null)} summary={threads.find((t) => t.thread_id === openId) ?? null} context={context} labels={folders.labels} act={status.can_modify ? act : null} onGone={after} onWrite={status.can_modify ? write : null} /> : <p className="p-8 text-center text-sm text-muted">Choisissez un message pour le lire.</p>}
         </section>
       </div>
+      {compose && <Composer key={composeKey} request={compose} onClose={() => setCompose(null)} onChanged={refresh} />}
     </div>
   );
 }
@@ -378,7 +385,7 @@ function ThreadActions({ threads, context, labels, act, onGone }: { threads: Box
   );
 }
 
-function Reader({ id, onBack, summary, context, labels, act, onGone }: { id: string; onBack: () => void; summary: BoxThread | null; context: string | null; labels: FolderItem[]; act: Act | null; onGone: (ids: string[]) => void }) {
+function Reader({ id, onBack, summary, context, labels, act, onGone, onWrite }: { id: string; onBack: () => void; summary: BoxThread | null; context: string | null; labels: FolderItem[]; act: Act | null; onGone: (ids: string[]) => void; onWrite: ((r: ComposeRequest) => void) | null }) {
   const [images, setImages] = useState(false);
   const q = useQuery({
     queryKey: [...BOX_KEY, "thread", id, images],
@@ -424,6 +431,17 @@ function Reader({ id, onBack, summary, context, labels, act, onGone }: { id: str
                 {open && <span className="w-full truncate text-xs text-muted">À : {m.to || "(non indiqué)"}{m.cc ? ` · Cc : ${m.cc}` : ""}</span>}
               </button>
               {open && <MessageBody m={m} threadId={t.thread_id} images={images} />}
+              {open && onWrite && (
+                <div className="flex flex-wrap gap-2 border-t border-line px-3 py-2">
+                  {m.label_ids.includes("DRAFT")
+                    ? <Button variant="secondary" size="sm" onClick={() => onWrite({ kind: "draft", message_id: m.id })}><Pencil size={13} /> Modifier le brouillon</Button>
+                    : <>
+                        <Button variant="secondary" size="sm" onClick={() => onWrite({ kind: "reply", thread_id: t.thread_id, message: m })}><Reply size={13} /> Répondre</Button>
+                        <Button variant="secondary" size="sm" onClick={() => onWrite({ kind: "reply_all", thread_id: t.thread_id, message: m })}><ReplyAll size={13} /> Répondre à tous</Button>
+                        <Button variant="secondary" size="sm" onClick={() => onWrite({ kind: "forward", thread_id: t.thread_id, message: m })}><Forward size={13} /> Transférer</Button>
+                      </>}
+                </div>
+              )}
             </li>
           );
         })}

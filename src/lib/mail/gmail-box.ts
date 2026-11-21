@@ -25,11 +25,11 @@ const MESSAGES: Record<BoxErrorCode, string> = {
 
 const get = <T>(token: string, path: string) => call<T>(token, path);
 
-async function call<T>(token: string, path: string, payload?: unknown): Promise<T> {
+async function call<T>(token: string, path: string, payload?: unknown, method?: "DELETE"): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${API}${path}`, {
-      method: payload === undefined ? "GET" : "POST",
+      method: method ?? (payload === undefined ? "GET" : "POST"),
       headers: { authorization: `Bearer ${token}`, ...(payload === undefined ? {} : { "content-type": "application/json" }) },
       body: payload === undefined ? undefined : JSON.stringify(payload),
       signal: AbortSignal.timeout(20_000),
@@ -37,7 +37,7 @@ async function call<T>(token: string, path: string, payload?: unknown): Promise<
   } catch {
     throw new GmailBoxError("network", MESSAGES.network);
   }
-  if (res.ok) return (await res.json()) as T;
+  if (res.ok) return (await res.json().catch(() => ({}))) as T; // une suppression répond sans contenu
   // le détail de la réponse n'est jamais journalisé ni renvoyé : seul le motif sert à classer l'erreur
   const body = (await res.json().catch(() => null)) as { error?: { errors?: { reason?: string }[]; status?: string } } | null;
   const reason = body?.error?.errors?.[0]?.reason ?? body?.error?.status ?? "";
@@ -217,7 +217,10 @@ export async function searchThreadIds(token: string, q: string, pageToken: strin
 }
 
 export type FullAttachment = { id: string; name: string; mime_type: string; size: number };
-export type FullMessage = BoxMessage & { to_full: string | null; cc_full: string | null; html: string | null; text: string | null; attachments: FullAttachment[] };
+export type FullMessage = BoxMessage & {
+  to_full: string | null; cc_full: string | null; bcc_full: string | null; reply_to: string | null; references: string | null;
+  html: string | null; text: string | null; attachments: FullAttachment[];
+};
 
 const decode = (d?: string) => (d ? Buffer.from(d, "base64url").toString("utf8") : "");
 function flatten(p: GmailPart | undefined, out: GmailPart[] = []): GmailPart[] {
@@ -235,11 +238,24 @@ export function toFullMessage(m: RawMessage): FullMessage {
     ...toBoxMessage(m),
     to_full: header(m.payload, "to"),
     cc_full: header(m.payload, "cc"),
+    bcc_full: header(m.payload, "bcc"),
+    reply_to: header(m.payload, "reply-to"),
+    references: header(m.payload, "references"),
     html: html ? decode(html.body?.data) : null,
     text: text ? decode(text.body?.data) : null,
     attachments: parts.filter((x) => x.filename && x.body?.attachmentId)
       .map((x) => ({ id: x.body!.attachmentId!, name: x.filename!.slice(0, 255), mime_type: x.mimeType ?? "application/octet-stream", size: x.body?.size ?? 0 })),
   };
+}
+
+/** Un message complet (pièces jointes à reprendre dans un brouillon). `null` : il n'existe plus. */
+export async function getBoxMessageFull(token: string, id: string): Promise<FullMessage | null> {
+  try {
+    return toFullMessage(await get<RawMessage>(token, `/messages/${encodeURIComponent(id)}?format=full`));
+  } catch (e) {
+    if (e instanceof GmailBoxError && e.code === "not_found") return null;
+    throw e;
+  }
 }
 
 /** Fil complet, du plus ancien au plus récent. `null` : le fil n'existe plus dans Gmail. */
@@ -273,4 +289,85 @@ export async function modifyThread(token: string, id: string, add: string[], rem
 /** Corbeille Gmail (supprimée définitivement par Gmail après 30 jours) ; `restore` : sortie de la corbeille. */
 export async function trashThread(token: string, id: string, restore = false): Promise<ThreadLabels> {
   return labelsOf(await call<RawThread>(token, `/threads/${encodeURIComponent(id)}/${restore ? "untrash" : "trash"}`, {}));
+}
+
+// ---------------------------------------------------------------------------
+// Rédaction (lot M04) : les brouillons vivent dans Gmail ; l'envoi part d'un brouillon Gmail.
+// ---------------------------------------------------------------------------
+const UPLOAD = "https://gmail.googleapis.com/upload/gmail/v1/users/me";
+export type DraftRef = { id: string; message_id: string; thread_id: string | null };
+
+/** Crée le brouillon, ou remplace son contenu (`id`). `threadId` le range dans un fil existant (réponse, transfert). */
+export async function writeDraft(token: string, raw: Buffer, opts: { id?: string | null; threadId?: string | null } = {}): Promise<DraftRef> {
+  const boundary = `cely_${crypto.randomUUID()}`;
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ message: opts.threadId ? { threadId: opts.threadId } : {} })}\r\n--${boundary}\r\nContent-Type: message/rfc822\r\n\r\n`),
+    raw,
+    Buffer.from(`\r\n--${boundary}--`),
+  ]);
+  let res: Response;
+  try {
+    res = await fetch(`${UPLOAD}/drafts${opts.id ? `/${encodeURIComponent(opts.id)}` : ""}?uploadType=multipart`, {
+      method: opts.id ? "PUT" : "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": `multipart/related; boundary=${boundary}` },
+      body: new Uint8Array(body),
+      signal: AbortSignal.timeout(50_000),
+    });
+  } catch {
+    throw new GmailBoxError("network", MESSAGES.network);
+  }
+  if (!res.ok) {
+    const code: BoxErrorCode = res.status === 401 ? "auth" : res.status === 404 ? "not_found" : res.status === 429 ? "quota" : res.status === 403 ? "scope" : "network";
+    throw new GmailBoxError(code, res.status === 413 ? "Message trop volumineux pour Gmail." : MESSAGES[code], res.status);
+  }
+  const d = (await res.json()) as { id: string; message?: { id: string; threadId?: string } };
+  return { id: d.id, message_id: d.message?.id ?? "", thread_id: d.message?.threadId ?? null };
+}
+
+/** `null` : ce brouillon n'existe plus (envoyé ou supprimé). */
+export async function getDraft(token: string, id: string): Promise<{ id: string; message: FullMessage } | null> {
+  try {
+    const d = await get<{ id: string; message: RawMessage }>(token, `/drafts/${encodeURIComponent(id)}?format=full`);
+    return { id: d.id, message: toFullMessage(d.message) };
+  } catch (e) {
+    if (e instanceof GmailBoxError && e.code === "not_found") return null;
+    throw e;
+  }
+}
+
+/** Retrouve le brouillon d'un message de la boîte (les brouillons les plus récents d'abord). */
+export async function findDraftId(token: string, messageId: string): Promise<string | null> {
+  let page: string | undefined;
+  for (let i = 0; i < 10; i++) {
+    const r = await get<{ drafts?: { id: string; message?: { id: string } }[]; nextPageToken?: string }>(token, `/drafts?maxResults=100${page ? `&pageToken=${encodeURIComponent(page)}` : ""}`);
+    const hit = (r.drafts ?? []).find((d) => d.message?.id === messageId);
+    if (hit) return hit.id;
+    if (!r.nextPageToken) return null;
+    page = r.nextPageToken;
+  }
+  return null;
+}
+
+/** Envoie le brouillon : Gmail le retire des brouillons, un second appel répond « introuvable ». */
+export async function sendDraft(token: string, id: string): Promise<{ message_id: string; thread_id: string | null }> {
+  const m = await call<{ id: string; threadId?: string }>(token, "/drafts/send", { id });
+  return { message_id: m.id, thread_id: m.threadId ?? null };
+}
+
+export async function deleteDraft(token: string, id: string): Promise<void> {
+  await call(token, `/drafts/${encodeURIComponent(id)}`, undefined, "DELETE").catch((e) => {
+    if (!(e instanceof GmailBoxError && e.code === "not_found")) throw e; // déjà supprimé : rien à faire
+  });
+}
+
+/** Signature et nom d'expéditeur réglés dans Gmail pour l'adresse du compte. `null` : réglages non lisibles. */
+export async function gmailSignature(token: string, email: string): Promise<{ name: string | null; signature_html: string } | null> {
+  try {
+    const r = await get<{ sendAs?: { sendAsEmail?: string; displayName?: string; signature?: string; isPrimary?: boolean }[] }>(token, "/settings/sendAs");
+    const s = (r.sendAs ?? []).find((x) => x.sendAsEmail?.toLowerCase() === email.toLowerCase()) ?? (r.sendAs ?? []).find((x) => x.isPrimary);
+    return s ? { name: s.displayName || null, signature_html: s.signature ?? "" } : null;
+  } catch (e) {
+    if (e instanceof GmailBoxError && (e.code === "scope" || e.code === "not_found")) return null;
+    throw e;
+  }
 }

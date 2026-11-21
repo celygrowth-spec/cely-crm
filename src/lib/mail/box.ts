@@ -9,7 +9,7 @@ import { CrmError } from "@/lib/crm/service";
 import { gmailAccess } from "@/lib/jobs/run";
 import { BOX_ACTIONS, type BoxActionResult, type BoxFolder, type BoxOpenThread, type BoxStatus, type BoxThread, type BoxThreadPage } from "./box-types";
 import { canModifyBox } from "./box-sync";
-import { GmailBoxError, getAttachment, getThread, modifyThread, pooled, searchThreadIds, trashThread, type FullMessage, type ThreadLabels } from "./gmail-box";
+import { GmailBoxError, getAttachment, getThread, modifyThread, parseAddresses, pooled, searchThreadIds, trashThread, type FullMessage, type ThreadLabels } from "./gmail-box";
 import { rpc as serverRpc } from "@/lib/appointments/server";
 import { serverRpcKey } from "@/lib/appointments/secrets";
 
@@ -77,7 +77,7 @@ export async function listThreads(sb: SupabaseClient, label: string, cursor: str
 }
 
 /** Accès Gmail pour une action du propriétaire (déjà vérifié par l'appelant) : jeton côté serveur uniquement. */
-async function ownerAccess(sb: SupabaseClient): Promise<{ account: { id: string; scopes: string[] }; token: string }> {
+export async function ownerAccess(sb: SupabaseClient): Promise<{ account: { id: string; scopes: string[]; email: string; display_name: string | null; signature: string }; token: string }> {
   if (!(await ensureServerKey(sb))) throw new CrmError("Le module Mail demande la variable serveur APPOINTMENTS_SECRET (voir docs/mail-configuration.md).");
   let access: Awaited<ReturnType<typeof gmailAccess>>;
   try {
@@ -86,12 +86,13 @@ async function ownerAccess(sb: SupabaseClient): Promise<{ account: { id: string;
     throw new CrmError("Google a refusé l'accès à la boîte. Reconnectez Gmail depuis l'onglet « Compte et envois ».");
   }
   if ("skipped" in access) throw new CrmError(`${access.skipped}.`);
-  return { account: { id: access.account.id, scopes: access.account.scopes }, token: access.token };
+  const a = access.account;
+  return { account: { id: a.id, scopes: a.scopes, email: a.email, display_name: a.display_name, signature: a.signature }, token: access.token };
 }
 const ownerToken = async (sb: SupabaseClient) => (await ownerAccess(sb)).token;
 
 /** Appel Gmail : une erreur classée devient un message affichable, jamais la réponse brute de Google. */
-async function gmail<T>(fn: () => Promise<T>): Promise<T> {
+export async function gmail<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (e) {
@@ -183,6 +184,8 @@ export async function openThread(sb: SupabaseClient, threadId: string, images: b
       const body = m.html ? cleanEmailHtml(m.html, images) : { html: `<pre style="white-space:pre-wrap;font:inherit;margin:0">${escapeHtml(m.text ?? m.snippet)}</pre>`, remote: false };
       return {
         id: m.id, from_name: m.from_name, from_email: m.from_email, to: m.to_full ?? "", cc: m.cc_full ?? "", at: m.internal_at,
+        subject: m.subject, rfc_message_id: m.rfc_message_id, references: m.references,
+        reply_to: parseAddresses(m.reply_to).map((a) => a.email), to_list: m.to, cc_list: m.cc,
         label_ids: m.label_ids, html: body.html, remote_images: body.remote,
         attachments: m.attachments.map((a) => ({ name: a.name, mime_type: a.mime_type, size: a.size })),
       };

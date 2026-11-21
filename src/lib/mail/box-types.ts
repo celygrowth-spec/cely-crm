@@ -41,6 +41,13 @@ export type BoxOpenMessage = {
   to: string;
   cc: string;
   at: string;
+  /** pour répondre et transférer : objet, identifiants de fil, adresses */
+  subject: string;
+  rfc_message_id: string | null;
+  references: string | null;
+  reply_to: string[];
+  to_list: string[];
+  cc_list: string[];
   label_ids: string[];
   /** HTML nettoyé côté serveur, affiché dans un cadre isolé sans script. */
   html: string;
@@ -104,3 +111,26 @@ export function applyBoxAction(labels: string[], action: BoxAction, extra: { lab
   }
   return [...set];
 }
+
+// ---------------------------------------------------------------------------
+// Rédaction (lot M04)
+// ---------------------------------------------------------------------------
+/** Pièce jointe déjà dans Gmail : désignée par son message et sa position (brouillon en cours ou message transféré). */
+export type AttachmentRef = { message_id: string; n: number; name: string; size: number };
+export type ComposeContext = { email: string; name: string | null; signature_html: string; can_compose: boolean };
+export type ComposeDraft = {
+  draft_id: string | null;
+  thread_id: string | null;
+  in_reply_to: string | null;
+  references: string | null;
+  to: string[];
+  cc: string[];
+  bcc: string[];
+  subject: string;
+  html: string;
+  attachments: AttachmentRef[];
+};
+export type ComposeSaved = { draft_id: string; message_id: string; thread_id: string | null; attachments: AttachmentRef[] };
+/** Fichiers ajoutés depuis l'ordinateur : limite par enregistrement (taille d'une requête vers le serveur). */
+export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+export const MAX_UPLOAD_LABEL = "4 Mo";

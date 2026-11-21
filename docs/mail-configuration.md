@@ -127,3 +127,23 @@ personnel sont plus basses : consultez l'aide Google.
 - **Ouvrir un fil non lu** le marque lu, dans Gmail aussi.
 - **Suppression définitive** : non proposée. Gmail vide sa corbeille après 30 jours.
 - **Base de données** : `supabase/migrations/20261126120000_mail_boite_tri.sql` (additive, après les deux précédentes).
+
+## Rédaction depuis la boîte (Mail, lot M04)
+- **Nouveau message, Répondre, Répondre à tous, Transférer**, avec Cc, Cci et pièces jointes. Une réponse reste dans
+  le fil d'origine, côté Gmail comme côté CRM.
+- **Brouillons** : ce sont ceux de Gmail. La saisie y est enregistrée après deux secondes sans frappe ; un brouillon
+  commencé dans Gmail se reprend ici (dossier Brouillons › « Modifier le brouillon »), et inversement.
+- **Signature** : celle réglée dans Gmail pour l'adresse du compte (autorisation `gmail.settings.basic`), sinon la
+  signature saisie dans Mail › Compte et envois. Les images d'une signature ne sont pas reprises.
+- **Envoi unique** : l'envoi part du brouillon Gmail. Un verrou en base empêche deux envois du même brouillon (double
+  clic, deux onglets) et Gmail retire le brouillon une fois parti.
+- **Échec d'envoi** : le brouillon reste dans Gmail et la fenêtre reste ouverte avec le motif. Si Gmail ne répond pas
+  clairement, le CRM vérifie si le brouillon existe encore avant de conclure ; en cas de doute, il le dit et ne
+  renvoie rien de lui-même.
+- **Pièces jointes** : 18 Mo au total par message. Les fichiers ajoutés depuis l'ordinateur passent par le serveur :
+  4 Mo au plus par ajout (ajoutez les gros fichiers un par un). Les pièces jointes d'un message transféré sont
+  reprises directement depuis Gmail, sans cette limite par ajout.
+- **Différences avec l'envoi depuis une fiche** : ces messages ne passent pas par les modèles, les variables ni le
+  suivi des liens. L'envoi depuis une fiche (Mail du CRM) est inchangé.
+- **Base de données** : `supabase/migrations/20261126130000_mail_boite_redaction.sql` (additive, après les trois
+  précédentes) : verrous d'envoi, sans aucun contenu de message.
