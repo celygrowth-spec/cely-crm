@@ -8,6 +8,7 @@ const JOBS = [
   { job: "agenda", label: "Agenda Google", what: "Répercute annulations, reports et modifications ; signale les déplacements faits dans Google." },
   { job: "rappels", label: "Rappels de rendez-vous", what: "Envoie par Gmail les rappels dus (version du rendez-vous vérifiée juste avant)." },
   { job: "gmail", label: "Réception Gmail", what: "Rattache les réponses de vos contacts ; met les relances en pause." },
+  { job: "boite", label: "Boîte Gmail", what: "Tient à jour l'index de toute la boîte (dossiers, libellés, lu / non lu) pour le module Mail." },
   { job: "fireflies", label: "Fireflies", what: "Rattrape les appels manqués par le webhook." },
   { job: "corbeille", label: "Corbeille", what: "Supprime définitivement les éléments à la corbeille depuis plus de 30 jours, avec leurs fichiers." },
   { job: "seo", label: "Search Console et Bing", what: "Importe clics, impressions et positions du site (derniers jours relus, historique repris là où il s'est arrêté)." },

@@ -8,6 +8,7 @@ import { decryptSecret, encryptSecret } from "@/lib/mail/crypto";
 import { GMAIL_READ_SCOPE, GoogleError, gmailSend, refreshAccess } from "@/lib/mail/google";
 import { getMessage, GmailReadError, listRecent, listSince, profileHistoryId } from "@/lib/mail/gmail-read";
 import { parseGmailMessage } from "@/lib/mail/inbound";
+import { syncMailbox } from "@/lib/mail/box-sync";
 import { mailConfig } from "@/lib/mail/service";
 import { withSignature } from "@/lib/mail/types";
 import { dueReminders, isReminderStillValid, markReminder } from "@/lib/appointments/mail-adapter";
@@ -15,7 +16,7 @@ import { publicClient, reconcileCalendar, rpc } from "@/lib/appointments/server"
 import { syncGoogleChanges } from "@/lib/appointments/google-sync";
 import { serverRpcKey } from "@/lib/appointments/secrets";
 
-export type JobName = "agenda" | "rappels" | "gmail" | "fireflies" | "corbeille" | "seo";
+export type JobName = "agenda" | "rappels" | "gmail" | "fireflies" | "corbeille" | "seo" | "boite";
 
 async function report(sb: SupabaseClient, job: JobName, ok: boolean, error: string | null, result: unknown) {
   await sb.rpc("job_report", { p_server_key: serverRpcKey(), p_job: job, p_ok: ok, p_error: error, p_result: result ?? null });
@@ -142,4 +143,13 @@ export async function gmailJob(sb: SupabaseClient) {
   const messages = [];
   for (const id of ids.slice(0, 150)) messages.push(parseGmailMessage(await getMessage(token, id)));
   return rpc(sb, "mail_inbound_ingest", { p_server_key: serverRpcKey(), p_account: account.id, p_messages: messages, p_history_id: historyId, p_initial: initial });
+}
+
+// ---------------------------------------------------------------------------
+// Boîte Gmail entière (Mail, lot M01) : index des dossiers, libellés et fils ; reprise là où le passage s'est arrêté.
+// ---------------------------------------------------------------------------
+export async function boiteJob(sb: SupabaseClient, opts: { budgetMs?: number } = {}) {
+  const access = await gmailAccess(sb);
+  if ("skipped" in access) return access;
+  return syncMailbox(sb, access.account, access.token, opts);
 }

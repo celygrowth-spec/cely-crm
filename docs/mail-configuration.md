@@ -82,3 +82,22 @@ personnel sont plus basses : consultez l'aide Google.
   (réponse d'absence, liste, noreply, promotions) : conservés « ignorés », sans effet. Un email déjà vu ou envoyé par le
   CRM n'est jamais importé deux fois. Pièces jointes : noms et tailles seulement, à ouvrir dans Gmail.
 - Testé avec des messages Gmail simulés uniquement : la lecture réelle demande votre reconnexion.
+
+## Boîte Gmail entière (Mail, lot M01)
+- Le CRM tient un **index** de toute la boîte : Boîte de réception, Envoyés, Brouillons, Spam, Corbeille, Tous les
+  messages, libellés personnels et catégories, avec l'état de chaque fil (lu, suivi, important, libellés).
+- **Ce qui est conservé** : expéditeur, destinataires, objet, extrait, date, libellés, présence d'une pièce jointe.
+  Le corps des messages et les pièces jointes restent dans Gmail. Déconnecter le compte efface l'index.
+- **Autorisation** : la lecture déjà accordée (`gmail.readonly`) suffit pour ce lot. Le tri et la rédaction (lots
+  suivants) demanderont `gmail.modify` et une reconnexion.
+- **Première lecture** : toute la boîte, par lots, des messages les plus récents aux plus anciens. Elle avance tant
+  que la page Mail est ouverte, et à chaque passage planifié ; une coupure reprend au lot suivant.
+- **Ensuite** : seuls les changements sont relus (historique Gmail). Page Mail ouverte : toutes les minutes.
+  Page fermée : au rythme du passage planifié `boite` (voir docs/planificateur.md). Si l'historique Gmail a expiré
+  (plus d'une semaine sans passage), la boîte est relue en entier et ce qui n'existe plus est retiré.
+- **En cas d'échec** : la carte « Boîte Gmail » de la page Mail affiche le motif et la marche à suivre (reconnecter,
+  ou attendre la reprise automatique). Les repères restent en place : rien n'est relu deux fois, rien n'est perdu.
+- **Variables d'environnement** : aucune nouvelle. La synchronisation utilise `GOOGLE_MAIL_CLIENT_ID`,
+  `GOOGLE_MAIL_CLIENT_SECRET`, `MAIL_TOKEN_KEY` et `APPOINTMENTS_SECRET` (clé des fonctions serveur), déjà requises.
+- **Base de données** : `supabase/migrations/20261126100000_mail_boite.sql` (additive).
+- Testé avec un Gmail simulé uniquement.
