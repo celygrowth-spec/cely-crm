@@ -50,7 +50,7 @@ export async function agendaJob(sb: SupabaseClient, origin?: string | null) {
 // ---------------------------------------------------------------------------
 type ServerAccount = { id: string; email: string; display_name: string | null; scopes: string[]; signature: string; refresh_token_enc: string; access_token_enc: string | null; access_token_expires_at: string | null };
 
-async function gmailAccess(sb: SupabaseClient): Promise<{ account: ServerAccount; token: string } | { skipped: string }> {
+export async function gmailAccess(sb: SupabaseClient): Promise<{ account: ServerAccount; token: string } | { skipped: string }> {
   const c = mailConfig();
   if (!c) return { skipped: "Gmail n'est pas configuré sur le serveur" };
   const account = await rpc<ServerAccount | null>(sb, "mail_server_account", { p_server_key: serverRpcKey() });

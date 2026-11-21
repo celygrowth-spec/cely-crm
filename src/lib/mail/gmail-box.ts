@@ -198,3 +198,55 @@ export async function listChanges(token: string, startHistoryId: string, max = 1
   const complete = !r.nextPageToken;
   return { changed: [...changed], deleted: [...deleted], historyId: complete ? (r.historyId ?? last) : last, complete };
 }
+
+// ---------------------------------------------------------------------------
+// Lecture à la demande (lot M02) : recherche Gmail, fil complet, pièce jointe. Rien de ceci n'est stocké.
+// ---------------------------------------------------------------------------
+/** Recherche avec la syntaxe Gmail (`from:`, `has:attachment`, `in:spam`…) : Gmail répond, le CRM n'interprète rien. */
+export async function searchThreadIds(token: string, q: string, pageToken: string | null, max = 30): Promise<{ ids: string[]; next: string | null }> {
+  const r = await get<{ threads?: { id: string }[]; nextPageToken?: string }>(
+    token, `/threads?q=${encodeURIComponent(q)}&maxResults=${max}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`);
+  return { ids: (r.threads ?? []).map((t) => t.id), next: r.nextPageToken ?? null };
+}
+
+export type FullAttachment = { id: string; name: string; mime_type: string; size: number };
+export type FullMessage = BoxMessage & { to_full: string | null; cc_full: string | null; html: string | null; text: string | null; attachments: FullAttachment[] };
+
+const decode = (d?: string) => (d ? Buffer.from(d, "base64url").toString("utf8") : "");
+function flatten(p: GmailPart | undefined, out: GmailPart[] = []): GmailPart[] {
+  if (!p) return out;
+  out.push(p);
+  for (const c of p.parts ?? []) flatten(c, out);
+  return out;
+}
+
+export function toFullMessage(m: RawMessage): FullMessage {
+  const parts = flatten(m.payload);
+  const html = parts.find((x) => x.mimeType === "text/html" && !x.filename && x.body?.data);
+  const text = parts.find((x) => x.mimeType === "text/plain" && !x.filename && x.body?.data);
+  return {
+    ...toBoxMessage(m),
+    to_full: header(m.payload, "to"),
+    cc_full: header(m.payload, "cc"),
+    html: html ? decode(html.body?.data) : null,
+    text: text ? decode(text.body?.data) : null,
+    attachments: parts.filter((x) => x.filename && x.body?.attachmentId)
+      .map((x) => ({ id: x.body!.attachmentId!, name: x.filename!.slice(0, 255), mime_type: x.mimeType ?? "application/octet-stream", size: x.body?.size ?? 0 })),
+  };
+}
+
+/** Fil complet, du plus ancien au plus récent. `null` : le fil n'existe plus dans Gmail. */
+export async function getThread(token: string, id: string): Promise<FullMessage[] | null> {
+  try {
+    const r = await get<{ messages?: RawMessage[] }>(token, `/threads/${encodeURIComponent(id)}?format=full`);
+    return (r.messages ?? []).map(toFullMessage);
+  } catch (e) {
+    if (e instanceof GmailBoxError && e.code === "not_found") return null;
+    throw e;
+  }
+}
+
+export async function getAttachment(token: string, messageId: string, attachmentId: string): Promise<Buffer> {
+  const r = await get<{ data?: string }>(token, `/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`);
+  return Buffer.from(r.data ?? "", "base64url");
+}

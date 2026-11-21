@@ -101,3 +101,15 @@ personnel sont plus basses : consultez l'aide Google.
   `GOOGLE_MAIL_CLIENT_SECRET`, `MAIL_TOKEN_KEY` et `APPOINTMENTS_SECRET` (clé des fonctions serveur), déjà requises.
 - **Base de données** : `supabase/migrations/20261126100000_mail_boite.sql` (additive).
 - Testé avec un Gmail simulé uniquement.
+
+## Lecture de la boîte (Mail, lot M02)
+- **Mail › Boîte** : dossiers et libellés à gauche avec leur compteur (non-lus, ou total pour les brouillons), liste
+  des fils par pages de 50 chargées au défilement, fil ouvert à droite avec ses pièces jointes.
+- **Recherche** : la saisie est transmise telle quelle à Gmail, qui applique sa syntaxe (`from:`, `to:`, `subject:`,
+  `has:attachment`, `in:spam`, `older_than:`…). Les résultats suivent l'ordre de Gmail.
+- **Contenu des messages** : lu dans Gmail à l'ouverture, jamais stocké. Le HTML reçu est nettoyé côté serveur puis
+  affiché dans un cadre isolé où aucun script ne s'exécute. Les images distantes sont masquées par défaut (elles
+  signalent l'ouverture à l'expéditeur) ; « Afficher les images » les charge pour le fil ouvert.
+- **Pièces jointes** : téléchargées depuis Gmail à la demande, toujours comme fichier à enregistrer.
+- **Lecture seule à ce stade** : ouvrir un message ne le marque pas comme lu dans Gmail (le tri arrive au lot M03).
+- **Base de données** : `supabase/migrations/20261126110000_mail_boite_lecture.sql` (additive, après la précédente).

@@ -383,3 +383,53 @@ describe("accès : imposé par la base", () => {
     expect(await count("scheduled_jobs")).toBe(4);
   });
 });
+
+describe("lecture : liste des fils d'un dossier (M02)", () => {
+  type Row = { thread_id: string; unread: boolean; subject: string };
+  const list = async (label: string, before?: { at: string; id: string }, limit = 50, who: "owner" | "stranger" | "claude" = "owner") => {
+    await db.as(who);
+    return db.rpc<(Row & { last_at: string })[]>("mailbox_list_threads", { p_label: label, p_before: before?.at ?? null, p_before_id: before?.id ?? null, p_limit: limit });
+  };
+  const ids = (rows: Row[]) => rows.map((r) => r.thread_id);
+
+  beforeEach(async () => {
+    add({ id: "a", labelIds: ["INBOX", "UNREAD"] });
+    add({ id: "b", labelIds: ["SENT"] });
+    add({ id: "c", labelIds: ["SPAM"] });
+    add({ id: "d", labelIds: ["TRASH"] });
+    add({ id: "e1", threadId: "e", labelIds: ["INBOX", "Label_1"] });
+    add({ id: "e2", threadId: "e", labelIds: ["TRASH"] }); // un message du fil à la corbeille, l'autre non
+    await sync();
+  });
+
+  test("chaque dossier montre ses fils, du plus récent au plus ancien", async () => {
+    expect(ids(await list("INBOX"))).toEqual(["e", "a"]);
+    expect(ids(await list("SENT"))).toEqual(["b"]);
+    expect(ids(await list("SPAM"))).toEqual(["c"]);
+    expect(ids(await list("TRASH"))).toEqual(["e", "d"]);
+    expect(ids(await list("Label_1"))).toEqual(["e"]);
+    expect(ids(await list("Label_inconnu"))).toEqual([]);
+    expect((await list("INBOX")).find((t) => t.thread_id === "a")).toMatchObject({ unread: true, subject: "Objet a" });
+  });
+
+  test("« Tous les messages » : tout sauf Spam et Corbeille, un fil partiellement à la corbeille reste visible", async () => {
+    expect(ids(await list("ALL"))).toEqual(["e", "b", "a"]);
+  });
+
+  test("pagination par repère : pas de doublon ni de trou, même si un message arrive entre deux pages", async () => {
+    const p1 = await list("ALL", undefined, 2);
+    expect(ids(p1)).toEqual(["e", "b"]);
+    add({ id: "z", labelIds: ["INBOX"], date: 1_900_000_000_000 });
+    await sync();
+    const last = p1.at(-1)!;
+    expect(ids(await list("ALL", { at: last.last_at, id: last.thread_id }, 2))).toEqual(["a"]);
+    expect(ids(await list("ALL", undefined, 2))).toEqual(["z", "e"]);
+  });
+
+  test("un autre compte ou le connecteur Claude n'obtiennent rien ; un visiteur est refusé", async () => {
+    expect(await list("ALL", undefined, 50, "stranger")).toEqual([]);
+    expect(await list("ALL", undefined, 50, "claude")).toEqual([]);
+    await db.as("anon");
+    await expect(db.rpc("mailbox_list_threads", { p_label: "ALL" })).rejects.toThrow(/permission denied/);
+  });
+});
