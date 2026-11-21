@@ -69,8 +69,10 @@ export function cleanPastedHtml(html: string): string {
     .replace(/\s(class|lang|dir|face|size|color)="[^"]*"/gi, "");
 }
 
-export function MailEditor({ initialHtml, onChange, handle, placeholder = "Votre message…", label = "Message" }: {
+export function MailEditor({ initialHtml, onChange, handle, placeholder = "Votre message…", label = "Message", variables = true }: {
   initialHtml: string; onChange: (html: string, text: string) => void; handle?: Ref<MailEditorHandle>; placeholder?: string; label?: string;
+  /** faux : pas de menu « Variable » (message écrit à la main, hors modèles) */
+  variables?: boolean;
 }) {
   const changed = useRef(onChange);
   useEffect(() => { changed.current = onChange; });
@@ -115,13 +117,13 @@ export function MailEditor({ initialHtml, onChange, handle, placeholder = "Votre
 
   return (
     <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-line bg-white focus-within:border-violet focus-within:ring-2 focus-within:ring-violet/20" data-editor>
-      {editor && <Toolbar editor={editor} />}
+      {editor && <Toolbar editor={editor} variables={variables} />}
       <EditorContent editor={editor} className="min-h-40 flex-1 overflow-y-auto" />
     </div>
   );
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
+function Toolbar({ editor, variables }: { editor: Editor; variables: boolean }) {
   const s = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
@@ -172,7 +174,7 @@ function Toolbar({ editor }: { editor: Editor }) {
         {b("Liste à puces", <List size={15} />, s.bullet, () => chain().toggleBulletList().run(), "Ctrl+Maj+8")}
         {b("Liste numérotée", <ListOrdered size={15} />, s.ordered, () => chain().toggleOrderedList().run(), "Ctrl+Maj+7")}
         {b(s.link ? "Modifier le lien" : "Ajouter un lien", <Link2 size={15} />, s.link, () => setLinkOpen((o) => !o), "Ctrl+K")}
-        <div className="relative">
+        {variables && <div className="relative">
           <button type="button" aria-label="Insérer une variable" aria-expanded={vars} onMouseDown={(e) => e.preventDefault()} onClick={() => setVars((v) => !v)}
             className={cn("inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-semibold text-muted hover:bg-surface hover:text-ink", vars && "bg-violet-soft text-violet-strong")}>
             <Braces size={14} /> Variable
@@ -184,7 +186,7 @@ function Toolbar({ editor }: { editor: Editor }) {
               ))}
             </div>
           )}
-        </div>
+        </div>}
         <span className="mx-1 h-5 w-px bg-line" aria-hidden />
         {b("Annuler", <Undo2 size={15} />, false, () => chain().undo().run(), "Ctrl+Z", !s.canUndo)}
         {b("Rétablir", <Redo2 size={15} />, false, () => chain().redo().run(), "Ctrl+Maj+Z", !s.canRedo)}

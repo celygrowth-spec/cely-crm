@@ -83,7 +83,10 @@ async function gmail(sb: SupabaseClient, c: Checks): Promise<Connector> {
 }
 
 function scopeLabel(s: string) {
-  if (s.endsWith("gmail.send")) return "Envoyer des emails en votre nom (pas de lecture de la boîte)";
+  if (s.endsWith("gmail.send")) return "Envoyer des emails en votre nom";
+  if (s.endsWith("gmail.readonly")) return "Lire la boîte (index des messages, réponses de vos contacts)";
+  if (s.endsWith("gmail.modify")) return "Trier la boîte : libellés, lu / non lu, spam, corbeille, brouillons";
+  if (s.endsWith("gmail.settings.basic")) return "Lire les réglages Gmail (signature)";
   if (s === "email" || s.endsWith("userinfo.email")) return "Connaître l'adresse du compte";
   if (s === "profile" || s.endsWith("userinfo.profile")) return "Connaître le nom du compte";
   if (s === "openid") return null;

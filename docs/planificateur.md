@@ -1,6 +1,6 @@
 # Passages planifiés (agenda, rappels, réception Gmail, Fireflies)
 
-Une seule route : `GET|POST /api/cron` (paramètre facultatif `?taches=agenda,rappels,gmail,fireflies,corbeille`).
+Une seule route : `GET|POST /api/cron` (paramètre facultatif `?taches=agenda,rappels,gmail,boite,fireflies,corbeille`).
 Autorisée par `Authorization: Bearer <CRON_SECRET>` (planificateur) ou par la session du propriétaire
 (bouton « Lancer maintenant » dans Paramètres › Passages planifiés). Chaque tâche est isolée : une erreur n'empêche
 pas les suivantes. Dernière réussite et dernière erreur sont enregistrées (`scheduled_jobs`) et affichées.
@@ -9,6 +9,7 @@ pas les suivantes. Dernière réussite et dernière erreur sont enregistrées (`
 | --- | --- |
 | agenda | Répercute dans Google les annulations, reports et modifications enregistrés au CRM (la base fait foi), puis signale les déplacements faits directement dans Google |
 | rappels | Envoie par Gmail les rappels dus (20 par passage au plus), après avoir vérifié la version du rendez-vous et la révision du rappel. Un résultat incertain n'est jamais renvoyé. Suspension globale : Rendez-vous › réglages des rappels |
+| boite | Tient à jour l'index de toute la boîte Gmail pour le module Mail (première lecture par lots, puis changements seulement) |
 | gmail | Lit les emails reçus (initial : 30 jours, 150 messages ; ensuite incrémental) et rattache les réponses des contacts |
 | fireflies | Rattrape les appels manqués par le webhook |
 | corbeille | Supprime définitivement les éléments à la corbeille depuis 30 jours et retire leurs fichiers du stockage (voir `docs/corbeille.md`) |

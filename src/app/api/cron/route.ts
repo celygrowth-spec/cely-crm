@@ -10,7 +10,7 @@ import { requestOrigin } from "@/lib/appointments/http";
 import { serverRpcKey } from "@/lib/appointments/secrets";
 import { firefliesApiKey } from "@/lib/fireflies/config";
 import { drainImports, rematchPending, syncRecent } from "@/lib/fireflies/worker";
-import { agendaJob, gmailJob, remindersJob, runJob, type JobName } from "@/lib/jobs/run";
+import { agendaJob, boiteJob, gmailJob, remindersJob, runJob, type JobName } from "@/lib/jobs/run";
 import { seoJob } from "@/lib/tracking/seo/job";
 import { trashJob } from "@/lib/trash/job";
 
@@ -32,7 +32,7 @@ async function ownerSession() {
   return data === true;
 }
 
-const ALL: JobName[] = ["agenda", "rappels", "gmail", "fireflies", "corbeille", "seo"];
+const ALL: JobName[] = ["agenda", "rappels", "gmail", "fireflies", "corbeille", "seo", "boite"];
 
 async function handle(req: Request) {
   if (!cronAuthorized(req) && !(await ownerSession())) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
@@ -50,6 +50,7 @@ async function handle(req: Request) {
         return { sync, drain: await drainImports(sb), rematched: await rematchPending(sb) };
       }));
     }
+    if (job === "boite") results.push(await runJob(job, (sb) => boiteJob(sb, { budgetMs: wanted.length === 1 ? 40_000 : 15_000 })));
     if (job === "corbeille") results.push(await runJob(job, trashJob));
     // en dernier : avance par lots dans un temps borné et reprend au passage suivant
     if (job === "seo") {
