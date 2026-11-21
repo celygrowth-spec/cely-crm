@@ -147,3 +147,25 @@ personnel sont plus basses : consultez l'aide Google.
   suivi des liens. L'envoi depuis une fiche (Mail du CRM) est inchangé.
 - **Base de données** : `supabase/migrations/20261126130000_mail_boite_redaction.sql` (additive, après les trois
   précédentes) : verrous d'envoi, sans aucun contenu de message.
+
+## Lien avec les fiches (Mail, lot M05)
+- **Panneau à côté du fil** : quand un correspondant du fil est une personne d'une fiche, le panneau affiche
+  l'entreprise (clic : ouvre la fiche), la personne, l'étape de pipeline (ou le statut de prospection) et la
+  prochaine action.
+- **Créer la fiche** : proposé quand le correspondant n'a pas de fiche. Le formulaire est prérempli (personne et
+  adresse ; société et site déduits du domaine, sauf messagerie personnelle). Les contrôles de doublon habituels
+  s'appliquent.
+- **Historique** :
+  - mail reçu d'une personne d'une fiche : ajouté par la réception Gmail existante (inchangée) ;
+  - mail envoyé depuis une fiche : ajouté par l'envoi du CRM (inchangé) ;
+  - mail envoyé depuis la boîte (lot M04) aux personnes d'une seule fiche : ajouté à son historique à l'envoi.
+  Un même message Gmail n'est jamais enregistré deux fois, quel que soit le chemin.
+- **Non rattaché d'office** : un envoi vers plusieurs fiches à la fois, ou un message envoyé directement depuis
+  l'application Gmail (hors CRM).
+- **Base de données** : `supabase/migrations/20261126140000_mail_boite_fiches.sql` (additive, après les quatre
+  précédentes).
+
+## Suites possibles (hors périmètre)
+Mise en attente d'un message, envoi programmé et annulation d'envoi : l'API Gmail ne les fournit pas, ils seraient à
+recréer côté CRM. Également : notifications instantanées de Gmail (Pub/Sub) à la place de l'interrogation chaque
+minute, images intégrées des signatures, rattachement des envois faits depuis l'application Gmail.

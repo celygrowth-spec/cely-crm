@@ -149,6 +149,13 @@ export async function sendComposeDraft(sb: SupabaseClient, draftId: string): Pro
   }
   try {
     const sent = await sendDraft(token, draftId);
+    // historique de la fiche concernée (lot M05) : un échec ici ne remet jamais l'envoi en cause
+    const m = draft.message;
+    await serverRpc(publicClient(), "mailbox_record_sent", {
+      p_server_key: serverRpcKey(), p_account: account.id,
+      p: { provider_message_id: sent.message_id, provider_thread_id: sent.thread_id, rfc_message_id: m.rfc_message_id, to: m.to, cc: m.cc, subject: m.subject,
+        text: m.text ?? (m.html ? htmlToText(safeHtml(m.html)) : "") },
+    }).catch(() => undefined);
     return { status: "sent", thread_id: sent.thread_id };
   } catch (e) {
     if (!(e instanceof GmailBoxError)) throw e;

@@ -134,3 +134,15 @@ export type ComposeSaved = { draft_id: string; message_id: string; thread_id: st
 /** Fichiers ajoutés depuis l'ordinateur : limite par enregistrement (taille d'une requête vers le serveur). */
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 export const MAX_UPLOAD_LABEL = "4 Mo";
+
+// ---------------------------------------------------------------------------
+// Lien avec les fiches (lot M05)
+// ---------------------------------------------------------------------------
+export type BoxCrmMatch = {
+  email: string;
+  person: { id: string; name: string | null; title: string | null };
+  company: { id: string; name: string; prospect_status: string; deal_status: string };
+  pipeline: string | null;
+  stage: string | null;
+  next_action: { title: string; due_date: string } | null;
+};

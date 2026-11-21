@@ -4,12 +4,13 @@ import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
-import { AlertCircle, Archive, ArchiveRestore, ArrowLeft, Check, File, FileText, Flag, Folder, FolderInput, ImageOff, Inbox, Mail, MailOpen, OctagonAlert, Paperclip, Pencil, RefreshCw, Reply, ReplyAll, Forward, Search, Send, ShieldCheck, Star, Tag, Tags, Trash2, X } from "lucide-react";
+import { AlertCircle, Archive, ArchiveRestore, ArrowLeft, Check, File, FileText, Flag, Folder, FolderInput, ImageOff, Inbox, Mail, MailOpen, OctagonAlert, Paperclip, Pencil, RefreshCw, Reply, ReplyAll, Forward, Search, Building2, CalendarClock, UserPlus, Send, ShieldCheck, Star, Tag, Tags, Trash2, X } from "lucide-react";
+import { useCrm } from "@/components/app-shell";
 import { Badge, Button, EmptyState, Input, Select, Skeleton, cn } from "@/components/ui";
 import { mailCall } from "@/lib/client/mail";
 import { apiGet } from "@/lib/client/query";
-import { TZ } from "@/lib/format";
-import { CATEGORY_FOLDERS, SYSTEM_FOLDERS, applyBoxAction, inFolder, type BoxAction, type BoxActionResult, type BoxFolder, type BoxOpenMessage, type BoxOpenThread, type BoxThread, type BoxThreadPage } from "@/lib/mail/box-types";
+import { PROSPECT_STATUS_LABELS, TZ, formatDate } from "@/lib/format";
+import { CATEGORY_FOLDERS, SYSTEM_FOLDERS, applyBoxAction, inFolder, type BoxAction, type BoxActionResult, type BoxCrmMatch, type BoxFolder, type BoxOpenMessage, type BoxOpenThread, type BoxThread, type BoxThreadPage } from "@/lib/mail/box-types";
 import { BOX_TONE } from "../box-status";
 import { BOX_KEY, useBoxSync } from "../use-box-sync";
 import { Composer, type ComposeRequest } from "./composer";
@@ -230,7 +231,7 @@ export function Mailbox() {
 
         {/* Fil ouvert */}
         <section aria-label="Message" className={cn("min-h-0 min-w-0 overflow-y-auto", !openId && "hidden lg:block")}>
-          {openId ? <Reader key={openId} id={openId} onBack={() => setOpenId(null)} summary={threads.find((t) => t.thread_id === openId) ?? null} context={context} labels={folders.labels} act={status.can_modify ? act : null} onGone={after} onWrite={status.can_modify ? write : null} /> : <p className="p-8 text-center text-sm text-muted">Choisissez un message pour le lire.</p>}
+          {openId ? <Reader key={openId} id={openId} onBack={() => setOpenId(null)} summary={threads.find((t) => t.thread_id === openId) ?? null} context={context} labels={folders.labels} act={status.can_modify ? act : null} onGone={after} onWrite={status.can_modify ? write : null} me={status.email} /> : <p className="p-8 text-center text-sm text-muted">Choisissez un message pour le lire.</p>}
         </section>
       </div>
       {compose && <Composer key={composeKey} request={compose} onClose={() => setCompose(null)} onChanged={refresh} />}
@@ -385,7 +386,7 @@ function ThreadActions({ threads, context, labels, act, onGone }: { threads: Box
   );
 }
 
-function Reader({ id, onBack, summary, context, labels, act, onGone, onWrite }: { id: string; onBack: () => void; summary: BoxThread | null; context: string | null; labels: FolderItem[]; act: Act | null; onGone: (ids: string[]) => void; onWrite: ((r: ComposeRequest) => void) | null }) {
+function Reader({ id, onBack, summary, context, labels, act, onGone, onWrite, me }: { id: string; onBack: () => void; summary: BoxThread | null; context: string | null; labels: FolderItem[]; act: Act | null; onGone: (ids: string[]) => void; onWrite: ((r: ComposeRequest) => void) | null; me: string | null }) {
   const [images, setImages] = useState(false);
   const q = useQuery({
     queryKey: [...BOX_KEY, "thread", id, images],
@@ -403,8 +404,15 @@ function Reader({ id, onBack, summary, context, labels, act, onGone, onWrite }: 
   const t = q.data;
   const lastId = t.messages.at(-1)?.id;
   const hidden = !images && t.messages.some((m) => m.remote_images);
+  // correspondants du fil (hors ma propre adresse) : ils déterminent la fiche affichée à côté
+  const mine = me?.toLowerCase() ?? "";
+  const others = [...new Set(t.messages.flatMap((m) => [m.from_email ?? "", ...m.to_list, ...m.cc_list]).map((e) => e.toLowerCase()).filter((e) => e && e !== mine))];
+  const first = t.messages.find((m) => m.from_email && m.from_email.toLowerCase() !== mine);
+  const contact = first ? { name: first.from_name, email: first.from_email!.toLowerCase() } : others[0] ? { name: null, email: others[0] } : null;
   return (
-    <article className="p-4 sm:p-5">
+    <div className="xl:flex xl:min-h-full">
+    <CrmPanel emails={others} contact={contact} />
+    <article className="min-w-0 flex-1 p-4 sm:p-5">
       <div className="mb-3 flex items-start gap-2">
         <button type="button" onClick={onBack} className="mt-0.5 rounded p-1 text-muted hover:text-ink lg:hidden" aria-label="Retour à la liste"><ArrowLeft size={18} /></button>
         <h2 className="min-w-0 flex-1 font-display text-lg font-bold break-words">{t.subject || "(sans objet)"}</h2>
@@ -447,6 +455,62 @@ function Reader({ id, onBack, summary, context, labels, act, onGone, onWrite }: 
         })}
       </ol>
     </article>
+    </div>
+  );
+}
+
+const FREE_MAIL = /^(gmail|googlemail|outlook|hotmail|live|yahoo|icloud|me|orange|wanadoo|free|sfr|laposte|protonmail|proton|gmx|aol)\./i;
+
+/** Fiche prête à créer à partir d'un correspondant : société déduite du domaine, sauf messagerie personnelle. */
+function prefillFrom(contact: { name: string | null; email: string }) {
+  const domain = contact.email.split("@")[1] ?? "";
+  const pro = !!domain && !FREE_MAIL.test(domain);
+  const [firstName, ...rest] = (contact.name ?? "").trim().split(/\s+/).filter(Boolean);
+  const company = pro ? domain.split(".")[0].replace(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase()) : (contact.name ?? "");
+  return { name: company, website: pro ? domain : "", person: { first_name: firstName ?? "", last_name: rest.join(" "), email: contact.email } };
+}
+
+/**
+ * Lien avec le CRM : les fiches des correspondants du fil (entreprise, personne, étape, prochaine action), ou la
+ * création d'une fiche préremplie quand le correspondant n'en a pas.
+ */
+function CrmPanel({ emails, contact }: { emails: string[]; contact: { name: string | null; email: string } | null }) {
+  const { openCompany, openCreate } = useCrm();
+  const q = useQuery({
+    queryKey: ["mail-box-crm", emails.join(",")],
+    queryFn: ({ signal }) => apiGet<BoxCrmMatch[]>(`/api/mail/box/crm?emails=${encodeURIComponent(emails.join(","))}`, signal),
+    enabled: emails.length > 0, staleTime: 60_000,
+  });
+  if (!emails.length) return null;
+  const matches = q.data ?? [];
+  // une fiche n'apparaît qu'une fois, avec ses personnes présentes dans le fil
+  const companies = [...new Map(matches.map((m) => [m.company.id, m])).values()];
+  const known = !!contact && matches.some((m) => m.email === contact.email);
+  return (
+    <aside aria-label="Fiche du CRM" className="border-b border-line bg-surface/50 p-3 text-sm xl:order-last xl:w-64 xl:shrink-0 xl:border-b-0 xl:border-l">
+      {q.isLoading && <Skeleton className="h-16 w-full" />}
+      {q.isError && <p className="text-xs text-danger">Fiches indisponibles. <button type="button" className="underline" onClick={() => q.refetch()}>Réessayer</button></p>}
+      {companies.map((m) => (
+        <div key={m.company.id} className="mb-3 last:mb-0">
+          <button type="button" onClick={() => openCompany(m.company.id, { name: m.company.name })} className="flex w-full items-center gap-1.5 text-left font-display font-bold text-ink hover:text-violet-strong">
+            <Building2 size={15} className="shrink-0" /> <span className="truncate">{m.company.name}</span>
+          </button>
+          {matches.filter((x) => x.company.id === m.company.id).map((x) => (
+            <p key={x.person.id} className="mt-0.5 truncate text-xs text-muted">{x.person.name ?? x.email}{x.person.title ? ` · ${x.person.title}` : ""}</p>
+          ))}
+          <p className="mt-1.5 text-xs"><span className="text-muted">Étape : </span>{m.stage ? `${m.pipeline ? `${m.pipeline} › ` : ""}${m.stage}` : (PROSPECT_STATUS_LABELS[m.company.prospect_status as keyof typeof PROSPECT_STATUS_LABELS] ?? "Hors pipeline")}</p>
+          <p className="mt-0.5 flex items-start gap-1 text-xs"><CalendarClock size={12} className="mt-0.5 shrink-0 text-muted" />
+            {m.next_action ? <span>{m.next_action.title} <span className="text-muted">· {formatDate(m.next_action.due_date)}</span></span> : <span className="text-muted">Aucune action prévue</span>}
+          </p>
+        </div>
+      ))}
+      {q.isSuccess && contact && !known && (
+        <div className={companies.length ? "mt-3 border-t border-line pt-3" : undefined}>
+          <p className="text-xs text-muted">{contact.name ?? contact.email} n&apos;a pas de fiche.</p>
+          <Button variant="secondary" size="sm" className="mt-1.5" onClick={() => openCreate({ prefill: prefillFrom(contact), onCreated: () => void q.refetch() })}><UserPlus size={13} /> Créer la fiche</Button>
+        </div>
+      )}
+    </aside>
   );
 }
 

@@ -252,6 +252,16 @@ describe("envoi : une seule fois", () => {
     expect(drafts.size).toBe(0);
   });
 
+  test("envoi à une personne d'une fiche : une ligne dans l'historique de la fiche, une seule", async () => {
+    await db.as("owner");
+    const acme = (await db.rpc<{ id: string }>("create_company", { p_force: true, p_company: { name: "Acme" }, p_people: [{ first_name: "Claire", email: "claire@example.test" }] })).id;
+    const a = await save({ subject: "Devis", html: "<p>Voici le devis.</p>" });
+    await Promise.all([sendComposeDraft(owner, a.draft_id), sendComposeDraft(owner, a.draft_id)]);
+    await db.exec(`reset role;`);
+    expect(await db.one(`select count(*)::int n, min(content) content from interactions where company_id = $1 and kind = 'message_out'`, [acme])).toEqual({ n: 1, content: "Devis\n\nVoici le devis." });
+    expect(await db.one(`select status, company_id from mail_messages`)).toEqual({ status: "accepted", company_id: acme });
+  });
+
   test("double clic ou deux onglets en même temps : un seul message", async () => {
     const a = await save();
     const results = await Promise.all([sendComposeDraft(owner, a.draft_id), sendComposeDraft(owner, a.draft_id), sendComposeDraft(owner, a.draft_id)]);

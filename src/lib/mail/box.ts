@@ -7,7 +7,7 @@ import { ensureServerKey } from "@/lib/appointments/owner";
 import { publicClient } from "@/lib/appointments/server";
 import { CrmError } from "@/lib/crm/service";
 import { gmailAccess } from "@/lib/jobs/run";
-import { BOX_ACTIONS, type BoxActionResult, type BoxFolder, type BoxOpenThread, type BoxStatus, type BoxThread, type BoxThreadPage } from "./box-types";
+import { BOX_ACTIONS, type BoxActionResult, type BoxCrmMatch, type BoxFolder, type BoxOpenThread, type BoxStatus, type BoxThread, type BoxThreadPage } from "./box-types";
 import { canModifyBox } from "./box-sync";
 import { GmailBoxError, getAttachment, getThread, modifyThread, parseAddresses, pooled, searchThreadIds, trashThread, type FullMessage, type ThreadLabels } from "./gmail-box";
 import { rpc as serverRpc } from "@/lib/appointments/server";
@@ -281,4 +281,16 @@ export async function runBoxAction(sb: SupabaseClient, input: unknown): Promise<
   if (labels.length) await serverRpc(publicClient(), "mailbox_set_labels", { p_server_key: serverRpcKey(), p_account: account.id, p_messages: labels });
   if (fatal) throw new CrmError((fatal as GmailBoxError).message);
   return { done, failed };
+}
+
+// ---------------------------------------------------------------------------
+// Lien avec les fiches (lot M05)
+// ---------------------------------------------------------------------------
+/** Fiches dont une personne a l'une de ces adresses (lecture sous les droits du propriétaire). */
+export async function crmContext(sb: SupabaseClient, emails: string[]): Promise<BoxCrmMatch[]> {
+  const list = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter((e) => e.length <= 320 && /^[^\s@]+@[^\s@]+$/.test(e)))].slice(0, 50);
+  if (!list.length) return [];
+  const { data, error } = await sb.rpc("mailbox_crm_context", { p_emails: list });
+  if (error) throw new CrmError(`Lecture des fiches impossible : ${error.message}`);
+  return (data ?? []) as BoxCrmMatch[];
 }

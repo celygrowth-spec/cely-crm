@@ -12,7 +12,13 @@ import { SourcePicker } from "./source-picker";
 import { DuplicateNotice } from "./duplicate-notice";
 import { Button, Field, Input, Modal, Select, Textarea } from "./ui";
 
-export type CreateDefaults = { listId?: string; stageId?: string };
+export type CreateDefaults = {
+  listId?: string; stageId?: string;
+  /** Formulaire prérempli (par exemple depuis un email) : remplace la saisie mise de côté. */
+  prefill?: { name?: string; website?: string; person?: Partial<PersonDraft> };
+  /** Appelé une fois la fiche créée. */
+  onCreated?: () => void;
+};
 
 const emptyPerson = (): PersonDraft => ({ first_name: "", last_name: "", title: "", email: "", phone: "", linkedin_url: "" });
 
@@ -41,13 +47,13 @@ const keepDraft = (d: Draft | null) => { kept = d; };
 // monté à chaque ouverture : nouvelle clé d'idempotence ; formulaire vierge, ou saisie mise de côté
 function CreateForm({ defaults, onClose, onCreated }: { defaults: CreateDefaults; onClose: () => void; onCreated: (id: string, name: string) => void }) {
   const { sources, lists, pipelines, openCompany } = useCrm();
-  const [restored] = useState(() => kept);
-  const [name, setName] = useState(restored?.name ?? "");
-  const [website, setWebsite] = useState(restored?.website ?? "");
+  const [restored] = useState(() => (defaults.prefill ? null : kept));
+  const [name, setName] = useState(defaults.prefill?.name ?? restored?.name ?? "");
+  const [website, setWebsite] = useState(defaults.prefill?.website ?? restored?.website ?? "");
   const [description, setDescription] = useState(restored?.description ?? "");
   const [sourceId, setSourceId] = useState(restored?.sourceId ?? "");
   const [tags, setTags] = useState(restored?.tags ?? "");
-  const [people, setPeople] = useState<PersonDraft[]>(restored?.people ?? [emptyPerson()]);
+  const [people, setPeople] = useState<PersonDraft[]>(defaults.prefill?.person ? [{ ...emptyPerson(), ...defaults.prefill.person }] : (restored?.people ?? [emptyPerson()]));
   const [listId, setListId] = useState(defaults.listId ?? restored?.listId ?? "");
   const [stageId, setStageId] = useState(defaults.stageId ?? restored?.stageId ?? "");
   const [more, setMore] = useState(!!(restored && (restored.description || restored.sourceId || restored.tags)));
