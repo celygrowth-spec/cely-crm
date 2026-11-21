@@ -7,7 +7,14 @@ export type BoxStatus = {
   messages: number;
   last_sync_at: string | null;
   started_at: string | null;
+  /** le compte a accordé la gestion de la boîte (tri, brouillons) ; sinon lecture seule jusqu'à la reconnexion */
+  can_modify: boolean;
 };
+
+export const BOX_ACTIONS = ["archive", "trash", "untrash", "read", "unread", "star", "unstar", "important", "unimportant", "spam", "unspam", "label", "unlabel", "move"] as const;
+export type BoxAction = (typeof BOX_ACTIONS)[number];
+/** done : fils modifiés dans Gmail ; failed : fils qui n'existent plus dans Gmail */
+export type BoxActionResult = { done: string[]; failed: string[] };
 
 export type BoxFolder = { id: string; name: string; kind: "system" | "user"; unread: number; total: number };
 
@@ -62,3 +69,38 @@ export const CATEGORY_FOLDERS: { id: string; label: string }[] = [
   { id: "CATEGORY_UPDATES", label: "Notifications" },
   { id: "CATEGORY_FORUMS", label: "Forums" },
 ];
+
+/** Le fil apparaît-il dans ce dossier ? « ALL » : tout sauf Spam et Corbeille. */
+export const inFolder = (labels: string[], folder: string) => (folder === "ALL" ? !labels.includes("SPAM") && !labels.includes("TRASH") : labels.includes(folder));
+
+/**
+ * Libellés d'un fil après une action, pour mettre l'écran à jour sans attendre Gmail. Estimation au niveau du fil :
+ * l'état exact, message par message, vient de la réponse de Gmail puis de la synchronisation.
+ */
+export function applyBoxAction(labels: string[], action: BoxAction, extra: { label_id?: string; from_label?: string } = {}): string[] {
+  const set = new Set(labels);
+  const add = (...l: (string | undefined)[]) => l.forEach((x) => x && set.add(x));
+  const del = (...l: (string | undefined)[]) => l.forEach((x) => x && set.delete(x));
+  switch (action) {
+    case "archive": del("INBOX"); break;
+    case "trash": return [...labels.filter((l) => l !== "INBOX" && l !== "SPAM" && l !== "TRASH"), "TRASH"];
+    case "untrash": del("TRASH"); add("INBOX"); break;
+    case "read": del("UNREAD"); break;
+    case "unread": add("UNREAD"); break;
+    case "star": add("STARRED"); break;
+    case "unstar": del("STARRED"); break;
+    case "important": add("IMPORTANT"); break;
+    case "unimportant": del("IMPORTANT"); break;
+    case "spam": return [...labels.filter((l) => l !== "INBOX" && l !== "TRASH" && l !== "SPAM"), "SPAM"];
+    case "unspam": del("SPAM"); add("INBOX"); break;
+    case "label": add(extra.label_id); break;
+    case "unlabel": del(extra.label_id); break;
+    case "move":
+      del("TRASH", "SPAM");
+      if (extra.from_label && extra.from_label !== "ALL" && extra.from_label !== extra.label_id) del(extra.from_label);
+      else if (extra.label_id !== "INBOX") del("INBOX");
+      add(extra.label_id);
+      break;
+  }
+  return [...set];
+}

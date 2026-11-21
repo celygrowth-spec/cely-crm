@@ -7,16 +7,19 @@ import { ensureServerKey } from "@/lib/appointments/owner";
 import { publicClient } from "@/lib/appointments/server";
 import { CrmError } from "@/lib/crm/service";
 import { gmailAccess } from "@/lib/jobs/run";
-import type { BoxFolder, BoxOpenThread, BoxStatus, BoxThread, BoxThreadPage } from "./box-types";
-import { GmailBoxError, getAttachment, getThread, pooled, searchThreadIds, type FullMessage } from "./gmail-box";
+import { BOX_ACTIONS, type BoxActionResult, type BoxFolder, type BoxOpenThread, type BoxStatus, type BoxThread, type BoxThreadPage } from "./box-types";
+import { canModifyBox } from "./box-sync";
+import { GmailBoxError, getAttachment, getThread, modifyThread, pooled, searchThreadIds, trashThread, type FullMessage, type ThreadLabels } from "./gmail-box";
+import { rpc as serverRpc } from "@/lib/appointments/server";
+import { serverRpcKey } from "@/lib/appointments/secrets";
 
 export async function boxStatus(sb: SupabaseClient): Promise<BoxStatus> {
-  const { data: accounts, error } = await sb.from("mail_accounts").select("id, email, status, is_default, connected_at").neq("status", "disconnected")
+  const { data: accounts, error } = await sb.from("mail_accounts").select("id, email, status, is_default, connected_at, scopes").neq("status", "disconnected")
     .order("is_default", { ascending: false }).order("connected_at", { ascending: false }).limit(1);
   if (error) throw new CrmError(`Lecture de la boîte impossible : ${error.message}`);
   const account = accounts?.[0];
-  if (!account) return { state: "none", email: null, message: "Aucun compte Gmail connecté.", messages: 0, last_sync_at: null, started_at: null };
-  const base = { email: account.email as string, messages: 0, last_sync_at: null as string | null, started_at: null as string | null };
+  if (!account) return { state: "none", email: null, message: "Aucun compte Gmail connecté.", messages: 0, last_sync_at: null, started_at: null, can_modify: false };
+  const base = { email: account.email as string, messages: 0, last_sync_at: null as string | null, started_at: null as string | null, can_modify: canModifyBox((account.scopes as string[]) ?? []) };
   if (account.status !== "connected") return { ...base, state: "error", message: "Google a retiré l'accès à ce compte. Reconnectez Gmail ci-dessous : la synchronisation reprendra où elle s'est arrêtée." };
 
   const { data: sync } = await sb.from("mailbox_sync").select("backfill_started_at, backfill_done_at, last_sync_at, error_code, last_error").eq("account_id", account.id).maybeSingle();
@@ -74,7 +77,7 @@ export async function listThreads(sb: SupabaseClient, label: string, cursor: str
 }
 
 /** Accès Gmail pour une action du propriétaire (déjà vérifié par l'appelant) : jeton côté serveur uniquement. */
-async function ownerToken(sb: SupabaseClient): Promise<string> {
+async function ownerAccess(sb: SupabaseClient): Promise<{ account: { id: string; scopes: string[] }; token: string }> {
   if (!(await ensureServerKey(sb))) throw new CrmError("Le module Mail demande la variable serveur APPOINTMENTS_SECRET (voir docs/mail-configuration.md).");
   let access: Awaited<ReturnType<typeof gmailAccess>>;
   try {
@@ -83,8 +86,9 @@ async function ownerToken(sb: SupabaseClient): Promise<string> {
     throw new CrmError("Google a refusé l'accès à la boîte. Reconnectez Gmail depuis l'onglet « Compte et envois ».");
   }
   if ("skipped" in access) throw new CrmError(`${access.skipped}.`);
-  return access.token;
+  return { account: { id: access.account.id, scopes: access.account.scopes }, token: access.token };
 }
+const ownerToken = async (sb: SupabaseClient) => (await ownerAccess(sb)).token;
 
 /** Appel Gmail : une erreur classée devient un message affichable, jamais la réponse brute de Google. */
 async function gmail<T>(fn: () => Promise<T>): Promise<T> {
@@ -197,4 +201,81 @@ export async function readAttachment(sb: SupabaseClient, threadId: string, messa
   const meta = messages?.find((m) => m.id === messageId)?.attachments[index];
   if (!meta) throw new CrmError("Pièce jointe introuvable.");
   return { name: meta.name, data: await gmail(() => getAttachment(token, messageId, meta.id)) };
+}
+
+// ---------------------------------------------------------------------------
+// Tri (lot M03) : chaque action est faite dans Gmail d'abord ; l'index reprend ensuite l'état que Gmail a renvoyé.
+// ---------------------------------------------------------------------------
+const ID = /^[A-Za-z0-9_\-]{1,200}$/;
+const actionSchema = z.object({
+  action: z.enum(BOX_ACTIONS),
+  thread_ids: z.array(z.string().regex(ID)).min(1).max(50, "50 fils au plus par action"),
+  label_id: z.string().regex(ID).optional(),
+  from_label: z.string().regex(ID).optional(),
+});
+const MOVABLE = (id: string | undefined) => !!id && (id === "INBOX" || !/^[A-Z_]+$/.test(id)); // boîte de réception ou libellé personnel
+
+/**
+ * Toutes les actions sont des états à atteindre (« marquer lu », jamais « inverser ») : les rejouer, sur un double
+ * clic ou un nouvel essai, ne change rien de plus.
+ */
+export async function runBoxAction(sb: SupabaseClient, input: unknown): Promise<BoxActionResult> {
+  const p = actionSchema.parse(input);
+  const { account, token } = await ownerAccess(sb);
+  if (!canModifyBox(account.scopes)) throw new CrmError("Le tri n'est pas encore autorisé. Reconnectez Gmail depuis l'onglet « Compte et envois » en acceptant toutes les autorisations.");
+
+  const needsLabel = p.action === "label" || p.action === "unlabel" || p.action === "move";
+  if (needsLabel) {
+    if (!p.label_id) throw new CrmError("Choisissez un libellé.");
+    if (p.action === "move" ? !MOVABLE(p.label_id) : /^[A-Z_]+$/.test(p.label_id)) throw new CrmError("Ce dossier ne peut pas être choisi ici.");
+    if (p.label_id !== "INBOX") {
+      const { data } = await sb.from("mailbox_labels").select("label_id").eq("account_id", account.id).eq("label_id", p.label_id).eq("kind", "user").maybeSingle();
+      if (!data) throw new CrmError("Libellé introuvable. Synchronisez la boîte puis réessayez.");
+    }
+  }
+
+  const one = async (id: string): Promise<ThreadLabels> => {
+    const label = p.label_id!;
+    switch (p.action) {
+      case "archive": return modifyThread(token, id, [], ["INBOX"]);
+      case "trash": return trashThread(token, id);
+      case "untrash": await trashThread(token, id, true); return modifyThread(token, id, ["INBOX"], []);
+      case "read": return modifyThread(token, id, [], ["UNREAD"]);
+      case "unread": return modifyThread(token, id, ["UNREAD"], []);
+      case "star": return modifyThread(token, id, ["STARRED"], []);
+      case "unstar": return modifyThread(token, id, [], ["STARRED"]);
+      case "important": return modifyThread(token, id, ["IMPORTANT"], []);
+      case "unimportant": return modifyThread(token, id, [], ["IMPORTANT"]);
+      case "spam": return modifyThread(token, id, ["SPAM"], ["INBOX"]);
+      case "unspam": return modifyThread(token, id, ["INBOX"], ["SPAM"]);
+      case "label": return modifyThread(token, id, [label], []);
+      case "unlabel": return modifyThread(token, id, [], [label]);
+      case "move": {
+        if (p.from_label === "TRASH") await trashThread(token, id, true);
+        // quitter le dossier d'origine : la boîte de réception par défaut, un libellé personnel ou le spam sinon
+        const leave = p.from_label === "SPAM" ? ["SPAM"] : MOVABLE(p.from_label) ? [p.from_label!] : label === "INBOX" ? [] : ["INBOX"];
+        return modifyThread(token, id, [label], leave.filter((l) => l !== label));
+      }
+    }
+  };
+
+  const done: string[] = [];
+  const failed: string[] = [];
+  const labels: ThreadLabels = [];
+  let fatal: GmailBoxError | null = null;
+  await pooled(p.thread_ids, 5, async (id) => {
+    if (fatal) return;
+    try {
+      labels.push(...(await one(id)));
+      done.push(id);
+    } catch (e) {
+      if (!(e instanceof GmailBoxError)) throw e;
+      if (e.code === "not_found") failed.push(id); // le fil n'existe plus dans Gmail : la synchronisation le retirera
+      else fatal = e; // accès, autorisation, quota, réseau : inutile d'insister sur les fils suivants
+    }
+  });
+  // ce que Gmail a accepté est reflété tout de suite, même si la suite a échoué
+  if (labels.length) await serverRpc(publicClient(), "mailbox_set_labels", { p_server_key: serverRpcKey(), p_account: account.id, p_messages: labels });
+  if (fatal) throw new CrmError((fatal as GmailBoxError).message);
+  return { done, failed };
 }

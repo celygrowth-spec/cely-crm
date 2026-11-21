@@ -7,11 +7,10 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { rpc } from "@/lib/appointments/server";
 import { serverRpcKey } from "@/lib/appointments/secrets";
-import { GMAIL_READ_SCOPE } from "./google";
+import { GMAIL_MODIFY_SCOPE, GMAIL_READ_SCOPE } from "./google";
 import { GmailBoxError, getBoxMessage, listChanges, listLabels, listMessageIds, pooled, profileHistoryId, type BoxMessage } from "./gmail-box";
 
-/** Gère aussi le tri (lots suivants) ; elle inclut la lecture. */
-export const GMAIL_MODIFY_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
+export const canModifyBox = (scopes: string[]) => scopes.includes(GMAIL_MODIFY_SCOPE) || scopes.includes("https://mail.google.com/");
 export const canReadBox = (scopes: string[]) => scopes.includes(GMAIL_READ_SCOPE) || scopes.includes(GMAIL_MODIFY_SCOPE) || scopes.includes("https://mail.google.com/");
 
 type State = { history_id: string | null; generation: number; backfill_token: string | null; backfill_done: boolean };

@@ -1,13 +1,15 @@
 "use client";
 
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { AlertCircle, Archive, ArrowLeft, File, FileText, Flag, Folder, ImageOff, Inbox, OctagonAlert, Paperclip, RefreshCw, Search, Send, Star, Tag, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { toast } from "sonner";
+import { AlertCircle, Archive, ArchiveRestore, ArrowLeft, Check, File, FileText, Flag, Folder, FolderInput, ImageOff, Inbox, Mail, MailOpen, OctagonAlert, Paperclip, RefreshCw, Search, Send, ShieldCheck, Star, Tag, Tags, Trash2, X } from "lucide-react";
 import { Badge, Button, EmptyState, Input, Select, Skeleton, cn } from "@/components/ui";
+import { mailCall } from "@/lib/client/mail";
 import { apiGet } from "@/lib/client/query";
 import { TZ } from "@/lib/format";
-import { CATEGORY_FOLDERS, SYSTEM_FOLDERS, type BoxFolder, type BoxOpenMessage, type BoxOpenThread, type BoxThread, type BoxThreadPage } from "@/lib/mail/box-types";
+import { CATEGORY_FOLDERS, SYSTEM_FOLDERS, applyBoxAction, inFolder, type BoxAction, type BoxActionResult, type BoxFolder, type BoxOpenMessage, type BoxOpenThread, type BoxThread, type BoxThreadPage } from "@/lib/mail/box-types";
 import { BOX_TONE } from "../box-status";
 import { BOX_KEY, useBoxSync } from "../use-box-sync";
 
@@ -49,6 +51,74 @@ function useFolders() {
   return { ...items, loading: q.isLoading };
 }
 
+type ActionExtra = { label_id?: string; from_label?: string };
+type Act = (action: BoxAction, ids: string[], extra?: ActionExtra) => Promise<boolean>;
+type ListKey = { label?: string; q?: string };
+const FAMILY: Record<BoxAction, string> = {
+  archive: "archive", trash: "trash", untrash: "trash", read: "read", unread: "read", star: "star", unstar: "star",
+  important: "important", unimportant: "important", spam: "spam", unspam: "spam", label: "label", unlabel: "label", move: "move",
+};
+
+/**
+ * Tri : l'écran est mis à jour tout de suite, l'action part vers Gmail, et l'écran revient en arrière si Gmail
+ * refuse. Une action déjà en cours sur les mêmes fils n'est pas renvoyée (double clic).
+ */
+function useBoxActions(sync: () => Promise<unknown>): { act: Act; busy: boolean } {
+  const qc = useQueryClient();
+  const inFlight = useRef(new Set<string>());
+  const [busy, setBusy] = useState(0);
+  const act = useCallback<Act>(async (action, ids, extra = {}) => {
+    // même famille d'action sur les mêmes fils : un second clic (qui verrait le bouton déjà inversé) est ignoré
+    const key = `${FAMILY[action]}:${extra.label_id ?? ""}:${[...ids].sort().join(",")}`;
+    if (!ids.length || inFlight.current.has(key)) return false;
+    inFlight.current.add(key);
+    setBusy((n) => n + 1);
+    const lists = [...BOX_KEY, "threads"];
+    await qc.cancelQueries({ queryKey: lists });
+    const before = qc.getQueriesData<InfiniteData<BoxThreadPage>>({ queryKey: lists });
+    const touched = new Set(ids);
+    for (const [k, data] of before) {
+      if (!data) continue;
+      const folder = (k[2] as ListKey | undefined)?.label;
+      qc.setQueryData<InfiniteData<BoxThreadPage>>(k, {
+        ...data,
+        pages: data.pages.map((pg) => ({
+          ...pg,
+          threads: pg.threads.flatMap((t) => {
+            if (!touched.has(t.thread_id)) return [t];
+            const label_ids = applyBoxAction(t.label_ids, action, extra);
+            // dans un dossier, le fil qui n'y est plus disparaît ; dans une recherche, il reste affiché
+            if (folder && !inFolder(label_ids, folder)) return [];
+            return [{ ...t, label_ids, unread: label_ids.includes("UNREAD"), starred: label_ids.includes("STARRED"), important: label_ids.includes("IMPORTANT") }];
+          }),
+        })),
+      });
+    }
+    let ok = true;
+    try {
+      let missing = 0;
+      for (let i = 0; i < ids.length; i += 50) {
+        const r = await mailCall<BoxActionResult>("/api/mail/box/actions", "POST", { action, thread_ids: ids.slice(i, i + 50), ...extra });
+        if (!r.ok) throw new Error(r.error);
+        missing += r.data.failed.length;
+      }
+      if (missing) toast.message(`${missing} fil${missing > 1 ? "s n'existent" : " n'existe"} plus dans Gmail.`);
+    } catch (e) {
+      ok = false;
+      for (const [k, data] of before) qc.setQueryData(k, data); // retour en arrière : Gmail n'a pas appliqué l'action
+      toast.error(e instanceof Error && e.message ? e.message : "Gmail n'a pas appliqué l'action. Réessayez.");
+    } finally {
+      inFlight.current.delete(key);
+      setBusy((n) => n - 1);
+      // compteurs et état réel : repris de Gmail
+      await sync();
+      void qc.invalidateQueries({ queryKey: BOX_KEY });
+    }
+    return ok;
+  }, [qc, sync]);
+  return { act, busy: busy > 0 };
+}
+
 export function Mailbox() {
   const { status, syncing, run } = useBoxSync();
   const folders = useFolders();
@@ -56,6 +126,8 @@ export function Mailbox() {
   const [query, setQuery] = useState("");
   const [typed, setTyped] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const { act } = useBoxActions(run);
 
   const list = useInfiniteQuery({
     queryKey: [...BOX_KEY, "threads", query ? { q: query } : { label }],
@@ -72,13 +144,23 @@ export function Mailbox() {
     setQuery("");
     setTyped("");
     setOpenId(null);
+    setSelected(new Set());
   };
   const search = (e: FormEvent) => {
     e.preventDefault();
     setQuery(typed.trim());
     setOpenId(null);
+    setSelected(new Set());
   };
   const all = [...folders.system, ...folders.categories, ...folders.labels];
+  const context = query ? null : label;
+  const chosen = threads.filter((t) => selected.has(t.thread_id));
+  const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  /** Après une action qui sort les fils du dossier affiché : la sélection et le fil ouvert n'ont plus lieu d'être. */
+  const after = (ids: string[]) => {
+    setSelected((s) => new Set([...s].filter((id) => !ids.includes(id))));
+    if (openId && ids.includes(openId)) setOpenId(null);
+  };
   const title = query ? `Recherche : ${query}` : (all.find((f) => f.id === label)?.label ?? "Dossier");
 
   if (!status) return <Skeleton className="h-96 w-full" />;
@@ -125,13 +207,24 @@ export function Mailbox() {
             </Select>
             <h2 className="hidden min-w-0 flex-1 truncate font-display text-sm font-bold lg:block">{title}</h2>
           </div>
-          <ThreadList threads={threads} openId={openId} onOpen={setOpenId} loading={list.isLoading} error={list.isError ? list.error.message : null} retry={() => list.refetch()}
+          {status.can_modify ? (
+            <div className="flex min-h-10 flex-wrap items-center gap-1 border-b border-line px-3 py-1">
+              <input type="checkbox" aria-label="Tout sélectionner" className="size-4 accent-violet" checked={threads.length > 0 && chosen.length === threads.length}
+                onChange={(e) => setSelected(e.target.checked ? new Set(threads.map((t) => t.thread_id)) : new Set())} />
+              {chosen.length > 0
+                ? <><span className="mr-1 text-xs font-semibold tabular-nums">{chosen.length}</span><ThreadActions threads={chosen} context={context} labels={folders.labels} act={act} onGone={after} /></>
+                : <span className="text-xs text-muted">Cochez des messages pour les trier</span>}
+            </div>
+          ) : (
+            <p className="border-b border-line bg-violet-soft px-3 py-1.5 text-xs">Lecture seule. Pour trier vos messages, <a className="font-semibold underline" href={`/api/mail/oauth/start${status.email ? `?hint=${encodeURIComponent(status.email)}` : ""}`}>reconnectez Gmail</a> en acceptant toutes les autorisations.</p>
+          )}
+          <ThreadList threads={threads} openId={openId} onOpen={setOpenId} selected={status.can_modify ? selected : null} onToggle={toggle} loading={list.isLoading} error={list.isError ? list.error.message : null} retry={() => list.refetch()}
             hasMore={!!list.hasNextPage} loadingMore={list.isFetchingNextPage} more={() => list.fetchNextPage()} empty={query ? "Aucun message ne correspond à cette recherche." : "Aucun message dans ce dossier."} />
         </section>
 
         {/* Fil ouvert */}
         <section aria-label="Message" className={cn("min-h-0 min-w-0 overflow-y-auto", !openId && "hidden lg:block")}>
-          {openId ? <Reader key={openId} id={openId} onBack={() => setOpenId(null)} /> : <p className="p-8 text-center text-sm text-muted">Choisissez un message pour le lire.</p>}
+          {openId ? <Reader key={openId} id={openId} onBack={() => setOpenId(null)} summary={threads.find((t) => t.thread_id === openId) ?? null} context={context} labels={folders.labels} act={status.can_modify ? act : null} onGone={after} /> : <p className="p-8 text-center text-sm text-muted">Choisissez un message pour le lire.</p>}
         </section>
       </div>
     </div>
@@ -162,7 +255,7 @@ function FolderGroup({ title, items, current, onPick }: { title?: string; items:
   );
 }
 
-function ThreadList(p: { threads: BoxThread[]; openId: string | null; onOpen: (id: string) => void; loading: boolean; error: string | null; retry: () => void; hasMore: boolean; loadingMore: boolean; more: () => void; empty: string }) {
+function ThreadList(p: { threads: BoxThread[]; openId: string | null; onOpen: (id: string) => void; selected: Set<string> | null; onToggle: (id: string) => void; loading: boolean; error: string | null; retry: () => void; hasMore: boolean; loadingMore: boolean; more: () => void; empty: string }) {
   const sentinel = useRef<HTMLDivElement>(null);
   const { hasMore, loadingMore, more } = p;
   // page suivante chargée à l'approche du bas de la liste
@@ -180,9 +273,14 @@ function ThreadList(p: { threads: BoxThread[]; openId: string | null; onOpen: (i
   return (
     <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
       {p.threads.map((t) => (
-        <li key={t.thread_id}>
+        <li key={t.thread_id} className={cn("flex items-stretch hover:bg-violet-soft/60", (p.openId === t.thread_id || p.selected?.has(t.thread_id)) && "bg-violet-soft")}>
+          {p.selected && (
+            <label className="flex cursor-pointer items-start pt-3 pl-3">
+              <input type="checkbox" className="size-4 accent-violet" checked={p.selected.has(t.thread_id)} onChange={() => p.onToggle(t.thread_id)} aria-label={`Sélectionner : ${t.subject || "(sans objet)"}`} />
+            </label>
+          )}
           <button type="button" onClick={() => p.onOpen(t.thread_id)} aria-current={p.openId === t.thread_id ? "true" : undefined}
-            className={cn("block w-full px-3 py-2 text-left hover:bg-violet-soft/60", p.openId === t.thread_id && "bg-violet-soft", t.unread ? "text-ink" : "text-muted")}>
+            className={cn("block min-w-0 flex-1 px-3 py-2 text-left", t.unread ? "text-ink" : "text-muted")}>
             <div className="flex items-baseline gap-2">
               {t.unread && <span className="size-2 shrink-0 self-center rounded-full bg-violet" aria-label="Non lu" />}
               <span className={cn("min-w-0 flex-1 truncate text-sm", t.unread && "font-bold")}>
@@ -208,7 +306,79 @@ function ThreadList(p: { threads: BoxThread[]; openId: string | null; onOpen: (i
   );
 }
 
-function Reader({ id, onBack }: { id: string; onBack: () => void }) {
+function IconAction({ label, onClick, children, active }: { label: string; onClick: () => void; children: ReactNode; active?: boolean }) {
+  return (
+    <button type="button" onClick={onClick} title={label} aria-label={label} aria-pressed={active}
+      className={cn("rounded-lg p-1.5 hover:bg-violet-soft hover:text-ink", active ? "text-violet-strong" : "text-muted")}>{children}</button>
+  );
+}
+
+/** Menu déroulant simple : se ferme au choix, à Échap ou au clic ailleurs. */
+function Menu({ label, icon, children }: { label: string; icon: ReactNode; children: (close: () => void) => ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
+  }, [open]);
+  return (
+    <div ref={box} className="relative">
+      <button type="button" onClick={() => setOpen((o) => !o)} title={label} aria-label={label} aria-haspopup="menu" aria-expanded={open} className="rounded-lg p-1.5 text-muted hover:bg-violet-soft hover:text-ink">{icon}</button>
+      {open && <div role="menu" aria-label={label} className="absolute top-full left-0 z-20 mt-1 max-h-72 w-56 overflow-y-auto rounded-lg border border-line bg-white p-1 shadow-lg">{children(() => setOpen(false))}</div>}
+    </div>
+  );
+}
+const MenuItem = ({ onClick, children }: { onClick: () => void; children: ReactNode }) => (
+  <button type="button" role="menuitem" onClick={onClick} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-violet-soft">{children}</button>
+);
+
+/**
+ * Actions de tri sur un ou plusieurs fils. Chaque bouton vise un état (« marquer comme lu »), choisi d'après l'état
+ * actuel des fils. `onGone` : fils qui quittent le dossier affiché.
+ */
+function ThreadActions({ threads, context, labels, act, onGone }: { threads: BoxThread[]; context: string | null; labels: FolderItem[]; act: Act; onGone: (ids: string[]) => void }) {
+  const ids = threads.map((t) => t.thread_id);
+  const leave = (action: BoxAction, extra?: ActionExtra) => { onGone(ids); void act(action, ids, extra); };
+  const anyUnread = threads.some((t) => t.unread);
+  const allStarred = threads.every((t) => t.starred);
+  const allImportant = threads.every((t) => t.important);
+  const inTrash = context === "TRASH";
+  const inSpam = context === "SPAM";
+  const has = (l: string) => threads.every((t) => t.label_ids.includes(l));
+  return (
+    <div className="flex flex-wrap items-center gap-0.5" role="toolbar" aria-label="Trier">
+      {!inTrash && !inSpam && has("INBOX") && <IconAction label="Archiver" onClick={() => leave("archive")}><Archive size={16} /></IconAction>}
+      {inTrash
+        ? <IconAction label="Restaurer dans la boîte de réception" onClick={() => leave("untrash")}><ArchiveRestore size={16} /></IconAction>
+        : <IconAction label="Supprimer (corbeille)" onClick={() => leave("trash")}><Trash2 size={16} /></IconAction>}
+      {inSpam
+        ? <IconAction label="Non-spam" onClick={() => leave("unspam")}><ShieldCheck size={16} /></IconAction>
+        : !inTrash && <IconAction label="Signaler comme spam" onClick={() => leave("spam")}><OctagonAlert size={16} /></IconAction>}
+      <IconAction label={anyUnread ? "Marquer comme lu" : "Marquer comme non lu"} onClick={() => void act(anyUnread ? "read" : "unread", ids)}>{anyUnread ? <MailOpen size={16} /> : <Mail size={16} />}</IconAction>
+      <IconAction label={allStarred ? "Retirer le suivi" : "Suivre"} active={allStarred} onClick={() => void act(allStarred ? "unstar" : "star", ids)}><Star size={16} className={allStarred ? "fill-current" : undefined} /></IconAction>
+      <IconAction label={allImportant ? "Marquer comme non important" : "Marquer comme important"} active={allImportant} onClick={() => void act(allImportant ? "unimportant" : "important", ids)}><Flag size={16} className={allImportant ? "fill-current" : undefined} /></IconAction>
+      <Menu label="Libellés" icon={<Tags size={16} />}>
+        {(close) => labels.length === 0 ? <p className="px-2 py-1.5 text-xs text-muted">Aucun libellé personnel dans Gmail.</p> : labels.map((l) => {
+          const on = has(l.id);
+          return <MenuItem key={l.id} onClick={() => { close(); if (on && context === l.id) onGone(ids); void act(on ? "unlabel" : "label", ids, { label_id: l.id }); }}><Check size={14} className={on ? "text-violet-strong" : "invisible"} /><span className="truncate">{l.label}</span></MenuItem>;
+        })}
+      </Menu>
+      <Menu label="Déplacer vers" icon={<FolderInput size={16} />}>
+        {(close) => [{ id: "INBOX", label: "Boîte de réception" }, ...labels].filter((l) => l.id !== context).map((l) => (
+          <MenuItem key={l.id} onClick={() => { close(); if (context && context !== "ALL") onGone(ids); void act("move", ids, { label_id: l.id, ...(context ? { from_label: context } : {}) }); }}>
+            {l.id === "INBOX" ? <Inbox size={14} /> : <Tag size={14} />}<span className="truncate">{l.label}</span>
+          </MenuItem>
+        ))}
+      </Menu>
+    </div>
+  );
+}
+
+function Reader({ id, onBack, summary, context, labels, act, onGone }: { id: string; onBack: () => void; summary: BoxThread | null; context: string | null; labels: FolderItem[]; act: Act | null; onGone: (ids: string[]) => void }) {
   const [images, setImages] = useState(false);
   const q = useQuery({
     queryKey: [...BOX_KEY, "thread", id, images],
@@ -216,6 +386,11 @@ function Reader({ id, onBack }: { id: string; onBack: () => void }) {
     placeholderData: (previous) => previous,
   });
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // comme dans une boîte mail : ouvrir un fil non lu le marque comme lu (dans Gmail aussi)
+  const unread = !!q.data?.messages.some((m) => m.label_ids.includes("UNREAD"));
+  useEffect(() => {
+    if (unread && act) void act("read", [id]);
+  }, [unread, act, id]);
   if (q.isLoading) return <div className="space-y-3 p-5"><Skeleton className="h-6 w-2/3" /><Skeleton className="h-40 w-full" /></div>;
   if (q.isError || !q.data) return <p className="p-5 text-sm text-danger">{q.error?.message ?? "Lecture impossible"} <button type="button" className="underline" onClick={() => q.refetch()}>Réessayer</button> · <button type="button" className="underline" onClick={onBack}>Retour</button></p>;
   const t = q.data;
@@ -227,6 +402,7 @@ function Reader({ id, onBack }: { id: string; onBack: () => void }) {
         <button type="button" onClick={onBack} className="mt-0.5 rounded p-1 text-muted hover:text-ink lg:hidden" aria-label="Retour à la liste"><ArrowLeft size={18} /></button>
         <h2 className="min-w-0 flex-1 font-display text-lg font-bold break-words">{t.subject || "(sans objet)"}</h2>
       </div>
+      {act && <div className="mb-3"><ThreadActions threads={[summary ?? fromOpen(t)]} context={context} labels={labels} act={act} onGone={onGone} /></div>}
       {hidden && (
         <p className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-violet-soft px-3 py-2 text-xs">
           <ImageOff size={14} /> Les images distantes sont masquées : elles peuvent signaler à l&apos;expéditeur que vous avez ouvert le message.
@@ -254,6 +430,14 @@ function Reader({ id, onBack }: { id: string; onBack: () => void }) {
       </ol>
     </article>
   );
+}
+
+/** Résumé d'un fil ouvert depuis une recherche ou un lien, quand la liste ne le contient pas. */
+function fromOpen(t: BoxOpenThread): BoxThread {
+  const label_ids = [...new Set(t.messages.flatMap((m) => m.label_ids))];
+  const last = t.messages.at(-1);
+  return { thread_id: t.thread_id, last_at: last?.at ?? "", subject: t.subject, snippet: "", participants: [], message_count: t.messages.length, label_ids,
+    unread: label_ids.includes("UNREAD"), starred: label_ids.includes("STARRED"), important: label_ids.includes("IMPORTANT"), has_attachments: t.messages.some((m) => m.attachments.length > 0) };
 }
 
 // Cadre isolé : aucun script n'y tourne (attribut sandbox sans « allow-scripts ») et sa politique de contenu

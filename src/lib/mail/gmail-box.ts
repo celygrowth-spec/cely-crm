@@ -16,17 +16,24 @@ export class GmailBoxError extends Error {
 
 const MESSAGES: Record<BoxErrorCode, string> = {
   auth: "Google a refusé l'accès à la boîte. Reconnectez Gmail depuis la page Mail.",
-  scope: "La lecture de la boîte n'est pas autorisée. Reconnectez Gmail en acceptant toutes les autorisations demandées.",
+  scope: "Gmail refuse cette opération : autorisation manquante. Reconnectez Gmail en acceptant toutes les autorisations demandées.",
   quota: "Gmail limite temporairement les lectures. La synchronisation reprendra seule au prochain passage.",
   expired: "L'historique Gmail a expiré : la boîte est relue en entier.",
   not_found: "Élément introuvable dans Gmail.",
   network: "Gmail est injoignable pour le moment. La synchronisation reprendra seule au prochain passage.",
 };
 
-async function get<T>(token: string, path: string): Promise<T> {
+const get = <T>(token: string, path: string) => call<T>(token, path);
+
+async function call<T>(token: string, path: string, payload?: unknown): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${API}${path}`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20_000) });
+    res = await fetch(`${API}${path}`, {
+      method: payload === undefined ? "GET" : "POST",
+      headers: { authorization: `Bearer ${token}`, ...(payload === undefined ? {} : { "content-type": "application/json" }) },
+      body: payload === undefined ? undefined : JSON.stringify(payload),
+      signal: AbortSignal.timeout(20_000),
+    });
   } catch {
     throw new GmailBoxError("network", MESSAGES.network);
   }
@@ -249,4 +256,21 @@ export async function getThread(token: string, id: string): Promise<FullMessage[
 export async function getAttachment(token: string, messageId: string, attachmentId: string): Promise<Buffer> {
   const r = await get<{ data?: string }>(token, `/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`);
   return Buffer.from(r.data ?? "", "base64url");
+}
+
+// ---------------------------------------------------------------------------
+// Tri (lot M03) : chaque appel renvoie l'état réel des libellés du fil après l'opération, tel que Gmail le donne.
+// ---------------------------------------------------------------------------
+export type ThreadLabels = { id: string; label_ids: string[] }[];
+type RawThread = { messages?: { id: string; labelIds?: string[] }[] };
+const labelsOf = (t: RawThread): ThreadLabels => (t.messages ?? []).map((m) => ({ id: m.id, label_ids: m.labelIds ?? [] }));
+
+/** Ajoute et retire des libellés sur tous les messages d'un fil. Répéter le même appel ne change rien de plus. */
+export async function modifyThread(token: string, id: string, add: string[], remove: string[]): Promise<ThreadLabels> {
+  return labelsOf(await call<RawThread>(token, `/threads/${encodeURIComponent(id)}/modify`, { addLabelIds: add, removeLabelIds: remove }));
+}
+
+/** Corbeille Gmail (supprimée définitivement par Gmail après 30 jours) ; `restore` : sortie de la corbeille. */
+export async function trashThread(token: string, id: string, restore = false): Promise<ThreadLabels> {
+  return labelsOf(await call<RawThread>(token, `/threads/${encodeURIComponent(id)}/${restore ? "untrash" : "trash"}`, {}));
 }

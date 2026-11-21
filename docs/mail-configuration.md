@@ -113,3 +113,17 @@ personnel sont plus basses : consultez l'aide Google.
 - **Pièces jointes** : téléchargées depuis Gmail à la demande, toujours comme fichier à enregistrer.
 - **Lecture seule à ce stade** : ouvrir un message ne le marque pas comme lu dans Gmail (le tri arrive au lot M03).
 - **Base de données** : `supabase/migrations/20261126110000_mail_boite_lecture.sql` (additive, après la précédente).
+
+## Tri de la boîte (Mail, lot M03)
+- **Autorisation** : la connexion demande désormais aussi `gmail.modify` (tri, libellés, corbeille, brouillons) et
+  `gmail.settings.basic` (signature, lot M04). Un compte connecté avant ce lot reste en **lecture seule** jusqu'à sa
+  reconnexion (bandeau dans Mail › Boîte). Dans Google Cloud › Accès aux données, ajoutez ces deux autorisations.
+- **Actions** : archiver, supprimer (corbeille Gmail), restaurer, marquer lu ou non lu, suivre, important, signaler
+  comme spam ou non-spam, ajouter ou retirer un libellé, déplacer. Sur le fil ouvert ou sur une sélection.
+- **Dans Gmail d'abord** : l'écran se met à jour tout de suite, puis l'index reprend l'état renvoyé par Gmail. Si
+  Gmail refuse, l'écran revient en arrière avec le motif.
+- **Double clic** : chaque action vise un état (« marquer lu », jamais « inverser ») et une action en cours sur les
+  mêmes fils n'est pas renvoyée.
+- **Ouvrir un fil non lu** le marque lu, dans Gmail aussi.
+- **Suppression définitive** : non proposée. Gmail vide sa corbeille après 30 jours.
+- **Base de données** : `supabase/migrations/20261126120000_mail_boite_tri.sql` (additive, après les deux précédentes).
