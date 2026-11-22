@@ -47,7 +47,11 @@ export function EntryEditor({ entry }: { entry: CmsEntry }) {
       setError(r.error);
       return false;
     }
+    // la base normalise (espaces, tags en double) : l'éditeur reprend exactement la version enregistrée
     setSaved(pick(r.data));
+    setD(pick(r.data));
+    setTags(listText(r.data.tags));
+    setKw(listText(r.data.secondary_keywords));
     toast.success("Article enregistré");
     router.refresh();
     return true;

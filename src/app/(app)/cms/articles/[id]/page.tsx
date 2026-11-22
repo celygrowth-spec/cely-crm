@@ -12,5 +12,6 @@ export default async function EntryPage({ params }: { params: Promise<{ id: stri
   const { supabase } = await requireAppOwner();
   const entry = await getEntry(supabase, id);
   if (!entry) notFound();
-  return <EntryEditor key={entry.updated_at} entry={entry} />;
+  // clé stable : un rafraîchissement après enregistrement ne doit pas effacer une saisie en cours (date, champs)
+  return <EntryEditor key={entry.id} entry={entry} />;
 }
