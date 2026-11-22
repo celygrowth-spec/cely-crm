@@ -8,6 +8,7 @@ import { CrmError } from "@/lib/crm/service";
 import { PastDateError, createEntry, existingSlugs, importEntry, publishNow, schedule, setStatus, updateEntry, type DraftInput, type ImportItem } from "@/lib/cms/service";
 import { confirmMediaUpload, deleteMedia, mediaUsage, startMediaUpload } from "@/lib/cms/media";
 import type { CmsEntry } from "@/lib/cms/types";
+import { deletePage, importPages, savePage, type PageInput } from "@/lib/cms/pages-service";
 
 export type CmsResult<T> = { ok: true; data: T } | { ok: false; error: string; code?: "past_date" };
 
@@ -68,4 +69,18 @@ export async function existingSlugsAction(slugs: string[]) {
 
 export async function importEntryAction(item: ImportItem) {
   return owned((sb) => importEntry(sb, item));
+}
+
+// --- Pages SEO ---
+export async function savePageAction(id: string | null, input: PageInput) {
+  return owned((sb) => savePage(sb, id, input));
+}
+
+export async function deletePageAction(id: string) {
+  return owned((sb) => deletePage(sb, id));
+}
+
+export async function importPagesAction(text: string) {
+  if (text.length > 1_000_000) return { ok: false as const, error: "Fichier trop volumineux (1 Mo au plus)." };
+  return owned((sb) => importPages(sb, text));
 }
