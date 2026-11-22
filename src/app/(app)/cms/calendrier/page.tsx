@@ -3,6 +3,8 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge, PageHeader } from "@/components/ui";
 import { requireAppOwner } from "@/lib/auth";
+import { cmsMissingTables } from "@/lib/cms/ready";
+import { CmsNotInstalled } from "@/components/cms/not-installed";
 import { addMonthsKey, formatTimeShort, monthGrid, monthLabel } from "@/lib/appointments/time";
 import { CMS_TZ, parisDay } from "@/lib/cms/dates";
 import { listEntries, promoteDue } from "@/lib/cms/service";
@@ -15,6 +17,7 @@ const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ mois?: string }> }) {
   const { mois } = await searchParams;
   const { supabase } = await requireAppOwner();
+  if (await cmsMissingTables(supabase)) return <CmsNotInstalled />;
   await promoteDue(supabase).catch(() => 0);
   const today = parisDay(new Date());
   const month = mois && /^\d{4}-(0[1-9]|1[0-2])$/.test(mois) ? mois : today.slice(0, 7);
