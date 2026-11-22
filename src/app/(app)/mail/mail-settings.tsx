@@ -10,6 +10,7 @@ import { mailCall, type MailOverview } from "@/lib/client/mail";
 import { apiGet, attempt } from "@/lib/client/query";
 import { formatDateTime } from "@/lib/format";
 import { isEmail, type MailAccount } from "@/lib/mail/types";
+import { BoxStatusCard } from "./box-status";
 
 const ERRORS: Record<string, string> = {
   config: "Le système mail n'est pas encore configuré.",
@@ -50,10 +51,12 @@ export function MailSettings({ connected, error }: { connected: boolean; error?:
       ) : (
         <Card className="p-4">
           <p className="font-semibold">Connectez votre compte Gmail ou Google Workspace</p>
-          <p className="mt-1 text-sm text-muted">Vous vous identifiez chez Google : votre mot de passe n&apos;est jamais demandé ici. Le CRM demande uniquement le droit d&apos;envoyer des emails, pas de lire votre boîte.</p>
+          <p className="mt-1 text-sm text-muted">Vous vous identifiez chez Google : votre mot de passe n&apos;est jamais demandé ici. Le CRM demande le droit d&apos;envoyer des emails et de lire votre boîte : il en garde un index (expéditeur, objet, extrait, libellés), le contenu des messages reste dans Gmail.</p>
           <a href={startUrl()} className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-lg bg-ink px-3.5 text-sm font-semibold text-white"><PlugZap size={14} /> Connecter Gmail</a>
         </Card>
       )}
+
+      {data.configured && active && <BoxStatusCard />}
 
       {data.configured && others.length > 0 && (
         <Card className="p-4">
@@ -140,7 +143,7 @@ function ActiveAccount({ account: a }: { account: MailAccount }) {
         <span className="min-w-0 flex-1 truncate font-semibold">{a.email}</span>
         <Badge tone={STATUS[a.status].tone}>{STATUS[a.status].label}</Badge>
       </div>
-      <p className="text-xs text-muted">Connecté le {formatDateTime(a.connected_at)} · Autorisation : envoi uniquement. Le CRM ne lit pas votre boîte.</p>
+      <p className="text-xs text-muted">Connecté le {formatDateTime(a.connected_at)} · Autorisation : {a.scopes.some((x) => /gmail\.(readonly|modify)$/.test(x)) ? "envoi et lecture de la boîte" : "envoi uniquement, reconnectez pour autoriser la lecture de la boîte"}.</p>
 
       <div className="flex flex-wrap items-end gap-2">
         <Field label="Envoyer un test à" className="min-w-56 flex-1">

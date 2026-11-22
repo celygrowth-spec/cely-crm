@@ -315,6 +315,7 @@ function Shell({
         defaults={createDefaults}
         onClose={() => setCreateDefaults(null)}
         onCreated={(id, name) => {
+          createDefaults?.onCreated?.();
           setCreateDefaults(null);
           openCompany(id, { name });
         }}

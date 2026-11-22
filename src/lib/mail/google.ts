@@ -9,6 +9,10 @@ const SEND_URL = "https://gmail.googleapis.com/upload/gmail/v1/users/me/messages
 export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 /** Lecture (réception des réponses, Q03) : demandée explicitement à la connexion ; sans elle, seul l'envoi marche. */
 export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+/** Toute la boîte (lots M03 et M04) : trier, libeller, mettre à la corbeille, gérer les brouillons. Inclut la lecture. */
+export const GMAIL_MODIFY_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
+/** Lecture des réglages, pour reprendre la signature Gmail (lot M04). */
+export const GMAIL_SETTINGS_SCOPE = "https://www.googleapis.com/auth/gmail.settings.basic";
 const IDENTITY_SCOPES = ["openid", "email", "profile"];
 
 export type GoogleClient = { clientId: string; clientSecret: string };
@@ -23,7 +27,7 @@ export function authorizeUrl(c: GoogleClient, p: { redirectUri: string; state: s
     client_id: c.clientId,
     redirect_uri: p.redirectUri,
     response_type: "code",
-    scope: [...IDENTITY_SCOPES, GMAIL_SEND_SCOPE, GMAIL_READ_SCOPE].join(" "),
+    scope: [...IDENTITY_SCOPES, GMAIL_SEND_SCOPE, GMAIL_READ_SCOPE, GMAIL_MODIFY_SCOPE, GMAIL_SETTINGS_SCOPE].join(" "),
     access_type: "offline",
     prompt: "consent select_account", // sans « consent », Google ne redonne pas de jeton de renouvellement
     state: p.state,
