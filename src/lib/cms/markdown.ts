@@ -6,6 +6,10 @@
 // Syntaxe prise en charge : titres #, paragraphes, gras, italique, barré, code (en ligne et blocs ```), citations,
 // listes (à puces, numérotées, imbriquées, cases à cocher), liens, images, règles horizontales, tableaux,
 // retours à la ligne (deux espaces ou « \ » en fin de ligne).
+// Blocs du site (« :::nom arguments » … « ::: ») rendus avec le balisage exact des articles de celygrowth.com :
+// reponse, retenir, conseil, attention, resume, citation, postit, definition, faq, outil (voir docs/cms-modele-article.md).
+// Une image seule dans son paragraphe avec un titre (« ![alt](url "légende") ») devient une figure légendée ;
+// le premier paragraphe de l'article est l'accroche (art-lead).
 import sanitizeHtml from "sanitize-html";
 import { slugify } from "./slug";
 
@@ -63,7 +67,15 @@ function inline(src: string): string {
 // ---------------------------------------------------------------------------
 type Heading = { level: number; text: string; id: string };
 
+/** Outils interactifs du site insérables avec « :::outil nom » (le site injecte leur code). */
+export const CMS_OUTILS = ["simulateur-inbound-outbound", "generateur-prompts", "audit-geo", "diagnostic-aarrr", "generateur-lead-magnet"] as const;
+
+/** Blocs reconnus (« :::nom »). */
+export const CMS_BLOCS = ["reponse", "retenir", "conseil", "attention", "resume", "citation", "postit", "definition", "faq", "outil"] as const;
+
 const RE = {
+  block: /^ {0,3}:::\s*([a-z][a-z-]*)\s*(.*?)\s*$/,
+  blockEnd: /^ {0,3}:::\s*$/,
   fence: /^ {0,3}(`{3,}|~{3,})\s*([\w+-]*)/,
   heading: /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/,
   hr: /^ {0,3}([-*_])(\s*\1){2,}\s*$/,
@@ -79,15 +91,71 @@ function splitRow(line: string): string[] {
   return l.split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, "|"));
 }
 
-function renderBlocks(lines: string[], headings: Heading[], ids: Map<string, number>): string {
+function unwrapP(html: string): string {
+  const m = /^<p>([\s\S]*)<\/p>$/.exec(html.trim());
+  return m && !m[1].includes("<p>") ? m[1] : html;
+}
+
+/** Bloc « :::nom » : balisage des articles du site. Un nom inconnu rend simplement son contenu. */
+function renderDirective(name: string, args: string, body: string[], headings: Heading[], ids: Map<string, number>): string {
+  const inner = () => renderBlocks(body, headings, ids, false);
+  const [title, label] = args.split("|").map((x) => x.trim());
+  switch (name) {
+    case "reponse":
+      return `<div class="art-answer" id="reponse-directe"><span class="art-answer-label">${esc(title || "Réponse directe")}</span>${inner()}</div>`;
+    case "retenir":
+      return `<div class="art-tldr"><span class="art-tldr-label">${esc(title || "À retenir")}</span>${inner()}</div>`;
+    case "conseil":
+    case "attention":
+    case "resume": {
+      const kind = { conseil: "tip", attention: "warning", resume: "summary" }[name];
+      const tag = label || { conseil: "Conseil Cély", attention: "Attention", resume: "En résumé" }[name];
+      return `<div class="art-callout art-callout-${kind}"><span class="art-callout-tag">${esc(tag)}</span>${title ? `<p class="art-callout-title">${inline(title)}</p>` : ""}${inner()}</div>`;
+    }
+    case "citation":
+      return `<div class="art-pull">${unwrapP(inner())}</div>`;
+    case "postit":
+      return `<aside class="art-postit" aria-label="${esc(title || "Culture générale")}">${inner()}</aside>`;
+    case "definition":
+      return `<p class="art-definition">${unwrapP(inner())}</p>`;
+    case "faq": {
+      // « ### Question » puis la réponse, jusqu'à la question suivante ; la première est ouverte
+      const items: { q: string; a: string[] }[] = [];
+      for (const l of body) {
+        const q = /^ {0,3}#{2,4}\s+(.*?)\s*#*\s*$/.exec(l);
+        if (q) items.push({ q: q[1], a: [] });
+        else if (items.length) items[items.length - 1].a.push(l);
+      }
+      return `<div class="art-faq hp-faq">${items.map((it, k) => `<details class="art-faq-item"${k === 0 ? " open" : ""}><summary><h3>${inline(it.q)}</h3><span class="art-faq-icon" aria-hidden="true"></span></summary><div class="art-faq-answer">${renderBlocks(it.a, headings, ids, false)}</div></details>`).join("")}</div>`;
+    }
+    case "outil":
+      return (CMS_OUTILS as readonly string[]).includes(title) ? `<div data-cms-outil="${title}"></div>` : `<p>[Outil inconnu : ${esc(title)}]</p>`;
+    default:
+      return inner();
+  }
+}
+
+function renderBlocks(lines: string[], headings: Heading[], ids: Map<string, number>, top = true): string {
   const out: string[] = [];
   let i = 0;
+  let lead = top;
   const isBlank = (l: string | undefined) => l === undefined || l.trim() === "";
-  const startsBlock = (l: string) => RE.fence.test(l) || RE.heading.test(l) || RE.hr.test(l) || RE.quote.test(l) || RE.item.test(l);
+  const startsBlock = (l: string) => RE.block.test(l) || RE.fence.test(l) || RE.heading.test(l) || RE.hr.test(l) || RE.quote.test(l) || RE.item.test(l);
 
   while (i < lines.length) {
     const line = lines[i];
     if (isBlank(line)) { i++; continue; }
+
+    const dir = RE.block.exec(line);
+    if (dir && !RE.blockEnd.test(line)) {
+      const body: string[] = [];
+      i++;
+      while (i < lines.length && !RE.blockEnd.test(lines[i])) body.push(lines[i++]);
+      i++;
+      out.push(renderDirective(dir[1], dir[2], body, headings, ids));
+      continue;
+    }
+    if (RE.blockEnd.test(line)) { i++; continue; } // « ::: » orphelin
 
     const fence = RE.fence.exec(line);
     if (fence) {
@@ -121,7 +189,7 @@ function renderBlocks(lines: string[], headings: Heading[], ids: Map<string, num
     if (RE.quote.test(line)) {
       const body: string[] = [];
       while (i < lines.length && !isBlank(lines[i]) && (RE.quote.test(lines[i]) || !startsBlock(lines[i]))) body.push(lines[i++].replace(RE.quote, ""));
-      out.push(`<blockquote>${renderBlocks(body, headings, ids)}</blockquote>`);
+      out.push(`<blockquote>${renderBlocks(body, headings, ids, false)}</blockquote>`);
       continue;
     }
 
@@ -160,7 +228,7 @@ function renderBlocks(lines: string[], headings: Heading[], ids: Map<string, num
         const task = /^\[( |x|X)\]\s+(.*)$/.exec(first);
         if (task) { check = `<input type="checkbox" disabled${task[1] !== " " ? " checked" : ""} /> `; first = task[2]; }
         const rest = parts.slice(1);
-        const nested = rest.length ? renderBlocks(rest, headings, ids) : "";
+        const nested = rest.length ? renderBlocks(rest, headings, ids, false) : "";
         return `<li>${check}${inline(first)}${nested}</li>`;
       });
       out.push(ordered ? `<ol${start !== 1 ? ` start="${start}"` : ""}>${lis.join("")}</ol>` : `<ul>${lis.join("")}</ul>`);
@@ -174,29 +242,45 @@ function renderBlocks(lines: string[], headings: Heading[], ids: Map<string, num
       const rows: string[][] = [];
       while (i < lines.length && !isBlank(lines[i]) && lines[i].includes("|")) rows.push(splitRow(lines[i++]));
       const cell = (tag: string, c: string, k: number) => `<${tag}${align[k] ? ` style="text-align:${align[k]}"` : ""}>${inline(c)}</${tag}>`;
-      out.push(`<table><thead><tr>${head.map((c, k) => cell("th", c, k)).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${head.map((_, k) => cell("td", r[k] ?? "", k)).join("")}</tr>`).join("")}</tbody></table>`);
+      out.push(`<div class="art-table-wrap"><table class="art-table"><thead><tr>${head.map((c, k) => cell("th", c, k)).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${head.map((_, k) => cell("td", r[k] ?? "", k)).join("")}</tr>`).join("")}</tbody></table></div>`);
       continue;
     }
 
     const para: string[] = [];
     while (i < lines.length && !isBlank(lines[i]) && (para.length === 0 || !startsBlock(lines[i]))) para.push(lines[i++]);
-    out.push(`<p>${inline(para.join("\n"))}</p>`);
+    const fig = para.length === 1 ? /^\s*!\[([^\]]*)\]\(\s*<?([^\s)>]+)>?\s+"([^"]+)"\s*\)\s*$/.exec(para[0]) : null;
+    const src = fig ? safeUrl(fig[2], "image") : null;
+    if (fig && src) {
+      out.push(`<figure class="art-figure"><img src="${esc(src)}" alt="${esc(fig[1])}" loading="lazy" /><figcaption class="art-figure-cap">${inline(fig[3])}</figcaption></figure>`);
+      continue;
+    }
+    out.push(`<p${lead ? ' class="art-lead"' : ""}>${inline(para.join("\n"))}</p>`);
+    lead = false;
   }
   return out.join("\n");
 }
 
 const SANITIZE: sanitizeHtml.IOptions = {
   allowedTags: ["h1", "h2", "h3", "h4", "h5", "h6", "p", "br", "hr", "strong", "em", "del", "code", "pre", "blockquote",
-    "ul", "ol", "li", "a", "img", "table", "thead", "tbody", "tr", "th", "td", "input"],
+    "ul", "ol", "li", "a", "img", "table", "thead", "tbody", "tr", "th", "td", "input",
+    "div", "span", "aside", "details", "summary", "figure", "figcaption"],
   allowedAttributes: {
     a: ["href", "title", "rel"], img: ["src", "alt", "title", "loading"], code: ["class"], ol: ["start"],
     h1: ["id"], h2: ["id"], h3: ["id"], h4: ["id"], h5: ["id"], h6: ["id"], th: ["style"], td: ["style"], input: ["type", "checked", "disabled"],
+    div: [{ name: "id", multiple: false, values: ["reponse-directe"] }, { name: "data-cms-outil", multiple: false, values: [...CMS_OUTILS] }],
+    span: [{ name: "aria-hidden", multiple: false, values: ["true"] }], aside: ["aria-label"], details: ["open"],
   },
   allowedSchemes: ["http", "https", "mailto", "tel"],
   allowedSchemesByTag: { img: ["http", "https"] },
   allowProtocolRelative: false,
   allowedStyles: { th: { "text-align": [/^(left|right|center)$/] }, td: { "text-align": [/^(left|right|center)$/] } },
-  allowedClasses: { code: [/^language-[\w+-]+$/] },
+  allowedClasses: {
+    code: [/^language-[\w+-]+$/],
+    div: ["art-answer", "art-tldr", "art-callout", "art-callout-tip", "art-callout-warning", "art-callout-summary", "art-pull", "art-faq", "hp-faq", "art-table-wrap", "art-faq-answer"],
+    span: ["art-answer-label", "art-tldr-label", "art-callout-tag", "art-faq-icon"],
+    p: ["art-callout-title", "art-definition", "art-lead"],
+    aside: ["art-postit"], details: ["art-faq-item"], figure: ["art-figure"], figcaption: ["art-figure-cap"], table: ["art-table"],
+  },
   disallowedTagsMode: "escape",
   exclusiveFilter: (frame) => frame.tag === "input" && frame.attribs.type !== "checkbox",
 };

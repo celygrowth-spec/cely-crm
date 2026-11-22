@@ -9,13 +9,13 @@ const html = (md: string) => renderMarkdown(md).html;
 describe("rendu Markdown", () => {
   test("syntaxe courante", () => {
     expect(html("# Titre\n\nUn **gras**, un *italique*, du `code` et ~~barré~~.")).toBe(
-      '<h1 id="titre">Titre</h1>\n<p>Un <strong>gras</strong>, un <em>italique</em>, du <code>code</code> et <del>barré</del>.</p>');
-    expect(html("- a\n- b\n  - b1\n\n1. un\n2. deux")).toBe("<ul><li>a</li><li>b<ul><li>b1</li></ul></li></ul>\n<ol><li>un</li><li>deux</li></ol>");
+      '<h1 id="titre">Titre</h1>\n<p class="art-lead">Un <strong>gras</strong>, un <em>italique</em>, du <code>code</code> et <del>barré</del>.</p>');
+    expect(html("Intro\n\n- a\n- b\n  - b1\n\n1. un\n2. deux").replace('<p class="art-lead">Intro</p>\n', "")).toBe("<ul><li>a</li><li>b<ul><li>b1</li></ul></li></ul>\n<ol><li>un</li><li>deux</li></ol>");
     expect(html("[lien](https://exemple.fr \"t\") ![photo](https://img.test/a.png)")).toBe(
-      '<p><a href="https://exemple.fr" title="t" rel="noopener">lien</a> <img src="https://img.test/a.png" alt="photo" loading="lazy" /></p>');
+      '<p class="art-lead"><a href="https://exemple.fr" title="t" rel="noopener">lien</a> <img src="https://img.test/a.png" alt="photo" loading="lazy" /></p>');
     expect(html("```ts\nconst a = 1 < 2;\n```")).toBe('<pre><code class="language-ts">const a = 1 &lt; 2;</code></pre>');
     expect(html("> citation\n\n---\n\n| a | b |\n|---|:-:|\n| 1 | 2 |")).toBe(
-      '<blockquote><p>citation</p></blockquote>\n<hr />\n<table><thead><tr><th>a</th><th style="text-align:center">b</th></tr></thead><tbody><tr><td>1</td><td style="text-align:center">2</td></tr></tbody></table>');
+      '<blockquote><p>citation</p></blockquote>\n<hr />\n<div class="art-table-wrap"><table class="art-table"><thead><tr><th>a</th><th style="text-align:center">b</th></tr></thead><tbody><tr><td>1</td><td style="text-align:center">2</td></tr></tbody></table></div>');
     expect(renderMarkdown("## Étape 1\n## Étape 1").headings).toEqual([{ level: 2, text: "Étape 1", id: "etape-1" }, { level: 2, text: "Étape 1", id: "etape-1-2" }]);
   });
 
@@ -41,6 +41,35 @@ describe("rendu Markdown", () => {
       // le texte échappé (&lt;script&gt;) est inoffensif : on cherche de vraies balises ou de vrais attributs
       expect(out, a).not.toMatch(/<(script|iframe|svg|object|embed)\b|<[^>]*\son\w+\s*=|<[a-z][^>]*\s(href|src)\s*=\s*"\s*(javascript:|vbscript:|data:|\/\/)/i);
     }
+  });
+
+  test("blocs du site : balisage exact des articles de celygrowth.com", () => {
+    expect(html(":::reponse\nUne **réponse**.\n:::")).toBe('<div class="art-answer" id="reponse-directe"><span class="art-answer-label">Réponse directe</span><p>Une <strong>réponse</strong>.</p></div>');
+    expect(html(":::retenir\n- un\n- deux\n:::")).toBe('<div class="art-tldr"><span class="art-tldr-label">À retenir</span><ul><li>un</li><li>deux</li></ul></div>');
+    expect(html(":::conseil Pourquoi | Mon avis\nTexte\n:::")).toBe('<div class="art-callout art-callout-tip"><span class="art-callout-tag">Mon avis</span><p class="art-callout-title">Pourquoi</p><p>Texte</p></div>');
+    expect(html(":::attention\nTexte\n:::")).toContain('<div class="art-callout art-callout-warning"><span class="art-callout-tag">Attention</span>');
+    expect(html(":::citation\n100 contactés → 2 rendez-vous\n:::")).toBe('<div class="art-pull">100 contactés → 2 rendez-vous</div>');
+    expect(html(":::postit\nLe saviez-vous ?\n:::")).toBe('<aside class="art-postit" aria-label="Culture générale"><p>Le saviez-vous ?</p></aside>');
+    expect(html(":::definition\n**Le GEO**, c'est…\n:::")).toBe(`<p class="art-definition"><strong>Le GEO</strong>, c'est…</p>`);
+    expect(html(":::faq\n### Question 1 ?\nRéponse 1\n### Question 2 ?\nRéponse 2\n:::")).toBe('<div class="art-faq hp-faq">'
+      + '<details class="art-faq-item" open><summary><h3>Question 1 ?</h3><span class="art-faq-icon" aria-hidden="true"></span></summary><div class="art-faq-answer"><p>Réponse 1</p></div></details>'
+      + '<details class="art-faq-item"><summary><h3>Question 2 ?</h3><span class="art-faq-icon" aria-hidden="true"></span></summary><div class="art-faq-answer"><p>Réponse 2</p></div></details></div>');
+    expect(html(":::outil diagnostic-aarrr\n:::")).toBe('<div data-cms-outil="diagnostic-aarrr"></div>');
+    expect(html(":::outil inconnu\n:::")).toBe("<p>[Outil inconnu : inconnu]</p>");
+    expect(html('![Schéma](https://img.test/s.png "Le parcours")')).toBe('<figure class="art-figure"><img src="https://img.test/s.png" alt="Schéma" loading="lazy" /><figcaption class="art-figure-cap">Le parcours</figcaption></figure>');
+    // l'accroche est le premier paragraphe de l'article, pas celui d'un bloc
+    expect(html(":::reponse\nR\n:::\n\nPremier.\n\nSecond.")).toContain('<p class="art-lead">Premier.</p>\n<p>Second.</p>');
+  });
+
+  test("blocs : rien d'autre ne passe (classes, attributs, outils hors liste)", () => {
+    // HTML saisi dans un bloc : rendu comme du texte
+    expect(html(':::citation\n<div class="art-pull" onclick="x()" data-cms-outil="evil">a</div>\n:::')).toBe(
+      '<div class="art-pull">&lt;div class="art-pull" onclick="x()" data-cms-outil="evil"&gt;a&lt;/div&gt;</div>');
+    // argument piégé : reste une valeur d'attribut échappée
+    expect(html(':::postit " onmouseover="alert(1)\nb\n:::')).toBe('<aside class="art-postit" aria-label="&quot; onmouseover=&quot;alert(1)"><p>b</p></aside>');
+    // outil hors liste : jamais d'attribut data-cms-outil
+    expect(html(':::outil diagnostic-aarrr" onload="alert(1)\n:::')).toBe('<p>[Outil inconnu : diagnostic-aarrr" onload="alert(1)]</p>');
+    expect(html(":::faq\n### <img src=x onerror=alert(1)>\nok\n:::")).not.toMatch(/<img[^>]*onerror/i);
   });
 
   test("images citées", () => {

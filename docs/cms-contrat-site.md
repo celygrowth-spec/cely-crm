@@ -105,8 +105,17 @@ Avec le cache décrit plus bas, le site en reste très loin.
   `http(s)`, `mailto`, `tel`, relatifs ou ancres uniquement). Le site l'affiche tel quel
   (`dangerouslySetInnerHTML`) dans un conteneur stylé. Balises possibles : `h1`–`h6` (avec `id`), `p`, `br`, `hr`,
   `strong`, `em`, `del`, `code`, `pre`, `blockquote`, `ul`, `ol`, `li`, `a`, `img` (`loading="lazy"`), `table`,
-  `thead`, `tbody`, `tr`, `th`, `td`, `input type="checkbox" disabled`. Si le site préfère rendre
+  `thead`, `tbody`, `tr`, `th`, `td`, `input type="checkbox" disabled`, et pour les blocs `div`, `span`, `aside`,
+  `details`, `summary`, `figure`, `figcaption`. Si le site préfère rendre
   `content_markdown` lui-même, il doit le nettoyer avec la même rigueur (pas de HTML brut).
+- Blocs des articles (`:::reponse`, `:::faq`, `:::outil`…, voir `docs/cms-modele-article.md`) : `content_html` les
+  rend avec le balisage des articles de celygrowth.com, et seulement ces classes : `art-lead`, `art-answer`
+  (`id="reponse-directe"`), `art-answer-label`, `art-tldr`, `art-tldr-label`, `art-callout` (+ `-tip`, `-warning`,
+  `-summary`), `art-callout-tag`, `art-callout-title`, `art-pull`, `art-postit`, `art-definition`, `art-faq hp-faq`,
+  `art-faq-item` (`details`/`summary`/`h3`), `art-faq-icon`, `art-faq-answer`, `art-figure`, `art-figure-cap`,
+  `art-table-wrap`, `art-table`. Un outil est un emplacement vide `<div data-cms-outil="nom"></div>` (noms :
+  `simulateur-inbound-outbound`, `generateur-prompts`, `audit-geo`, `diagnostic-aarrr`, `generateur-lead-magnet`) que
+  le site remplace par le code de l'outil.
 - `headings` sert au sommaire (ancres `#id`).
 - `published_at` : date affichée ; `updated_at` : dernière modification du contenu (pour `dateModified` et le sitemap).
 - `extra` : réservé aux futurs types de contenus (études de cas, témoignages, FAQ) ; vide pour un article.
