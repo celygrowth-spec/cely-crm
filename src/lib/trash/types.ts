@@ -5,8 +5,8 @@ export const CLAUDE_TRASH_KINDS = [
   "company", "person", "project", "project_task", "project_idea", "project_phase", "project_meeting",
   "finance_mission", "finance_invoice", "finance_payment",
 ] as const;
-/** Tous les types, dont ceux réservés à l'application (To do list : Claude n'y a pas accès). */
-export const TRASH_KINDS = [...CLAUDE_TRASH_KINDS, "todo_list_item"] as const;
+/** Tous les types, dont ceux réservés à l'application (To do list, CMS : Claude n'y a pas accès). */
+export const TRASH_KINDS = [...CLAUDE_TRASH_KINDS, "todo_list_item", "cms_entry"] as const;
 export type TrashKind = (typeof TRASH_KINDS)[number];
 
 export const KIND_LABEL: Record<TrashKind, string> = {
@@ -21,6 +21,7 @@ export const KIND_LABEL: Record<TrashKind, string> = {
   finance_invoice: "Facture",
   finance_payment: "Règlement",
   todo_list_item: "Tâche de la To do list",
+  cms_entry: "Article du site",
 };
 
 /** Éléments liés, par table : [singulier, pluriel]. L'ordre est celui de l'affichage. */

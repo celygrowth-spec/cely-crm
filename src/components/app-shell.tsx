@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChartSpline, ChevronDown, FolderKanban, Home, LayoutGrid, LogOut, Search, Settings, Users, Wallet, X } from "lucide-react";
+import { ChartSpline, ChevronDown, FolderKanban, Home, LayoutGrid, LogOut, Newspaper, Search, Settings, Users, Wallet, X } from "lucide-react";
 import type { LeadSource, List, PipelineWithStages } from "@/lib/crm/types";
 import { signOutAction } from "@/app/actions";
 import { QueryProvider, apiGet, useFlushRouterOnNavigate } from "@/lib/client/query";
@@ -90,6 +90,12 @@ export const NAV: NavSection[] = [
     { href: "/finance/revenus?vue=paiements", label: "Règlements" },
   ] },
   { key: "tracking", label: "Tracking site", short: "Tracking", icon: ChartSpline, href: "/tracking-site" },
+  { key: "cms", label: "CMS", icon: Newspaper, items: [
+    { href: "/cms", label: "Articles", exact: true, match: ["/cms/articles"] },
+    { href: "/cms/calendrier", label: "Calendrier éditorial" },
+    { href: "/cms/pages", label: "Pages SEO" },
+    { href: "/cms/images", label: "Images" },
+  ] },
   { key: "autres", label: "Autres", icon: LayoutGrid, items: [
     { href: "/rendez-vous/agenda", label: "Agenda", match: ["/rendez-vous"] },
     { href: "/mail", label: "Mail" },

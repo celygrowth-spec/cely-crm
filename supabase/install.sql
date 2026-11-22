@@ -22634,3 +22634,728 @@ end;
 $$;
 revoke execute on function public.mailbox_record_sent(text, uuid, jsonb) from public;
 grant execute on function public.mailbox_record_sent(text, uuid, jsonb) to anon, authenticated;
+
+
+-- ===== 20261127100100_cms_articles.sql =====
+-- CMS (lot 1) : contenus du site celygrowth.com, dont le CRM est la source de vérité. Migration additive.
+--  * Une seule table pour tous les contenus (cms_entries), distingués par « type ». Seuls les articles existent
+--    aujourd'hui ; un futur type (étude de cas, témoignage, FAQ) s'ajoute au registre cms_private.types et range
+--    ses champs propres dans « extra » : ni nouvelle table, ni refonte des accès.
+--  * Statuts : draft (Brouillon), scheduled (Programmé), published (Publié), unpublished (Dépublié).
+--    Visible sur le site si et seulement si : programmé ou publié, et date de publication passée
+--    (cms_private.is_visible). La visibilité est calculée à la lecture : elle ne dépend d'aucun passage planifié.
+--  * Slug unique par type ; un slug changé sur un article déjà publié une fois devient une redirection 301
+--    (cms_redirects), sans chaîne : toutes les anciennes adresses visent l'article, jamais un ancien slug.
+--  * Temps de lecture et date de mise à jour calculés par la base.
+--  * Écriture réservée au propriétaire dans l'application (ni un autre compte, ni Claude, ni le portail).
+--  * Corbeille : type 'cms_entry' ; un article visible ou programmé doit d'abord être dépublié.
+
+create schema if not exists cms_private;
+revoke all on schema cms_private from public, anon;
+grant usage on schema cms_private to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Registre des types de contenus
+-- ---------------------------------------------------------------------------
+create table if not exists cms_private.types (
+  type text primary key check (type ~ '^[a-z][a-z_]{0,30}$'),
+  label text not null
+);
+revoke all on cms_private.types from public, anon;
+grant select on cms_private.types to authenticated;
+insert into cms_private.types (type, label) values ('article', 'Article') on conflict do nothing;
+
+-- ---------------------------------------------------------------------------
+-- Contenus
+-- ---------------------------------------------------------------------------
+create table public.cms_entries (
+  id uuid primary key default gen_random_uuid(),
+  type text not null default 'article' references cms_private.types (type),
+  title text not null check (char_length(btrim(title)) between 1 and 300),
+  slug text not null check (char_length(slug) between 1 and 120 and slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
+  excerpt text check (char_length(excerpt) <= 1000),
+  body_md text not null default '' check (char_length(body_md) <= 400000),
+  cover_image_url text check (char_length(cover_image_url) <= 1000 and cover_image_url ~ '^https?://'),
+  cover_alt text check (char_length(cover_alt) <= 300),
+  category text check (char_length(category) <= 100),
+  tags text[] not null default '{}' check (cardinality(tags) <= 30),
+  author text check (char_length(author) <= 120),
+  focus_keyword text check (char_length(focus_keyword) <= 120),
+  secondary_keywords text[] not null default '{}' check (cardinality(secondary_keywords) <= 30),
+  seo_title text check (char_length(seo_title) <= 200),
+  seo_description text check (char_length(seo_description) <= 400),
+  og_title text check (char_length(og_title) <= 200),
+  og_image_url text check (char_length(og_image_url) <= 1000 and og_image_url ~ '^https?://'),
+  canonical_url text check (char_length(canonical_url) <= 1000 and canonical_url ~ '^https?://'),
+  noindex boolean not null default false,
+  status text not null default 'draft' check (status in ('draft', 'scheduled', 'published', 'unpublished')),
+  publish_at timestamptz,
+  first_published_at timestamptz,
+  content_updated_at timestamptz not null default now(),
+  reading_minutes integer not null default 1,
+  extra jsonb not null default '{}' check (jsonb_typeof(extra) = 'object'),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint cms_entries_slug_key unique (type, slug),
+  constraint cms_entries_date_check check (status in ('draft', 'unpublished') or publish_at is not null)
+);
+create index cms_entries_publish_idx on public.cms_entries (type, publish_at desc) where status in ('scheduled', 'published');
+
+-- Anciennes adresses d'un contenu (redirection 301 vers son slug actuel)
+create table public.cms_redirects (
+  type text not null references cms_private.types (type),
+  from_slug text not null check (from_slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
+  entry_id uuid not null references public.cms_entries (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (type, from_slug)
+);
+create index cms_redirects_entry_idx on public.cms_redirects (entry_id);
+
+-- Visible sur le site : programmé ou publié, et date passée. Seule règle, utilisée partout.
+create or replace function cms_private.is_visible(p_status text, p_publish_at timestamptz)
+returns boolean language sql stable set search_path = '' as $$
+  select p_status in ('scheduled', 'published') and p_publish_at is not null and p_publish_at <= now();
+$$;
+
+-- Temps de lecture : 200 mots par minute, une minute au moins.
+create or replace function cms_private.reading_minutes(p_md text)
+returns integer language sql immutable set search_path = '' as $$
+  select greatest(1, ceil(coalesce(array_length(regexp_split_to_array(nullif(btrim(coalesce(p_md, '')), ''), '\s+'), 1), 0) / 200.0)::int);
+$$;
+
+create or replace function cms_private.tg_entries_before()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  new.title := btrim(new.title);
+  new.tags := coalesce(array(select distinct btrim(t) from unnest(new.tags) t where btrim(t) <> ''), '{}');
+  new.secondary_keywords := coalesce(array(select distinct btrim(t) from unnest(new.secondary_keywords) t where btrim(t) <> ''), '{}');
+  new.reading_minutes := cms_private.reading_minutes(new.body_md);
+  new.updated_at := now();
+  if tg_op = 'INSERT' then
+    new.content_updated_at := now();
+  elsif (new.title, new.slug, new.excerpt, new.body_md, new.cover_image_url, new.cover_alt, new.category, new.tags, new.author,
+         new.seo_title, new.seo_description, new.og_title, new.og_image_url, new.canonical_url, new.noindex, new.extra)
+        is distinct from
+        (old.title, old.slug, old.excerpt, old.body_md, old.cover_image_url, old.cover_alt, old.category, old.tags, old.author,
+         old.seo_title, old.seo_description, old.og_title, old.og_image_url, old.canonical_url, old.noindex, old.extra) then
+    new.content_updated_at := now();
+  else
+    new.content_updated_at := old.content_updated_at;
+  end if;
+  if new.status = 'published' and new.publish_at is null then new.publish_at := date_trunc('second', now()); end if;
+  if new.first_published_at is null and cms_private.is_visible(new.status, new.publish_at) then
+    new.first_published_at := new.publish_at;
+  end if;
+  -- un slug qui redirige déjà vers un AUTRE contenu reste réservé (l'ancienne adresse ne doit pas changer de cible)
+  if exists (select 1 from public.cms_redirects r where r.type = new.type and r.from_slug = new.slug and r.entry_id <> new.id) then
+    raise exception 'Ce slug est une ancienne adresse d''un autre contenu : choisissez-en un autre' using errcode = '23505';
+  end if;
+  return new;
+end; $$;
+create trigger cms_entries_before before insert or update on public.cms_entries
+  for each row execute function cms_private.tg_entries_before();
+
+-- Slug changé sur un contenu déjà publié une fois : l'ancien devient une redirection ; revenir à un ancien slug
+-- retire la redirection correspondante. Sécurité : la fonction écrit dans cms_redirects pour le propriétaire.
+create or replace function cms_private.tg_entries_slug()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if new.slug is distinct from old.slug or new.type is distinct from old.type then
+    delete from public.cms_redirects where type = new.type and from_slug = new.slug and entry_id = new.id;
+    if old.first_published_at is not null or cms_private.is_visible(old.status, old.publish_at) then
+      insert into public.cms_redirects (type, from_slug, entry_id) values (old.type, old.slug, new.id)
+      on conflict (type, from_slug) do update set entry_id = excluded.entry_id, created_at = now();
+    end if;
+  end if;
+  return null;
+end; $$;
+revoke all on function cms_private.tg_entries_slug() from public, anon, authenticated;
+create trigger cms_entries_slug after update of slug, type on public.cms_entries
+  for each row execute function cms_private.tg_entries_slug();
+
+-- ---------------------------------------------------------------------------
+-- Droits : lecture et écriture réservées au propriétaire dans l'application
+-- ---------------------------------------------------------------------------
+alter table public.cms_entries enable row level security;
+alter table public.cms_redirects enable row level security;
+revoke all on public.cms_entries, public.cms_redirects from anon;
+create policy cms_entries_owner_read on public.cms_entries for select to authenticated using ((select public.is_app_owner()));
+create policy cms_entries_owner_write on public.cms_entries for insert to authenticated
+  with check ((select public.is_app_owner()) and public.current_actor() = 'user');
+create policy cms_entries_owner_update on public.cms_entries for update to authenticated
+  using ((select public.is_app_owner()) and public.current_actor() = 'user')
+  with check ((select public.is_app_owner()) and public.current_actor() = 'user');
+create policy cms_entries_owner_delete on public.cms_entries for delete to authenticated
+  using ((select public.is_app_owner()) and public.current_actor() = 'user');
+create policy cms_redirects_owner_read on public.cms_redirects for select to authenticated using ((select public.is_app_owner()));
+create policy cms_redirects_owner_delete on public.cms_redirects for delete to authenticated
+  using ((select public.is_app_owner()) and public.current_actor() = 'user');
+
+-- ---------------------------------------------------------------------------
+-- Changements de statut (le propriétaire, dans l'application)
+-- ---------------------------------------------------------------------------
+create or replace function cms_private.assert_writer()
+returns void language plpgsql stable set search_path = '' as $$
+begin
+  perform public.assert_owner();
+  if public.current_actor() <> 'user' then raise exception 'Accès refusé' using errcode = '42501'; end if;
+end; $$;
+
+-- Publier maintenant. Un second appel (double clic) ne change rien et le dit (already = true).
+create or replace function public.cms_publish_now(p_id uuid)
+returns jsonb language plpgsql set search_path = '' as $$
+declare r public.cms_entries;
+begin
+  perform cms_private.assert_writer();
+  select * into r from public.cms_entries where id = p_id for update;
+  if not found then raise exception 'Contenu introuvable' using errcode = 'P0002'; end if;
+  if r.status = 'published' and cms_private.is_visible(r.status, r.publish_at) then
+    return jsonb_build_object('already', true, 'entry', to_jsonb(r));
+  end if;
+  update public.cms_entries set status = 'published',
+    publish_at = case when publish_at is null or publish_at > now() or status in ('draft', 'unpublished') then date_trunc('second', now()) else publish_at end
+   where id = p_id returning * into r;
+  return jsonb_build_object('already', false, 'entry', to_jsonb(r));
+end; $$;
+
+-- Programmer. Une date passée est refusée (code 'past_date') sauf confirmation explicite : publication immédiate.
+create or replace function public.cms_schedule(p_id uuid, p_at timestamptz, p_confirm_now boolean default false)
+returns jsonb language plpgsql set search_path = '' as $$
+declare r public.cms_entries;
+begin
+  perform cms_private.assert_writer();
+  if p_at is null then raise exception 'Date de publication manquante' using errcode = '22023'; end if;
+  if p_at <= now() then
+    if not coalesce(p_confirm_now, false) then
+      raise exception 'past_date' using errcode = 'P0001', hint = 'La date choisie est passée : confirmer une publication immédiate.';
+    end if;
+    return public.cms_publish_now(p_id);
+  end if;
+  update public.cms_entries set status = 'scheduled', publish_at = p_at where id = p_id returning * into r;
+  if not found then raise exception 'Contenu introuvable' using errcode = 'P0002'; end if;
+  return jsonb_build_object('already', false, 'entry', to_jsonb(r));
+end; $$;
+
+-- Dépublier (disparaît du site et du sitemap) ou repasser en brouillon (annule une programmation).
+create or replace function public.cms_set_status(p_id uuid, p_status text)
+returns jsonb language plpgsql set search_path = '' as $$
+declare r public.cms_entries;
+begin
+  perform cms_private.assert_writer();
+  if p_status not in ('draft', 'unpublished') then raise exception 'Statut non autorisé ici' using errcode = '22023'; end if;
+  update public.cms_entries set status = p_status where id = p_id returning * into r;
+  if not found then raise exception 'Contenu introuvable' using errcode = 'P0002'; end if;
+  return jsonb_build_object('already', false, 'entry', to_jsonb(r));
+end; $$;
+
+-- Programmé dont la date est passée → Publié (passage planifié ; le site, lui, le voit déjà dès la date).
+create or replace function cms_private.promote_due()
+returns integer language plpgsql security definer set search_path = '' as $$
+declare n integer;
+begin
+  update public.cms_entries set status = 'published' where status = 'scheduled' and publish_at <= now()
+     and not public.in_trash('cms_entries', id);
+  get diagnostics n = row_count;
+  return n;
+end; $$;
+revoke all on function cms_private.promote_due() from public, anon, authenticated;
+
+create or replace function public.cms_promote_due()
+returns integer language plpgsql set search_path = '' as $$
+declare n integer;
+begin
+  perform cms_private.assert_writer();
+  update public.cms_entries set status = 'published' where status = 'scheduled' and publish_at <= now();
+  get diagnostics n = row_count;
+  return n;
+end; $$;
+
+create or replace function public.cms_promote_due_server(p_server_key text)
+returns integer language plpgsql security definer set search_path = '' as $$
+begin
+  perform appt_private.assert_server(p_server_key);
+  return cms_private.promote_due();
+end; $$;
+
+revoke all on function public.cms_publish_now(uuid), public.cms_schedule(uuid, timestamptz, boolean),
+  public.cms_set_status(uuid, text), public.cms_promote_due() from public, anon;
+grant execute on function public.cms_publish_now(uuid), public.cms_schedule(uuid, timestamptz, boolean),
+  public.cms_set_status(uuid, text), public.cms_promote_due() to authenticated;
+revoke all on function public.cms_promote_due_server(text) from public;
+grant execute on function public.cms_promote_due_server(text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Corbeille : type 'cms_entry' (ses redirections partent avec lui à la purge)
+-- ---------------------------------------------------------------------------
+insert into trash_private.kinds (kind, row_table) values ('cms_entry', 'cms_entries') on conflict do nothing;
+select trash_private.hide('cms_entries', array['id:cms_entries']);
+select trash_private.hide('cms_redirects', array['entry_id:cms_entries']);
+
+create or replace function trash_private.describe_cms_entry(p_id uuid)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object(
+    'label', e.title,
+    'context', 'CMS · ' || coalesce(t.label, e.type) || ' · /' || e.slug,
+    'parents', '[]'::jsonb,
+    'warnings', case when e.status in ('scheduled', 'published')
+      then jsonb_build_array('Cet article est publié ou programmé : dépubliez-le d''abord.') else '[]'::jsonb end)
+    from public.cms_entries e left join cms_private.types t on t.type = e.type where e.id = p_id;
+$$;
+create or replace function trash_private.collect_cms_entry(p_id uuid)
+returns table (row_table text, row_id uuid) language sql stable set search_path = '' as $$
+  select 'cms_entries', id from public.cms_entries where id = p_id;
+$$;
+-- Avant la mise à la corbeille : un article publié ou programmé est refusé (il faut le dépublier d'abord).
+create or replace function trash_private.before_cms_entry(p_id uuid)
+returns jsonb language plpgsql set search_path = '' as $$
+begin
+  if exists (select 1 from public.cms_entries where id = p_id and status in ('scheduled', 'published')) then
+    raise exception 'Dépubliez d''abord cet article : un article publié ou programmé ne part pas à la corbeille.' using errcode = 'P0001';
+  end if;
+  return '{}'::jsonb;
+end; $$;
+revoke all on function trash_private.describe_cms_entry(uuid), trash_private.collect_cms_entry(uuid), trash_private.before_cms_entry(uuid) from public, anon;
+grant execute on function trash_private.describe_cms_entry(uuid), trash_private.collect_cms_entry(uuid), trash_private.before_cms_entry(uuid) to authenticated;
+
+-- Fonctions d'aide appelées avec les droits du propriétaire (les fonctions ne sont plus exécutables par défaut)
+grant execute on function cms_private.is_visible(text, timestamptz), cms_private.reading_minutes(text),
+  cms_private.assert_writer() to authenticated;
+
+
+-- ===== 20261127100200_cms_medias.sql =====
+-- CMS (lot 2) : images des contenus du site. Migration additive.
+--  * Bucket « cms-media » PUBLIC en lecture : les images sont affichées par le site (couverture, partage, corps).
+--    Les noms de fichiers sont aléatoires ; une image d'un brouillon n'est trouvable que par qui connaît son adresse.
+--    Formats d'image seulement, sans SVG (un SVG peut porter du script). 10 Mo au plus.
+--  * Envoi, liste et suppression réservés au propriétaire dans l'application.
+--  * Registre cms_media : une ligne par image (nom d'origine, type, taille), pour la page Images et l'import.
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('cms-media', 'cms-media', true, 10485760, array['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif'])
+on conflict (id) do update set public = true, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+create policy cms_media_select on storage.objects for select to authenticated
+  using (bucket_id = 'cms-media' and (select public.is_app_owner()));
+create policy cms_media_insert on storage.objects for insert to authenticated
+  with check (bucket_id = 'cms-media' and (select public.is_app_owner()) and public.current_actor() = 'user');
+create policy cms_media_delete on storage.objects for delete to authenticated
+  using (bucket_id = 'cms-media' and (select public.is_app_owner()) and public.current_actor() = 'user');
+
+create table public.cms_media (
+  id uuid primary key default gen_random_uuid(),
+  path text not null unique check (path ~ '^[0-9a-f-]{36}\.(png|jpg|jpeg|webp|gif|avif)$'),
+  filename text not null check (char_length(filename) between 1 and 200),
+  mime text not null check (mime in ('image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif')),
+  size integer not null check (size > 0 and size <= 10485760),
+  status text not null default 'pending' check (status in ('pending', 'ready')),
+  created_at timestamptz not null default now()
+);
+create index cms_media_created_idx on public.cms_media (created_at desc);
+alter table public.cms_media enable row level security;
+revoke all on public.cms_media from anon;
+create policy cms_media_owner_read on public.cms_media for select to authenticated using ((select public.is_app_owner()));
+create policy cms_media_owner_insert on public.cms_media for insert to authenticated
+  with check ((select public.is_app_owner()) and public.current_actor() = 'user');
+create policy cms_media_owner_update on public.cms_media for update to authenticated
+  using ((select public.is_app_owner()) and public.current_actor() = 'user')
+  with check ((select public.is_app_owner()) and public.current_actor() = 'user');
+create policy cms_media_owner_delete on public.cms_media for delete to authenticated
+  using ((select public.is_app_owner()) and public.current_actor() = 'user');
+
+
+-- ===== 20261127100300_cms_pages.sql =====
+-- CMS (lot 3) : réglages SEO des pages du site, identifiées par leur chemin (« / », « /offres »). Migration additive.
+--  * Champ vide (null) = le site garde la valeur inscrite dans son code. « Ne pas indexer » a trois états :
+--    null (valeur du site), false (indexer), true (ne pas indexer).
+--  * site_defaults : valeurs actuelles du code du site, fournies par l'import JSON (format « cely-cms-pages »,
+--    voir docs/cms-contrat-site.md) ; affichées comme indications, jamais renvoyées comme réglages.
+--  * Import en lot : crée les pages absentes, met à jour libellé et valeurs du site ; ne touche jamais aux réglages
+--    saisis dans le CMS et ne supprime aucune page.
+--  * Réservé au propriétaire dans l'application.
+
+create table public.cms_pages (
+  id uuid primary key default gen_random_uuid(),
+  path text not null unique check (char_length(path) <= 300 and (path = '/' or path ~ '^(/[A-Za-z0-9._~%!$&''()*+,;=:@-]+)+$')),
+  label text check (char_length(label) <= 200),
+  seo_title text check (char_length(seo_title) <= 200),
+  seo_description text check (char_length(seo_description) <= 400),
+  og_title text check (char_length(og_title) <= 200),
+  og_image_url text check (char_length(og_image_url) <= 1000 and og_image_url ~ '^https?://'),
+  canonical_url text check (char_length(canonical_url) <= 1000 and canonical_url ~ '^https?://'),
+  noindex boolean,
+  site_defaults jsonb not null default '{}' check (jsonb_typeof(site_defaults) = 'object' and pg_column_size(site_defaults) <= 8000),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create or replace function cms_private.tg_pages_before()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  new.label := nullif(btrim(new.label), '');
+  new.seo_title := nullif(btrim(new.seo_title), '');
+  new.seo_description := nullif(btrim(new.seo_description), '');
+  new.og_title := nullif(btrim(new.og_title), '');
+  new.og_image_url := nullif(btrim(new.og_image_url), '');
+  new.canonical_url := nullif(btrim(new.canonical_url), '');
+  new.updated_at := now();
+  return new;
+end; $$;
+create trigger cms_pages_before before insert or update on public.cms_pages
+  for each row execute function cms_private.tg_pages_before();
+
+alter table public.cms_pages enable row level security;
+revoke all on public.cms_pages from anon;
+create policy cms_pages_owner_read on public.cms_pages for select to authenticated using ((select public.is_app_owner()));
+create policy cms_pages_owner_insert on public.cms_pages for insert to authenticated
+  with check ((select public.is_app_owner()) and public.current_actor() = 'user');
+create policy cms_pages_owner_update on public.cms_pages for update to authenticated
+  using ((select public.is_app_owner()) and public.current_actor() = 'user')
+  with check ((select public.is_app_owner()) and public.current_actor() = 'user');
+create policy cms_pages_owner_delete on public.cms_pages for delete to authenticated
+  using ((select public.is_app_owner()) and public.current_actor() = 'user');
+
+-- Import en lot (tout ou rien). p_pages : [{path, label, defaults}] déjà validés par l'application ;
+-- la base revérifie le chemin (contrainte) et la taille. Renvoie {created, updated, unchanged}.
+create or replace function public.cms_pages_import(p_pages jsonb)
+returns jsonb language plpgsql set search_path = '' as $$
+declare v jsonb; v_created int := 0; v_updated int := 0; v_unchanged int := 0; v_old public.cms_pages;
+begin
+  perform cms_private.assert_writer();
+  if jsonb_typeof(p_pages) <> 'array' or jsonb_array_length(p_pages) > 500 then
+    raise exception 'Liste de pages invalide (500 au plus)' using errcode = '22023';
+  end if;
+  for v in select * from jsonb_array_elements(p_pages) loop
+    select * into v_old from public.cms_pages where path = v ->> 'path' for update;
+    if not found then
+      insert into public.cms_pages (path, label, site_defaults)
+      values (v ->> 'path', v ->> 'label', coalesce(nullif(v -> 'defaults', 'null'::jsonb), '{}'));
+      v_created := v_created + 1;
+    elsif (v_old.label, v_old.site_defaults) is distinct from (nullif(btrim(v ->> 'label'), ''), coalesce(nullif(v -> 'defaults', 'null'::jsonb), '{}')) then
+      update public.cms_pages set label = coalesce(nullif(btrim(v ->> 'label'), ''), label),
+        site_defaults = coalesce(nullif(v -> 'defaults', 'null'::jsonb), '{}') where id = v_old.id;
+      v_updated := v_updated + 1;
+    else
+      v_unchanged := v_unchanged + 1;
+    end if;
+  end loop;
+  return jsonb_build_object('created', v_created, 'updated', v_updated, 'unchanged', v_unchanged);
+end; $$;
+revoke all on function public.cms_pages_import(jsonb) from public, anon;
+grant execute on function public.cms_pages_import(jsonb) to authenticated;
+
+
+-- ===== 20261127100400_cms_publication.sql =====
+-- CMS (lot 4) : rafraîchissement du site, reprises automatiques, aperçus temporaires. Migration additive.
+--  * Toute modification qui change ce que le site affiche (article visible avant ou après, page SEO) inscrit une
+--    demande de rafraîchissement (cms_revalidations). Les demandes en attente sont fusionnées : un seul appel au
+--    site suffit, et un appel réussi résout aussi les échecs plus anciens (il rafraîchit tout le contenu du CMS).
+--  * Envoi immédiat par l'application après l'action, puis reprise par le passage planifié « contenus » avec un
+--    délai croissant (1, 2, 4… minutes, une heure au plus). Les échecs restent visibles dans Aujourd'hui jusqu'à
+--    leur résolution.
+--  * Aperçu : jeton aléatoire (seule son empreinte est en base), valable 24 h au plus, pour un seul contenu.
+--  * Passage planifié « contenus » ajouté à la liste des tâches suivies (scheduled_jobs).
+
+create table public.cms_revalidations (
+  id uuid primary key default gen_random_uuid(),
+  reasons text[] not null default '{}',
+  tags text[] not null default '{}',
+  status text not null default 'pending' check (status in ('pending', 'running', 'ok', 'failed')),
+  attempts integer not null default 0,
+  last_error text check (char_length(last_error) <= 500),
+  next_attempt_at timestamptz not null default now(),
+  locked_until timestamptz,
+  created_at timestamptz not null default now(),
+  done_at timestamptz
+);
+create index cms_revalidations_open_idx on public.cms_revalidations (next_attempt_at) where status in ('pending', 'running', 'failed');
+alter table public.cms_revalidations enable row level security;
+revoke all on public.cms_revalidations from anon;
+create policy cms_revalidations_owner_read on public.cms_revalidations for select to authenticated using ((select public.is_app_owner()));
+
+-- Ajoute une demande (ou la fusionne avec celle qui attend déjà). Appelée par les déclencheurs.
+create or replace function cms_private.enqueue(p_reason text, p_tags text[])
+returns void language plpgsql security definer set search_path = '' as $$
+declare v_id uuid;
+begin
+  select id into v_id from public.cms_revalidations where status = 'pending' order by created_at limit 1 for update skip locked;
+  if v_id is null then
+    insert into public.cms_revalidations (reasons, tags) values (array[left(p_reason, 200)], array(select distinct unnest(array['cms'] || p_tags)));
+  else
+    update public.cms_revalidations
+       set reasons = (reasons || array[left(p_reason, 200)])[greatest(1, cardinality(reasons) - 18):],
+           tags = array(select distinct unnest(tags || p_tags)), next_attempt_at = least(next_attempt_at, now())
+     where id = v_id;
+  end if;
+  if random() < 0.05 then delete from public.cms_revalidations where status = 'ok' and done_at < now() - interval '30 days'; end if;
+end; $$;
+revoke all on function cms_private.enqueue(text, text[]) from public, anon, authenticated;
+
+create or replace function cms_private.tg_entries_revalidate()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  v_old boolean := tg_op <> 'INSERT' and cms_private.is_visible(old.status, old.publish_at);
+  v_new boolean := tg_op <> 'DELETE' and cms_private.is_visible(new.status, new.publish_at);
+  v_tags text[];
+begin
+  if not (v_old or v_new) then return null; end if;
+  if tg_op = 'UPDATE' and old.content_updated_at = new.content_updated_at and old.status = new.status
+     and old.publish_at is not distinct from new.publish_at and old.slug = new.slug then
+    return null;
+  end if;
+  v_tags := array['cms:articles', 'cms:sitemap', 'cms:redirections'];
+  if tg_op <> 'INSERT' then v_tags := v_tags || ('cms:' || old.type || ':' || old.slug); end if;
+  if tg_op <> 'DELETE' then v_tags := v_tags || ('cms:' || new.type || ':' || new.slug); end if;
+  perform cms_private.enqueue(
+    case when tg_op = 'DELETE' then 'suppression' when not v_old then 'publication' when not v_new then 'retrait' else 'modification' end
+      || ' : ' || coalesce(new.slug, old.slug), v_tags);
+  return null;
+end; $$;
+revoke all on function cms_private.tg_entries_revalidate() from public, anon, authenticated;
+create trigger cms_entries_revalidate after insert or update or delete on public.cms_entries
+  for each row execute function cms_private.tg_entries_revalidate();
+
+create or replace function cms_private.tg_pages_revalidate()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if tg_op = 'UPDATE' and (old.path, old.seo_title, old.seo_description, old.og_title, old.og_image_url, old.canonical_url, old.noindex)
+     is not distinct from (new.path, new.seo_title, new.seo_description, new.og_title, new.og_image_url, new.canonical_url, new.noindex) then
+    return null; -- seuls le libellé ou les valeurs du site ont changé : rien à rafraîchir
+  end if;
+  perform cms_private.enqueue('page SEO : ' || coalesce(new.path, old.path), array['cms:pages', 'cms:page:' || coalesce(new.path, old.path)]);
+  return null;
+end; $$;
+revoke all on function cms_private.tg_pages_revalidate() from public, anon, authenticated;
+create trigger cms_pages_revalidate after insert or update or delete on public.cms_pages
+  for each row execute function cms_private.tg_pages_revalidate();
+
+-- Appelant : le propriétaire dans l'application (p_server_key null) ou le passage planifié (clé serveur).
+create or replace function cms_private.assert_caller(p_server_key text)
+returns void language plpgsql stable set search_path = '' as $$
+begin
+  if p_server_key is not null then perform appt_private.assert_server(p_server_key);
+  else perform cms_private.assert_writer(); end if;
+end; $$;
+revoke all on function cms_private.assert_caller(text) from public, anon, authenticated;
+
+-- Prend les demandes dues (fusionnées) pour un appel au site ; null s'il n'y a rien à envoyer.
+create or replace function public.cms_revalidation_claim(p_server_key text default null)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare v_ids uuid[]; v_tags text[]; v_reasons text[];
+begin
+  perform cms_private.assert_caller(p_server_key);
+  with due as (
+    select id from public.cms_revalidations
+     where (status in ('pending', 'failed') or (status = 'running' and locked_until < now())) and next_attempt_at <= now()
+     order by created_at limit 50 for update skip locked),
+  upd as (
+    update public.cms_revalidations r set status = 'running', locked_until = now() + interval '2 minutes'
+      from due where r.id = due.id
+    returning r.id, r.tags, r.reasons)
+  select (select array_agg(id) from upd),
+         (select array_agg(distinct t) from upd, unnest(upd.tags) t),
+         (select array_agg(x) from (select unnest(upd.reasons) x from upd limit 20) s)
+    into v_ids, v_tags, v_reasons;
+  if v_ids is null then return null; end if;
+  return jsonb_build_object('ids', to_jsonb(v_ids), 'tags', to_jsonb(coalesce(v_tags, array['cms'])), 'reasons', to_jsonb(coalesce(v_reasons, '{}')));
+end; $$;
+
+-- Issue de l'appel. Réussite : ces demandes et les échecs plus anciens sont résolus. Échec : nouvel essai plus tard.
+create or replace function public.cms_revalidation_report(p_ids uuid[], p_ok boolean, p_error text default null, p_server_key text default null)
+returns void language plpgsql security definer set search_path = '' as $$
+declare v_first timestamptz;
+begin
+  perform cms_private.assert_caller(p_server_key);
+  if p_ok then
+    select max(created_at) into v_first from public.cms_revalidations where id = any (p_ids);
+    update public.cms_revalidations set status = 'ok', done_at = now(), locked_until = null, last_error = null
+     where id = any (p_ids) or (status = 'failed' and created_at <= coalesce(v_first, now()));
+  else
+    update public.cms_revalidations set status = 'failed', attempts = attempts + 1, locked_until = null,
+      last_error = left(coalesce(nullif(btrim(p_error), ''), 'Échec sans précision'), 500),
+      next_attempt_at = now() + make_interval(mins => least(60, power(2, least(attempts, 6))::int))
+     where id = any (p_ids);
+  end if;
+end; $$;
+
+-- « Réessayer » : les échecs redeviennent dus tout de suite.
+create or replace function public.cms_revalidation_retry()
+returns integer language plpgsql security definer set search_path = '' as $$
+declare n integer;
+begin
+  perform cms_private.assert_writer();
+  update public.cms_revalidations set next_attempt_at = now() where status = 'failed';
+  get diagnostics n = row_count;
+  return n;
+end; $$;
+
+revoke all on function public.cms_revalidation_claim(text), public.cms_revalidation_report(uuid[], boolean, text, text), public.cms_revalidation_retry() from public;
+grant execute on function public.cms_revalidation_claim(text), public.cms_revalidation_report(uuid[], boolean, text, text) to anon, authenticated;
+grant execute on function public.cms_revalidation_retry() to authenticated;
+revoke execute on function public.cms_revalidation_retry() from anon;
+
+-- ---------------------------------------------------------------------------
+-- Aperçu d'un brouillon sur le site
+-- ---------------------------------------------------------------------------
+create table public.cms_preview_tokens (
+  token_hash text primary key check (token_hash ~ '^[0-9a-f]{64}$'),
+  entry_id uuid not null references public.cms_entries (id) on delete cascade,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  constraint cms_preview_tokens_ttl check (expires_at <= created_at + interval '24 hours')
+);
+create index cms_preview_tokens_entry_idx on public.cms_preview_tokens (entry_id);
+alter table public.cms_preview_tokens enable row level security;
+revoke all on public.cms_preview_tokens from anon;
+create policy cms_preview_owner_read on public.cms_preview_tokens for select to authenticated using ((select public.is_app_owner()));
+select trash_private.hide('cms_preview_tokens', array['entry_id:cms_entries']);
+
+-- Crée un aperçu (empreinte du jeton fournie par l'application) valable p_hours heures (24 au plus).
+create or replace function public.cms_preview_create(p_entry uuid, p_token_hash text, p_hours integer default 24)
+returns timestamptz language plpgsql security definer set search_path = '' as $$
+declare v_exp timestamptz;
+begin
+  perform cms_private.assert_writer();
+  if p_hours is null or p_hours < 1 or p_hours > 24 then raise exception 'Durée de 1 à 24 heures' using errcode = '22023'; end if;
+  if not exists (select 1 from public.cms_entries where id = p_entry) or public.in_trash('cms_entries', p_entry) then
+    raise exception 'Contenu introuvable' using errcode = 'P0002';
+  end if;
+  delete from public.cms_preview_tokens where expires_at < now();
+  v_exp := now() + make_interval(hours => p_hours);
+  insert into public.cms_preview_tokens (token_hash, entry_id, expires_at, created_at) values (p_token_hash, p_entry, v_exp, now());
+  return v_exp;
+end; $$;
+
+-- Retire tous les aperçus d'un contenu.
+create or replace function public.cms_preview_revoke(p_entry uuid)
+returns integer language plpgsql security definer set search_path = '' as $$
+declare n integer;
+begin
+  perform cms_private.assert_writer();
+  delete from public.cms_preview_tokens where entry_id = p_entry;
+  get diagnostics n = row_count;
+  return n;
+end; $$;
+revoke all on function public.cms_preview_create(uuid, text, integer), public.cms_preview_revoke(uuid) from public, anon;
+grant execute on function public.cms_preview_create(uuid, text, integer), public.cms_preview_revoke(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Passage planifié « contenus »
+-- ---------------------------------------------------------------------------
+do $$
+declare v text;
+begin
+  select pg_get_constraintdef(oid) into v from pg_constraint
+   where conrelid = 'public.scheduled_jobs'::regclass and conname = 'scheduled_jobs_job_check';
+  if v is not null and v not like '%''contenus''%' and v like '%ARRAY[%' then
+    alter table public.scheduled_jobs drop constraint scheduled_jobs_job_check;
+    execute 'alter table public.scheduled_jobs add constraint scheduled_jobs_job_check ' || replace(v, 'ARRAY[', 'ARRAY[''contenus''::text, ');
+  end if;
+end $$;
+
+
+-- ===== 20261127100500_cms_acces_site.sql =====
+-- CMS (lot 5) : accès en lecture seule pour le site celygrowth.com. Migration additive.
+--  * Appelé uniquement par le serveur du CRM (route /api/site/cms/v1/…), après contrôle de la clé du site
+--    (CMS_SITE_API_KEY) ; la base exige en plus la clé serveur (comme les autres fonctions publiques).
+--  * Ne renvoie jamais un brouillon, un article programmé dans le futur, un article dépublié ou à la corbeille :
+--    seule exception, l'aperçu avec un jeton valide (non expiré, 24 h au plus).
+--  * Limite d'abus en base : par empreinte d'adresse et au total, par minute (site_private.rate_ok du Tracking).
+--  * Aucune écriture hors du compteur d'abus.
+
+create or replace function cms_private.entry_json(e public.cms_entries, p_full boolean)
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_strip_nulls(jsonb_build_object(
+    'type', e.type, 'slug', e.slug, 'title', e.title, 'excerpt', e.excerpt,
+    'cover_image_url', e.cover_image_url, 'cover_alt', e.cover_alt, 'category', e.category, 'author', e.author,
+    'seo_title', e.seo_title, 'seo_description', e.seo_description, 'og_title', e.og_title, 'og_image_url', e.og_image_url,
+    'canonical_url', e.canonical_url, 'focus_keyword', e.focus_keyword,
+    'published_at', e.publish_at, 'first_published_at', e.first_published_at, 'updated_at', e.content_updated_at,
+    'reading_minutes', e.reading_minutes,
+    'body_md', case when p_full then e.body_md end))
+  || jsonb_build_object('tags', to_jsonb(e.tags), 'secondary_keywords', to_jsonb(e.secondary_keywords), 'noindex', e.noindex,
+                        'extra', case when p_full then e.extra else '{}'::jsonb end);
+$$;
+
+create or replace function cms_private.site_visible(e public.cms_entries)
+returns boolean language sql stable set search_path = '' as $$
+  select cms_private.is_visible(e.status, e.publish_at) and not public.in_trash('cms_entries', e.id);
+$$;
+
+-- Lecture du site. p_what : list | entry | redirects | pages | sitemap | preview. p_rate : empreinte de l'adresse.
+create or replace function public.cms_site_read(p_server_key text, p_what text, p_args jsonb default '{}', p_rate text default null)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_type text := coalesce(nullif(p_args ->> 'type', ''), 'article');
+  v_limit int; v_offset int; v_e public.cms_entries; v_target public.cms_entries; v_out jsonb;
+begin
+  perform appt_private.assert_server(p_server_key);
+  if not site_private.rate_ok('cms:' || coalesce(p_rate, '?'), 600) or not site_private.rate_ok('cms:all', 3000) then
+    return jsonb_build_object('error', 'rate_limited');
+  end if;
+  if not exists (select 1 from cms_private.types where type = v_type) then return jsonb_build_object('error', 'unknown_type'); end if;
+
+  if p_what = 'list' then
+    v_limit := least(greatest(coalesce((p_args ->> 'limit')::int, 20), 1), 100);
+    v_offset := least(greatest(coalesce((p_args ->> 'offset')::int, 0), 0), 100000);
+    with vis as (
+      select e from public.cms_entries e
+       where e.type = v_type and cms_private.site_visible(e)
+         and (p_args ->> 'category' is null or lower(e.category) = lower(p_args ->> 'category'))
+         and (p_args ->> 'tag' is null or exists (select 1 from unnest(e.tags) t where lower(t) = lower(p_args ->> 'tag'))))
+    select jsonb_build_object(
+      'total', (select count(*) from vis),
+      'items', coalesce((select jsonb_agg(cms_private.entry_json(x.e, false) order by (x.e).publish_at desc, (x.e).slug)
+                           from (select e from vis order by (e).publish_at desc, (e).slug limit v_limit offset v_offset) x), '[]'))
+      into v_out;
+    -- prochaine apparition prévue (heure seulement, aucun contenu) : le site peut caler son rafraîchissement dessus
+    return v_out || jsonb_build_object('next_change_at', (select min(publish_at) from public.cms_entries
+      where type = v_type and status in ('scheduled', 'published') and publish_at > now() and not public.in_trash('cms_entries', id)));
+
+  elsif p_what = 'entry' then
+    select * into v_e from public.cms_entries where type = v_type and slug = p_args ->> 'slug';
+    if found and cms_private.site_visible(v_e) then return jsonb_build_object('entry', cms_private.entry_json(v_e, true)); end if;
+    select t.* into v_target from public.cms_redirects r join public.cms_entries t on t.id = r.entry_id
+     where r.type = v_type and r.from_slug = p_args ->> 'slug';
+    if found and cms_private.site_visible(v_target) then return jsonb_build_object('redirect', v_target.slug); end if;
+    return jsonb_build_object('not_found', true);
+
+  elsif p_what = 'redirects' then
+    return jsonb_build_object('redirects', coalesce((
+      select jsonb_agg(jsonb_build_object('type', r.type, 'from', r.from_slug, 'to', t.slug) order by r.from_slug)
+        from public.cms_redirects r join public.cms_entries t on t.id = r.entry_id
+       where r.type = v_type and cms_private.site_visible(t)), '[]'));
+
+  elsif p_what = 'pages' then
+    return jsonb_build_object('pages', coalesce((
+      select jsonb_agg(jsonb_strip_nulls(jsonb_build_object('path', p.path, 'seo_title', p.seo_title, 'seo_description', p.seo_description,
+               'og_title', p.og_title, 'og_image_url', p.og_image_url, 'canonical_url', p.canonical_url, 'noindex', p.noindex)) order by p.path)
+        from public.cms_pages p), '[]'));
+
+  elsif p_what = 'sitemap' then
+    return jsonb_build_object('entries', coalesce((
+      select jsonb_agg(jsonb_strip_nulls(jsonb_build_object('type', e.type, 'slug', e.slug, 'updated_at', e.content_updated_at,
+                       'published_at', e.publish_at, 'canonical_url', e.canonical_url)) order by e.publish_at desc)
+        from public.cms_entries e where cms_private.site_visible(e) and not e.noindex), '[]'),
+      'noindex_pages', coalesce((select jsonb_agg(p.path order by p.path) from public.cms_pages p where p.noindex is true), '[]'));
+
+  elsif p_what = 'preview' then
+    select e.* into v_e from public.cms_preview_tokens k join public.cms_entries e on e.id = k.entry_id
+     where k.token_hash = p_args ->> 'token_hash' and k.expires_at > now() and not public.in_trash('cms_entries', e.id);
+    if not found then return jsonb_build_object('not_found', true); end if;
+    return jsonb_build_object('entry', cms_private.entry_json(v_e, true), 'status', v_e.status,
+      'expires_at', (select expires_at from public.cms_preview_tokens where token_hash = p_args ->> 'token_hash'));
+  end if;
+  return jsonb_build_object('error', 'unknown_request');
+end; $$;
+
+-- Requête refusée (clé du site absente ou fausse) : compteur d'abus par adresse. Faux = trop d'essais (429).
+create or replace function public.cms_site_denied(p_server_key text, p_rate text)
+returns boolean language plpgsql security definer set search_path = '' as $$
+begin
+  perform appt_private.assert_server(p_server_key);
+  return site_private.rate_ok('cms-denied:' || coalesce(p_rate, '?'), 20);
+end; $$;
+
+revoke all on function cms_private.entry_json(public.cms_entries, boolean), cms_private.site_visible(public.cms_entries) from public, anon, authenticated;
+revoke all on function public.cms_site_read(text, text, jsonb, text), public.cms_site_denied(text, text) from public;
+grant execute on function public.cms_site_read(text, text, jsonb, text), public.cms_site_denied(text, text) to anon, authenticated;

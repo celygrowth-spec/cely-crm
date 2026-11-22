@@ -129,6 +129,18 @@ function order(params) {
 }
 
 
+// Comme PostgREST : une liste JSON écrite dans une colonne tableau (text[]…) devient un tableau Postgres ;
+// ailleurs (jsonb), elle reste du JSON.
+async function arrayColumns(tx, table) {
+  const r = await tx.query(`select a.attname from pg_attribute a join pg_type ty on ty.oid = a.atttypid
+    where a.attrelid = to_regclass('public.' || $1) and a.attnum > 0 and not a.attisdropped and ty.typcategory = 'A'`, [table]);
+  return new Set(r.rows.map((x) => x.attname));
+}
+function restValue(arrays, k, v) {
+  if (Array.isArray(v) && arrays.has(k)) return `{${v.map((x) => `"${String(x).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
+  return v !== null && typeof v === "object" ? JSON.stringify(v) : v;
+}
+
 // --- Storage minimal : chaque opération est vérifiée par les politiques RLS réelles de storage.objects ---
 const blobs = new Map();
 const tokens = new Map();
@@ -332,6 +344,7 @@ const server = http.createServer(async (req, res) => {
           const count = prefer.includes("count=exact") ? (await tx.query(`select count(*)::int n from public.${t}${where(p)}`)).rows[0].n : null;
           return { rows, count };
         }
+        const arrays = req.method === "POST" || req.method === "PATCH" ? await arrayColumns(tx, t) : new Set();
         if (req.method === "POST") {
           const list = Array.isArray(body) ? body : [body];
           const rows = [];
@@ -340,7 +353,7 @@ const server = http.createServer(async (req, res) => {
             const conflict = prefer.includes("merge-duplicates") && p.get("on_conflict")
               ? ` on conflict (${p.get("on_conflict").split(",").map(ident).join(",")}) do update set ${ks.map((k) => `${ident(k)} = excluded.${ident(k)}`).join(", ")}` : "";
             const r = await tx.query(`insert into public.${t} (${ks.map(ident).join(",")}) values (${ks.map((_, i) => `$${i + 1}`).join(",")})${conflict} returning ${cols}`,
-              ks.map((k) => (row[k] !== null && typeof row[k] === "object" ? JSON.stringify(row[k]) : row[k])));
+              ks.map((k) => restValue(arrays, k, row[k])));
             rows.push(...r.rows);
           }
           return { rows };
@@ -348,7 +361,7 @@ const server = http.createServer(async (req, res) => {
         if (req.method === "PATCH") {
           const ks = Object.keys(body);
           const r = await tx.query(`update public.${t} set ${ks.map((k, i) => `${ident(k)} = $${i + 1}`).join(", ")}${where(p)} returning ${cols}`,
-            ks.map((k) => (body[k] !== null && typeof body[k] === "object" ? JSON.stringify(body[k]) : body[k])));
+            ks.map((k) => restValue(arrays, k, body[k])));
           return { rows: r.rows };
         }
         if (req.method === "DELETE") return { rows: (await tx.query(`delete from public.${t}${where(p)} returning ${cols}`)).rows };

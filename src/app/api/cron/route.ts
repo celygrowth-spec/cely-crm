@@ -1,4 +1,5 @@
-// Passage planifié unique (C07, Q02, Q03) : agenda Google, rappels, réception Gmail, Fireflies, purge de la corbeille.
+// Passage planifié unique (C07, Q02, Q03) : agenda Google, rappels, réception Gmail, Fireflies, purge de la corbeille,
+// contenus du site (CMS).
 // Appelé par Vercel Cron (« Authorization: Bearer CRON_SECRET ») ou un planificateur externe (pg_cron), ou par le
 // propriétaire connecté. Route publique pour le proxy : l'autorisation est vérifiée ici. ?taches=rappels,gmail
 // limite le passage (planificateur fréquent).
@@ -13,6 +14,7 @@ import { drainImports, rematchPending, syncRecent } from "@/lib/fireflies/worker
 import { agendaJob, boiteJob, gmailJob, remindersJob, runJob, type JobName } from "@/lib/jobs/run";
 import { seoJob } from "@/lib/tracking/seo/job";
 import { trashJob } from "@/lib/trash/job";
+import { contentsJob } from "@/lib/cms/job";
 
 export const maxDuration = 60;
 
@@ -32,7 +34,7 @@ async function ownerSession() {
   return data === true;
 }
 
-const ALL: JobName[] = ["agenda", "rappels", "gmail", "fireflies", "corbeille", "seo", "boite"];
+const ALL: JobName[] = ["contenus", "agenda", "rappels", "gmail", "fireflies", "corbeille", "seo", "boite"];
 
 async function handle(req: Request) {
   if (!cronAuthorized(req) && !(await ownerSession())) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
@@ -40,6 +42,8 @@ async function handle(req: Request) {
   const origin = requestOrigin(req);
   const results = [];
   for (const job of wanted) {
+    // CMS : en premier (rapide) ; articles programmés et rafraîchissement du site
+    if (job === "contenus") results.push(await runJob(job, contentsJob));
     if (job === "agenda") results.push(await runJob(job, (sb) => agendaJob(sb, origin)));
     if (job === "rappels") results.push(await runJob(job, (sb) => remindersJob(sb, { origin })));
     if (job === "gmail") results.push(await runJob(job, (sb) => gmailJob(sb)));

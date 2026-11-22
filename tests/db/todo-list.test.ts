@@ -144,8 +144,9 @@ describe("suppression par la Corbeille", () => {
       { kind: "project_phase", row_table: "project_phases" }, { kind: "project_meeting", row_table: "project_meetings" },
       { kind: "finance_mission", row_table: "finance_missions" }, { kind: "finance_invoice", row_table: "finance_invoices" },
       { kind: "finance_payment", row_table: "finance_payments" }, { kind: "todo_list_item", row_table: "todo_list_items" },
+      { kind: "cms_entry", row_table: "cms_entries" }, // CMS (contenus du site)
     ]));
-    expect(kinds).toHaveLength(11);
+    expect(kinds).toHaveLength(12);
     await expect(db.rpc("trash_put", { p_kind: "inconnu", p_id: randomUUID() })).rejects.toThrow(/Type d'élément inconnu/);
   });
 });
