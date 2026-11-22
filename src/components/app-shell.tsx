@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChartSpline, ChevronDown, FolderKanban, Home, LayoutGrid, LogOut, Newspaper, Search, Settings, Users, Wallet, X } from "lucide-react";
+import { ChevronDown, FolderKanban, Globe, Home, LayoutGrid, LogOut, Search, Settings, Users, Wallet, X } from "lucide-react";
 import type { LeadSource, List, PipelineWithStages } from "@/lib/crm/types";
 import { signOutAction } from "@/app/actions";
 import { QueryProvider, apiGet, useFlushRouterOnNavigate } from "@/lib/client/query";
@@ -89,8 +89,8 @@ export const NAV: NavSection[] = [
     { href: "/finance/revenus?vue=factures", label: "Factures" },
     { href: "/finance/revenus?vue=paiements", label: "Règlements" },
   ] },
-  { key: "tracking", label: "Tracking site", short: "Tracking", icon: ChartSpline, href: "/tracking-site" },
-  { key: "cms", label: "CMS", icon: Newspaper, items: [
+  { key: "site", label: "Mon site", short: "Site", icon: Globe, items: [
+    { href: "/tracking-site", label: "Tracking site" },
     { href: "/cms", label: "Articles", exact: true, match: ["/cms/articles"] },
     { href: "/cms/calendrier", label: "Calendrier éditorial" },
     { href: "/cms/pages", label: "Pages SEO" },
