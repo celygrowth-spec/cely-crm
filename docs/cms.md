@@ -26,6 +26,8 @@ Les fichiers Markdown ne servent qu'à l'import et à l'export.
 - Éditeur Markdown avec aperçu (écrire / côte à côte / aperçu), rendu par le même code que le HTML envoyé au site.
   Le HTML brut n'est pas pris en charge et le résultat passe par `sanitize-html` : aucun script ne peut être injecté
   (ni par saisie, ni par import).
+- Blocs des articles du site (réponse directe, à retenir, encadrés, citation, post-it, définition, FAQ, outils
+  interactifs) : syntaxe `:::nom` … `:::`, modèle complet dans [cms-modele-article.md](cms-modele-article.md).
 - **Importer** (liste des articles) : un ou plusieurs `.md`, avec les images citées par une adresse locale. Le
   frontmatter remplit les champs (noms usuels d'autres outils acceptés : `description`, `date`, `image`,
   `categories`, `draft`…) ; champs manquants et remarques affichés par fichier. Slug existant : **Remplacer** ou
