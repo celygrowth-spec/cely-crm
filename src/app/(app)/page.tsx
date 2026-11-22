@@ -21,6 +21,8 @@ import { listJourney } from "@/lib/journey/service";
 import { HomeCalls } from "./_today/home-calls";
 import { JourneyActions } from "./_today/journey-actions";
 import { TasksList } from "./_today/tasks-list";
+import { CmsToday } from "./_today/cms-today";
+import { cmsToday } from "@/lib/cms/service";
 
 // Accueil : ce qui compte en ouvrant Cely Growth. Finance du mois, clients en cours, et ce qui attend une action
 // (appels à rattacher, rendez-vous du jour, relances dues, réponses, tâches de projet). Toutes les lectures partent
@@ -59,6 +61,8 @@ export default async function HomePage() {
   const c = (counters.data ?? {}) as { replies?: number; calls?: number; emails?: number };
   // parcours des clients (diagnostic, proposition, signature, onboarding) : ce qui attend une action de ma part
   const journey = await ok(listJourney(supabase));
+  // CMS : publications du jour et des 7 prochains jours (Paris), rafraîchissements du site en échec
+  const cms = await ok(cmsToday(supabase, zonedToUtc(day, "00:00", DEFAULT_TZ).toISOString(), zonedToUtc(addDaysKey(day, 8), "00:00", DEFAULT_TZ).toISOString()));
   // Tracking site : prospects identifiés revenus sur celygrowth.com ces 7 derniers jours
   const returns = ((await supabase.rpc("site_return_signals", { p_days: 7 })).data ?? []) as { company_id: string; company_name: string; visits: number; intent: boolean; intent_page: string | null }[];
 
@@ -141,6 +145,10 @@ export default async function HomePage() {
 
         <Block title="Prochaines actions clients" href="/pipelines" data-home-journey-block>
           {!journey.ok ? <Empty>Parcours indisponible pour le moment.</Empty> : <JourneyActions lines={journeyTodos(journey.v)} />}
+        </Block>
+
+        <Block title="Site : publications" href="/cms/calendrier" data-home-cms-block>
+          {!cms.ok ? <Empty>Publications indisponibles pour le moment.</Empty> : <CmsToday publications={cms.v.publications} failures={cms.v.failures} today={day} />}
         </Block>
 
         <Block title="Clients en cours" href="/projets" data-home-clients>

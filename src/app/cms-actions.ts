@@ -8,14 +8,19 @@ import { CrmError } from "@/lib/crm/service";
 import { PastDateError, createEntry, existingSlugs, importEntry, publishNow, schedule, setStatus, updateEntry, type DraftInput, type ImportItem } from "@/lib/cms/service";
 import { confirmMediaUpload, deleteMedia, mediaUsage, startMediaUpload } from "@/lib/cms/media";
 import type { CmsEntry } from "@/lib/cms/types";
+import { flushRevalidations } from "@/lib/cms/revalidate";
+import { createPreview, revokePreviews } from "@/lib/cms/preview";
 import { deletePage, importPages, savePage, type PageInput } from "@/lib/cms/pages-service";
 
 export type CmsResult<T> = { ok: true; data: T } | { ok: false; error: string; code?: "past_date" };
 
-async function owned<T>(fn: (sb: SupabaseClient) => Promise<T>): Promise<CmsResult<T>> {
+async function owned<T>(fn: (sb: SupabaseClient) => Promise<T>, refreshSite = false): Promise<CmsResult<T>> {
   const { supabase } = await requireAppOwner();
   try {
-    return { ok: true, data: await fn(supabase) };
+    const data = await fn(supabase);
+    // ce qui change sur le site est demandé aussitôt au site ; un échec reste en base et sera repris
+    if (refreshSite) await flushRevalidations(supabase).catch(() => undefined);
+    return { ok: true, data };
   } catch (e) {
     if (e instanceof PastDateError) return { ok: false, error: e.message, code: "past_date" };
     if (e instanceof CrmError) return { ok: false, error: e.message };
@@ -30,19 +35,19 @@ export async function createEntryAction(id: string, input: DraftInput & { title:
 }
 
 export async function updateEntryAction(id: string, patch: DraftInput) {
-  return owned<CmsEntry>((sb) => updateEntry(sb, id, patch));
+  return owned<CmsEntry>((sb) => updateEntry(sb, id, patch), true);
 }
 
 export async function publishNowAction(id: string) {
-  return owned(async (sb) => (await publishNow(sb, id)).entry);
+  return owned(async (sb) => (await publishNow(sb, id)).entry, true);
 }
 
 export async function scheduleAction(id: string, at: string, confirmNow = false) {
-  return owned(async (sb) => (await schedule(sb, id, at, confirmNow)).entry);
+  return owned(async (sb) => (await schedule(sb, id, at, confirmNow)).entry, true);
 }
 
 export async function setStatusAction(id: string, status: "draft" | "unpublished") {
-  return owned(async (sb) => (await setStatus(sb, id, status)).entry);
+  return owned(async (sb) => (await setStatus(sb, id, status)).entry, true);
 }
 
 // --- Images ---
@@ -68,19 +73,37 @@ export async function existingSlugsAction(slugs: string[]) {
 }
 
 export async function importEntryAction(item: ImportItem) {
-  return owned((sb) => importEntry(sb, item));
+  return owned((sb) => importEntry(sb, item), true);
 }
 
 // --- Pages SEO ---
 export async function savePageAction(id: string | null, input: PageInput) {
-  return owned((sb) => savePage(sb, id, input));
+  return owned((sb) => savePage(sb, id, input), true);
 }
 
 export async function deletePageAction(id: string) {
-  return owned((sb) => deletePage(sb, id));
+  return owned((sb) => deletePage(sb, id), true);
 }
 
 export async function importPagesAction(text: string) {
   if (text.length > 1_000_000) return { ok: false as const, error: "Fichier trop volumineux (1 Mo au plus)." };
-  return owned((sb) => importPages(sb, text));
+  return owned((sb) => importPages(sb, text), true);
+}
+
+// --- Publication ---
+export async function previewAction(id: string, hours = 24) {
+  return owned((sb) => createPreview(sb, id, hours));
+}
+
+export async function revokePreviewsAction(id: string) {
+  return owned((sb) => revokePreviews(sb, id));
+}
+
+/** « Réessayer » : les rafraîchissements en échec sont renvoyés tout de suite. */
+export async function retryRefreshAction() {
+  return owned(async (sb) => {
+    const { error } = await sb.rpc("cms_revalidation_retry");
+    if (error) throw new CrmError("Relance impossible.");
+    return flushRevalidations(sb);
+  });
 }

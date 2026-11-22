@@ -154,3 +154,18 @@ export async function importEntry(sb: SupabaseClient, item: ImportItem, type: Cm
   if (res.error?.code === "23505" && /cms_entries_slug_key/.test(res.error.message)) throw new CrmError(`Le slug « ${slug} » existe déjà : choisissez Remplacer ou Créer une copie.`);
   return { entry: check(res) as CmsEntry, mode: item.mode };
 }
+
+// ---------------------------------------------------------------------------
+// Aujourd'hui : publications du jour et des 7 prochains jours (Paris), rafraîchissements du site en échec
+// ---------------------------------------------------------------------------
+export type CmsTodayItem = Pick<CmsEntry, "id" | "title" | "slug" | "status" | "publish_at">;
+export type CmsFailure = { id: string; reasons: string[]; attempts: number; last_error: string | null; next_attempt_at: string; created_at: string };
+
+export async function cmsToday(sb: SupabaseClient, dayStartIso: string, in8DaysIso: string) {
+  const [pubs, fails] = await Promise.all([
+    sb.from("cms_entries").select("id, title, slug, status, publish_at").in("status", ["scheduled", "published"])
+      .gte("publish_at", dayStartIso).lt("publish_at", in8DaysIso).order("publish_at").limit(100),
+    sb.from("cms_revalidations").select("id, reasons, attempts, last_error, next_attempt_at, created_at").eq("status", "failed").order("created_at").limit(20),
+  ]);
+  return { publications: check(pubs) as CmsTodayItem[], failures: check(fails) as CmsFailure[] };
+}
