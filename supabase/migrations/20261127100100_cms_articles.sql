@@ -103,7 +103,7 @@ begin
   else
     new.content_updated_at := old.content_updated_at;
   end if;
-  if new.status = 'published' and new.publish_at is null then new.publish_at := now(); end if;
+  if new.status = 'published' and new.publish_at is null then new.publish_at := date_trunc('second', now()); end if;
   if new.first_published_at is null and cms_private.is_visible(new.status, new.publish_at) then
     new.first_published_at := new.publish_at;
   end if;
@@ -174,7 +174,7 @@ begin
     return jsonb_build_object('already', true, 'entry', to_jsonb(r));
   end if;
   update public.cms_entries set status = 'published',
-    publish_at = case when publish_at is null or publish_at > now() or status in ('draft', 'unpublished') then now() else publish_at end
+    publish_at = case when publish_at is null or publish_at > now() or status in ('draft', 'unpublished') then date_trunc('second', now()) else publish_at end
    where id = p_id returning * into r;
   return jsonb_build_object('already', false, 'entry', to_jsonb(r));
 end; $$;

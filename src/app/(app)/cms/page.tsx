@@ -1,6 +1,8 @@
 // CMS › Articles : liste filtrable par statut, création, import et export.
 import { requireAppOwner } from "@/lib/auth";
 import { listEntries, promoteDue } from "@/lib/cms/service";
+import { Download } from "lucide-react";
+import { ImportButton } from "@/components/cms/import-dialog";
 import { ArticlesView } from "./articles-view";
 
 export const dynamic = "force-dynamic";
@@ -9,5 +11,15 @@ export default async function CmsPage() {
   const { supabase } = await requireAppOwner();
   await promoteDue(supabase).catch(() => 0); // Programmé dont la date est passée → Publié (le site le voit déjà)
   const entries = await listEntries(supabase);
-  return <ArticlesView entries={entries} />;
+  const toolbar = (
+    <>
+      <ImportButton />
+      {entries.length > 0 && (
+        <a href="/api/cms/export" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-white px-3.5 text-sm font-semibold hover:border-violet" data-export-all>
+          <Download size={15} /> Exporter tout (.zip)
+        </a>
+      )}
+    </>
+  );
+  return <ArticlesView entries={entries} toolbar={toolbar} />;
 }

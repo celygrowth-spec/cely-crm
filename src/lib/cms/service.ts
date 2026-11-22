@@ -114,3 +114,43 @@ export async function promoteDue(sb: SupabaseClient): Promise<number> {
 }
 
 export type CmsDraftFields = CmsDraft;
+
+// ---------------------------------------------------------------------------
+// Import de fichiers Markdown (déjà lus par l'interface, images déjà dans le stockage)
+// ---------------------------------------------------------------------------
+export type ImportMode = "new" | "replace" | "copy";
+export type ImportItem = { id: string; mode: ImportMode; draft: DraftInput & { title: string; slug: string }; status: string; publish_at: string | null };
+
+const statusSchema = z.enum(["draft", "scheduled", "published", "unpublished"]);
+
+/** Contenus existants pour ces slugs (pour demander Remplacer ou Créer une copie). */
+export async function existingSlugs(sb: SupabaseClient, slugs: string[], type: CmsType = "article") {
+  if (!slugs.length) return [];
+  return check(await sb.from("cms_entries").select("id, slug, title").eq("type", type).in("slug", slugs.slice(0, 500))) as { id: string; slug: string; title: string }[];
+}
+
+export async function importEntry(sb: SupabaseClient, item: ImportItem, type: CmsType = "article"): Promise<{ entry: CmsEntry; mode: ImportMode }> {
+  if (!z.uuid().safeParse(item.id).success) throw new CrmError("Identifiant invalide");
+  const data = draftSchema.parse(item.draft);
+  let status = statusSchema.parse(item.status);
+  let publishAt = item.publish_at && Number.isFinite(Date.parse(item.publish_at)) ? new Date(item.publish_at).toISOString() : null;
+  if (status !== "draft" && status !== "unpublished" && !publishAt) status = "draft";
+
+  if (item.mode === "replace") {
+    const target = await getEntryBySlug(sb, data.slug!, type);
+    if (!target) throw new CrmError(`Aucun article « ${data.slug} » à remplacer.`);
+    const res = check(await sb.from("cms_entries").update({ ...data, status, publish_at: publishAt }).eq("id", target.id).select("*").single()) as CmsEntry;
+    return { entry: res, mode: "replace" };
+  }
+  const already = await getEntry(sb, item.id);
+  if (already) return { entry: already, mode: item.mode }; // réessai : rien n'est créé deux fois
+  let slug = data.slug!;
+  if (item.mode === "copy") {
+    slug = uniqueSlug(slug, await takenSlugs(sb, type));
+    status = "draft"; // une copie n'est jamais publiée d'office (contenu en double)
+    publishAt = null;
+  }
+  const res = await sb.from("cms_entries").insert({ ...data, id: item.id, type, slug, status, publish_at: publishAt }).select("*").single();
+  if (res.error?.code === "23505" && /cms_entries_slug_key/.test(res.error.message)) throw new CrmError(`Le slug « ${slug} » existe déjà : choisissez Remplacer ou Créer une copie.`);
+  return { entry: check(res) as CmsEntry, mode: item.mode };
+}

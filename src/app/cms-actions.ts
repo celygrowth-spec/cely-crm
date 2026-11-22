@@ -5,7 +5,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireAppOwner } from "@/lib/auth";
 import { CrmError } from "@/lib/crm/service";
-import { PastDateError, createEntry, publishNow, schedule, setStatus, updateEntry, type DraftInput } from "@/lib/cms/service";
+import { PastDateError, createEntry, existingSlugs, importEntry, publishNow, schedule, setStatus, updateEntry, type DraftInput, type ImportItem } from "@/lib/cms/service";
+import { confirmMediaUpload, deleteMedia, mediaUsage, startMediaUpload } from "@/lib/cms/media";
 import type { CmsEntry } from "@/lib/cms/types";
 
 export type CmsResult<T> = { ok: true; data: T } | { ok: false; error: string; code?: "past_date" };
@@ -41,4 +42,30 @@ export async function scheduleAction(id: string, at: string, confirmNow = false)
 
 export async function setStatusAction(id: string, status: "draft" | "unpublished") {
   return owned(async (sb) => (await setStatus(sb, id, status)).entry);
+}
+
+// --- Images ---
+export async function startMediaUploadAction(input: { name: string; size: number }) {
+  return owned((sb) => startMediaUpload(sb, input));
+}
+
+export async function confirmMediaUploadAction(id: string) {
+  return owned((sb) => confirmMediaUpload(sb, id));
+}
+
+export async function mediaUsageAction(path: string) {
+  return owned((sb) => mediaUsage(sb, path));
+}
+
+export async function deleteMediaAction(id: string, confirmed: boolean) {
+  return owned((sb) => deleteMedia(sb, id, confirmed));
+}
+
+// --- Import ---
+export async function existingSlugsAction(slugs: string[]) {
+  return owned((sb) => existingSlugs(sb, slugs));
+}
+
+export async function importEntryAction(item: ImportItem) {
+  return owned((sb) => importEntry(sb, item));
 }
