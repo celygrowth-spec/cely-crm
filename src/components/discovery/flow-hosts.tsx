@@ -10,8 +10,8 @@ import { portalApi, previewApi } from "./flow-api";
 const DiscoveryFlow = dynamic(() => import("./flow").then((m) => m.DiscoveryFlow), {
   ssr: false,
   loading: () => (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-[#f7f4ff]" aria-busy="true">
-      <span className="text-sm font-semibold text-violet-700">Chargement de ton onboarding…</span>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-white" aria-busy="true">
+      <span className="text-sm font-semibold text-muted">Chargement de ton onboarding…</span>
     </div>
   ),
 });

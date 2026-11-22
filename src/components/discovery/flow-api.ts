@@ -5,14 +5,15 @@ import type { DiscoveryView, StepStatus, TargetField } from "@/lib/discovery/typ
 import type { UploadTicket } from "./uploader";
 
 export type Res<T> = { ok: true; data: T } | { ok: false; error: string; network?: boolean };
-export type AnswerResult = { ok: true; rev: number } | { ok: false; conflict: true; value: string; rev: number; by: string | null; at: string };
+export type AnswerResult = { ok: true; rev: number } | { ok: false; conflict: true; value: string; unknown?: boolean; rev: number; by: string | null; at: string };
 export type TargetResult = { ok: true; rev: number } | { ok: false; conflict: true; rev: number };
 
 export type FlowApi = {
   preview: boolean;
   reload: () => Promise<Res<DiscoveryView>>;
   position: (screen: string) => Promise<Res<unknown>>;
-  answer: (key: string, value: string, rev: number) => Promise<Res<AnswerResult>>;
+  /** `unknown` : « Je ne sais pas » (la valeur envoyée est alors vide). */
+  answer: (key: string, value: string, rev: number, unknown: boolean) => Promise<Res<AnswerResult>>;
   step: (step: string, status: StepStatus | null) => Promise<Res<unknown>>;
   fileStart: (step: string, name: string, size: number, account: string | null) => Promise<Res<UploadTicket>>;
   fileResume: (fileId: string) => Promise<Res<UploadTicket>>;
@@ -45,7 +46,7 @@ export function portalApi(project: string): FlowApi {
     preview: false,
     reload: () => call({ op: "get", project }),
     position: (screen) => call({ op: "position", project, screen }),
-    answer: (key, value, rev) => call({ op: "answer", project, key, value, rev }),
+    answer: (key, value, rev, unknown) => call({ op: "answer", project, key, value, rev, unknown }),
     step: (step, status) => call({ op: "step", project, step, status }),
     fileStart: (step, name, size, account) => call({ op: "file_start", project, step, name, size, account }),
     fileResume: (file) => call({ op: "file_resume", file }),

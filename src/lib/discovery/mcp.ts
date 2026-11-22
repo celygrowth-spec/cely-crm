@@ -4,7 +4,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { OFFER_QUESTIONS, STEPS } from "./content";
 import { discoveryAdmin } from "./service";
-import { stepProgress } from "./types";
+import { stepProgress, unknownQuestions } from "./types";
+import { WEBSITE_KEY } from "./website";
 
 const LABELS: Record<string, string> = { not_started: "non commencé", in_progress: "en cours", complete: "complétée (pas encore envoyée)", sent: "envoyé" };
 
@@ -19,7 +20,10 @@ export async function discoveryForMcp(sb: SupabaseClient, projectId: string) {
     envoye_par: a.sent_by,
     modifie_apres_envoi_le: a.changed_after_send_at,
     etapes: Object.fromEntries(STEPS.filter((s) => s.key !== "welcome").map((s) => [s.key, { avancement: LABELS[stepProgress(a, s.key)], choix: a.steps[s.key]?.status ?? null }])),
-    reponses: OFFER_QUESTIONS.map((q) => ({ question: q.title, reponse: a.answers[q.key]?.value ?? null, par: a.answers[q.key]?.by ?? null, le: a.answers[q.key]?.at ?? null })),
+    // « Je ne sais pas » : question à compléter avec le client (réponse vide)
+    reponses: OFFER_QUESTIONS.map((q) => ({ question: q.title, reponse: a.answers[q.key]?.value || null, je_ne_sais_pas: !!a.answers[q.key]?.unknown, par: a.answers[q.key]?.by ?? null, le: a.answers[q.key]?.at ?? null })),
+    a_completer_avec_le_client: unknownQuestions(a).map((q) => q.title),
+    site_web: a.answers[WEBSITE_KEY]?.value || null,
     fichiers: a.files.map((f) => ({ etape: f.step, nom: f.name, taille_octets: f.size, compte_linkedin: f.account, depose_par: f.by, le: f.at })),
     cibles: a.targets.map((t) => ({
       position: t.position, nom: t.name, secteur: t.sector, taille: t.company_size, postes: t.roles, zone: t.geography, notes: t.notes,

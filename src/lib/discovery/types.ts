@@ -4,7 +4,8 @@ import { OFFER_QUESTIONS, STEPS, type StepKey } from "./content";
 export type StepStatus = "done" | "none" | "later";
 export type TargetField = "name" | "sector" | "company_size" | "roles" | "geography" | "notes";
 
-export type DiscoveryAnswer = { value: string; rev: number; by: string | null; mine: boolean | null; at: string };
+/** `unknown` : le client a coché « Je ne sais pas » (la valeur est alors vide). */
+export type DiscoveryAnswer = { value: string; unknown?: boolean; rev: number; by: string | null; mine: boolean | null; at: string };
 export type DiscoveryFile = { id: string; step: "blacklist" | "linkedin" | "documents"; name: string; size: number; account: string | null; by: string | null; mine: boolean | null; at: string };
 export type DiscoveryComment = { id: string; body: string; by: string | null; mine: boolean | null; at: string };
 export type DiscoveryTarget = Record<TargetField, string> & {
@@ -40,6 +41,9 @@ export type DiscoveryAdmin =
       enabled: boolean;
       enabled_source: "owner" | "sale";
       changed_after_send_at: string | null;
+      /** Fiche du client et son site : pour voir si le lien donné dans l'onboarding y figure. */
+      company_id?: string | null;
+      company_website?: string | null;
       sent_task_id: string | null;
       changes: DiscoveryChange[];
       contacts: { id: string; name: string | null; position: string | null; seen_at: string | null }[];
@@ -70,5 +74,8 @@ export function stepProgress(v: DiscoveryView, key: StepKey): StepProgress {
   if (stepComplete(v, key)) return v.sent_at ? "sent" : "complete";
   return stepStarted(v, key) ? "in_progress" : "not_started";
 }
+
+/** Questions où le client a coché « Je ne sais pas » : à compléter avec lui. */
+export const unknownQuestions = (v: Pick<DiscoveryView, "answers">) => OFFER_QUESTIONS.filter((q) => v.answers[q.key]?.unknown);
 
 export const CLIENT_STEPS = STEPS.filter((s) => s.key !== "welcome" && s.key !== "recap");
