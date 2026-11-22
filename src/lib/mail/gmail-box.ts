@@ -9,7 +9,7 @@ export type BoxErrorCode = "auth" | "scope" | "quota" | "expired" | "not_found" 
 
 /** Erreur classée : le message est celui affiché à l'utilisateur, jamais la réponse brute de Google. */
 export class GmailBoxError extends Error {
-  constructor(readonly code: BoxErrorCode, message: string, readonly status = 0) {
+  constructor(readonly code: BoxErrorCode, message: string, readonly status = 0, readonly retryAfterMs?: number) {
     super(message);
   }
 }
@@ -17,7 +17,7 @@ export class GmailBoxError extends Error {
 const MESSAGES: Record<BoxErrorCode, string> = {
   auth: "Google a refusé l'accès à la boîte. Reconnectez Gmail depuis la page Mail.",
   scope: "Gmail refuse cette opération : autorisation manquante. Reconnectez Gmail en acceptant toutes les autorisations demandées.",
-  quota: "Gmail limite temporairement les lectures. La synchronisation reprendra seule au prochain passage.",
+  quota: "Gmail limite temporairement les échanges avec ce compte. Réessayez dans une minute ; la synchronisation reprend seule.",
   expired: "L'historique Gmail a expiré : la boîte est relue en entier.",
   not_found: "Élément introuvable dans Gmail.",
   network: "Gmail est injoignable pour le moment. La synchronisation reprendra seule au prochain passage.",
@@ -25,7 +25,27 @@ const MESSAGES: Record<BoxErrorCode, string> = {
 
 const get = <T>(token: string, path: string) => call<T>(token, path);
 
+/**
+ * Rythme des appels. Gmail limite chaque compte à 250 unités par seconde (lire un message en coûte 5) : la lecture
+ * de la boîte reste nettement en dessous pour laisser de la marge aux actions de l'utilisateur, et un refus
+ * passager de Gmail est retenté après une courte attente avant d'être signalé.
+ */
+export const PACE = { retryMs: [1_000, 3_000], perSecond: 20 };
+const sleep = (ms: number) => (ms > 0 ? new Promise<void>((r) => setTimeout(r, ms)) : Promise.resolve());
+
 async function call<T>(token: string, path: string, payload?: unknown, method?: "DELETE"): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await once<T>(token, path, payload, method);
+    } catch (e) {
+      const wait = PACE.retryMs[attempt];
+      if (!(e instanceof GmailBoxError) || e.code !== "quota" || wait === undefined) throw e;
+      await sleep(Math.min(Math.max(wait, e.retryAfterMs ?? 0), 8_000));
+    }
+  }
+}
+
+async function once<T>(token: string, path: string, payload?: unknown, method?: "DELETE"): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${API}${path}`, {
@@ -47,7 +67,19 @@ async function call<T>(token: string, path: string, payload?: unknown, method?: 
     : res.status === 429 || /rateLimit|quota|RESOURCE_EXHAUSTED/i.test(reason) ? "quota"
     : res.status === 403 ? "scope"
     : "network";
-  throw new GmailBoxError(code, MESSAGES[code], res.status);
+  const retryAfter = Number(res.headers.get("retry-after"));
+  throw new GmailBoxError(code, MESSAGES[code], res.status, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : undefined);
+}
+
+/** Comme `pooled`, sans dépasser `PACE.perSecond` éléments par seconde (lecture de nombreux messages). */
+export async function paced<A, B>(items: A[], limit: number, fn: (a: A) => Promise<B>): Promise<B[]> {
+  const out: B[] = [];
+  for (let i = 0; i < items.length; i += PACE.perSecond) {
+    const started = Date.now();
+    out.push(...(await pooled(items.slice(i, i + PACE.perSecond), limit, fn)));
+    if (i + PACE.perSecond < items.length) await sleep(1_000 - (Date.now() - started));
+  }
+  return out;
 }
 
 /** Exécute `fn` sur chaque élément avec au plus `limit` appels en parallèle (quota Gmail par utilisateur). */

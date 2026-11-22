@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { serverRpcKey, serverRpcKeyHash } from "@/lib/appointments/secrets";
 import { syncMailbox } from "@/lib/mail/box-sync";
-import { parseAddresses, toBoxMessage } from "@/lib/mail/gmail-box";
+import { PACE, paced, parseAddresses, toBoxMessage } from "@/lib/mail/gmail-box";
 import { GMAIL_READ_SCOPE, GMAIL_SEND_SCOPE } from "@/lib/mail/google";
 import { createDb, type Db } from "./harness";
 
@@ -118,6 +118,8 @@ beforeEach(async () => {
   failNext = null;
   pageSize = 100;
   historyPage = 100;
+  PACE.retryMs = [0, 0]; // pas d'attente réelle dans les tests
+  PACE.perSecond = 20;
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => gmail(input)));
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -291,10 +293,47 @@ describe("échecs : message clair, repères conservés, reprise", () => {
     expect((await state()).last_error).toBeNull();
   });
 
-  test("quota Gmail atteint", async () => {
-    failNext = () => json({ error: { code: 403, errors: [{ reason: "userRateLimitExceeded" }] } }, 403);
+  test("quota Gmail atteint durablement : signalé après deux nouveaux essais, repères conservés", async () => {
+    const h = await before();
+    add({ id: "m2" });
+    let n = 0;
+    failNext = (u) => (u.pathname.endsWith("/history") ? (n++, json({ error: { code: 403, errors: [{ reason: "userRateLimitExceeded" }] } }, 403)) : null);
     await expect(sync()).rejects.toThrow(/limite temporairement/);
-    expect((await state()).error_code).toBe("quota");
+    expect(n).toBe(3);
+    expect(await state()).toMatchObject({ error_code: "quota", history_id: h });
+  });
+
+  test("Gmail freine un instant (429) : l'appel est retenté, rien n'est signalé", async () => {
+    add({ id: "m2" });
+    let n = 0;
+    failNext = (u) => (u.pathname.includes("/messages/") && ++n <= 2 ? json({ error: { code: 429 } }, 429) : null);
+    expect(await sync()).toMatchObject({ ajoutes_ou_modifies: 1 });
+    expect(await state()).toMatchObject({ error_code: null, last_error: null });
+    expect(await count("mailbox_messages")).toBe(2);
+  });
+
+  test("Gmail freine pendant la première lecture : pas d'erreur affichée, la lecture continue au passage suivant", async () => {
+    for (let i = 0; i < 6; i++) add({ id: `n${i}` });
+    oldestHistory = historyId + 1; // force une relecture complète
+    historyId += 10;
+    pageSize = 3;
+    let lists = 0;
+    failNext = (u) => (u.pathname.endsWith("/messages") && ++lists >= 2 ? json({ error: { code: 429 } }, 429) : null);
+    const r = await sync();
+    expect(r).toMatchObject({ mode: "initiale", lecture_complete_terminee: false, a_suivre: true });
+    expect(await state()).toMatchObject({ error_code: null, last_error: null, backfill_token: "3", locked_until: null });
+    failNext = null;
+    expect(await sync()).toMatchObject({ lecture_complete_terminee: true });
+    expect(await count("mailbox_messages")).toBe(7);
+  });
+
+  test("débit borné : pas plus de messages lus par seconde que la limite fixée", async () => {
+    PACE.perSecond = 2;
+    let live = 0, peak = 0;
+    const t0 = Date.now();
+    await paced([1, 2, 3, 4, 5], 5, async () => { peak = Math.max(peak, ++live); await new Promise((r) => setTimeout(r, 10)); live--; });
+    expect(peak).toBeLessThanOrEqual(2);
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(1900); // 5 éléments à 2 par seconde : trois tranches
   });
 
   test("autorisation de lecture retirée chez Google, ou jamais accordée", async () => {

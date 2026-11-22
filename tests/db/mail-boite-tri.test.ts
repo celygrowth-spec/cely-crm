@@ -27,6 +27,7 @@ import { runBoxAction } from "@/lib/mail/box";
 import { syncMailbox } from "@/lib/mail/box-sync";
 import { applyBoxAction, inFolder } from "@/lib/mail/box-types";
 import { encryptSecret } from "@/lib/mail/crypto";
+import { PACE } from "@/lib/mail/gmail-box";
 import { GMAIL_MODIFY_SCOPE, GMAIL_READ_SCOPE, GMAIL_SEND_SCOPE } from "@/lib/mail/google";
 
 let account: string;
@@ -115,6 +116,7 @@ beforeEach(async () => {
   history = [];
   writes = [];
   fail = null;
+  PACE.retryMs = [0, 0]; // pas d'attente réelle dans les tests
   vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => gmail(input, init)));
   await syncMailbox(server, { id: account, scopes: [GMAIL_MODIFY_SCOPE] }, "acces-fictif");
   writes = [];

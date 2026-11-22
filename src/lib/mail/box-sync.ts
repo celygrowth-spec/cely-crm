@@ -8,7 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { rpc } from "@/lib/appointments/server";
 import { serverRpcKey } from "@/lib/appointments/secrets";
 import { GMAIL_MODIFY_SCOPE, GMAIL_READ_SCOPE } from "./google";
-import { GmailBoxError, getBoxMessage, listChanges, listLabels, listMessageIds, pooled, profileHistoryId, type BoxMessage } from "./gmail-box";
+import { GmailBoxError, getBoxMessage, listChanges, listLabels, listMessageIds, paced, profileHistoryId, type BoxMessage } from "./gmail-box";
 
 export const canModifyBox = (scopes: string[]) => scopes.includes(GMAIL_MODIFY_SCOPE) || scopes.includes("https://mail.google.com/");
 export const canReadBox = (scopes: string[]) => scopes.includes(GMAIL_READ_SCOPE) || scopes.includes(GMAIL_MODIFY_SCOPE) || scopes.includes("https://mail.google.com/");
@@ -21,7 +21,7 @@ export type BoxSyncResult =
   | { mode: "initiale" | "incrementale"; ajoutes_ou_modifies: number; supprimes: number; lecture_complete_terminee: boolean; a_suivre: boolean };
 
 const PAGE = 100; // messages par lot de relecture
-const PARALLEL = 10; // lectures simultanées : sous le quota Gmail par utilisateur
+const PARALLEL = 5; // lectures simultanées ; le débit, lui, est borné par `paced` (quota Gmail par compte)
 
 /**
  * Un passage, borné dans le temps (`budgetMs`). Sans erreur : l'index reflète Gmail jusqu'au repère enregistré.
@@ -53,7 +53,7 @@ export async function syncMailbox(sb: SupabaseClient, account: { id: string; sco
   const fetchAll = async (ids: string[]) => {
     const found: BoxMessage[] = [];
     const gone: string[] = [];
-    (await pooled(ids, PARALLEL, (id) => getBoxMessage(token, id))).forEach((m, i) => (m ? found.push(m) : gone.push(ids[i])));
+    (await paced(ids, PARALLEL, (id) => getBoxMessage(token, id))).forEach((m, i) => (m ? found.push(m) : gone.push(ids[i])));
     return { found, gone };
   };
 
@@ -95,11 +95,18 @@ export async function syncMailbox(sb: SupabaseClient, account: { id: string; sco
     await apply({ labels: await listLabels(token) });
 
     while (!state.backfill_done && timeLeft()) {
-      const page = await listMessageIds(token, state.backfill_token, PAGE);
-      const { found } = await fetchAll(page.ids);
-      await apply({ upserts: found, backfill: { token: page.next, done: !page.next } });
-      state.backfill_token = page.next;
-      state.backfill_done = !page.next;
+      try {
+        const page = await listMessageIds(token, state.backfill_token, PAGE);
+        const { found } = await fetchAll(page.ids);
+        await apply({ upserts: found, backfill: { token: page.next, done: !page.next } });
+        state.backfill_token = page.next;
+        state.backfill_done = !page.next;
+      } catch (e) {
+        // Gmail freine la relecture : ce n'est pas une panne, les lots déjà lus sont enregistrés et le passage
+        // suivant continue au même endroit
+        if (e instanceof GmailBoxError && e.code === "quota") break;
+        throw e;
+      }
     }
 
     await call("mailbox_sync_release");

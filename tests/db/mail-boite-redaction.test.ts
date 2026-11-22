@@ -25,6 +25,7 @@ vi.mock("@/lib/appointments/server", async (original) => ({ ...(await original<t
 import { serverRpcKey, serverRpcKeyHash } from "@/lib/appointments/secrets";
 import { composeContext, discardComposeDraft, loadComposeDraft, saveComposeDraft, sendComposeDraft } from "@/lib/mail/box-compose";
 import { encryptSecret } from "@/lib/mail/crypto";
+import { PACE } from "@/lib/mail/gmail-box";
 import { GMAIL_MODIFY_SCOPE, GMAIL_READ_SCOPE, GMAIL_SEND_SCOPE } from "@/lib/mail/google";
 
 // --- Gmail simulé : brouillons, envoi, réglages -----------------------------------------------------------------
@@ -138,6 +139,7 @@ beforeEach(async () => {
   sent = [];
   seq = 0;
   fail = null;
+  PACE.retryMs = [0, 0]; // pas d'attente réelle dans les tests
   sendAs = { sendAs: [{ sendAsEmail: "moi@example.test", displayName: "Moi (Gmail)", signature: "<div><b>Moi</b><br>Cely Growth<script>x()</script></div>", isPrimary: true }] };
   received = new Map([["recu1", { headers: [{ name: "From", value: "claire@example.test" }, { name: "Subject", value: "Plan" }], parts: [{ filename: "plan.pdf", mimeType: "application/pdf", body: { attachmentId: "a1", size: 4 } }], blobs: { a1: Buffer.from("PLAN") } }]]);
   vi.stubGlobal("fetch", vi.fn((input: string | URL | Request, init?: RequestInit) => gmail(input, init)));
