@@ -120,13 +120,15 @@ describe("accès", () => {
   });
 
   test("limite d'abus par adresse ; les refus de clé sont comptés à part", async () => {
+    // compteurs préremplis pour la minute en cours et la suivante : le test ne dépend pas d'un changement de minute
+    await db.exec("reset role");
+    for (const [bucket, n] of [["cms:ip-bavarde", 600], ["cms-denied:ip-qui-devine", 20]] as const) {
+      await db.query(`insert into site_rate (bucket, minute, n) select $1, m, $2 from (values (date_trunc('minute', now())), (date_trunc('minute', now()) + interval '1 minute')) v(m)`, [bucket, n]);
+    }
     await db.as("anon");
-    let last: R = {};
-    for (let i = 0; i < 601; i++) last = await read("pages", {}, "ip-bavarde");
-    expect(last).toEqual({ error: "rate_limited" });
+    expect(await read("pages", {}, "ip-bavarde")).toEqual({ error: "rate_limited" }); // 601e appel de la minute
     expect(await read("pages", {}, "autre-ip")).toEqual({ pages: [] });
-    let denied = true;
-    for (let i = 0; i < 21; i++) denied = await db.rpc<boolean>("cms_site_denied", { p_server_key: KEY, p_rate: "ip-qui-devine" });
-    expect(denied).toBe(false);
+    expect(await db.rpc<boolean>("cms_site_denied", { p_server_key: KEY, p_rate: "ip-qui-devine" })).toBe(false); // 21e refus
+    expect(await db.rpc<boolean>("cms_site_denied", { p_server_key: KEY, p_rate: "autre-ip" })).toBe(true);
   });
 });

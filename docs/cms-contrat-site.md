@@ -75,7 +75,7 @@ Avec le cache décrit plus bas, le site en reste très loin.
   "cover_image": { "url": "https://….supabase.co/storage/v1/object/public/cms-media/….png", "alt": "Texte alternatif" },
   "category": "Prospection",
   "tags": ["relance", "email"],
-  "author": "Célien",
+  "author": "Cely Growth",
   "keywords": ["relance prospect", "relance email"],
   "seo": {
     "title": "Relancer un prospect : la méthode",
