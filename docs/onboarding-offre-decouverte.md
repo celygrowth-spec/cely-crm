@@ -11,6 +11,7 @@ tout ce qu'il faut pour lancer le test ; tout arrive rangé dans le CRM.
   commencé, en cours, envoyé), réponses, fichiers (liens de 60 s), 3 cibles à préparer, commentaires, changements
   après l'envoi (avant / après), contacts et dernier écran vu, **Copier le lien**, **Voir comme le client**.
 - **Réglage** (même panneau) : adresse à inviter dans lemlist, commune à tous les clients.
+  Tant qu'il est vide, le client voit l'adresse par défaut (`LEMLIST_INVITE_DEFAULT` dans `content.ts`).
 - Modifier une cible validée par le client retire sa validation : il voit « Modifiée depuis ta validation ».
 - Fichiers déposés : documents de la fiche (`company_files`) et dossier **interne** « Onboarding offre découverte »
   du projet. Ils ne sont jamais visibles dans l'onglet Fichiers du portail.

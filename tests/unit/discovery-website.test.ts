@@ -2,7 +2,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { LEMLIST_TUTO, LINKEDIN_TUTO, OFFER_QUESTIONS, WEBSITE_FIELD } from "@/lib/discovery/content";
+import { LEMLIST_INVITE_DEFAULT, LEMLIST_TUTO, LINKEDIN_TUTO, OFFER_QUESTIONS, WEBSITE_FIELD } from "@/lib/discovery/content";
 import { unknownQuestions, type DiscoveryView } from "@/lib/discovery/types";
 import { WEBSITE_KEY, normalizeWebsite } from "@/lib/discovery/website";
 
@@ -56,6 +56,9 @@ describe("tutos", () => {
       expect(s.image, s.title).toMatch(/^\/onboarding\/lemlist-\d-[a-z]+\.png$/);
       expect(existsSync(join(__dirname, "..", "..", "public", s.image!)), s.image).toBe(true);
     }
+  });
+  test("lemlist : une adresse à inviter est toujours affichée (adresse par défaut tant que le réglage est vide)", () => {
+    expect(LEMLIST_INVITE_DEFAULT).toBe("celygrowth@gmail.com");
   });
   test("LinkedIn : chaque étape garde la légende de la capture à faire", () => {
     for (const s of LINKEDIN_TUTO) expect(s.capture.length).toBeGreaterThan(20);

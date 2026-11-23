@@ -151,6 +151,8 @@ export const LEMLIST_TUTO: TutoStep[] = [
   },
 ];
 export const LEMLIST_URL = "https://app.lemlist.com";
+/** Adresse à inviter dans lemlist, affichée tant que le réglage du panneau de suivi est vide (le réglage l'emporte). */
+export const LEMLIST_INVITE_DEFAULT = "celygrowth@gmail.com";
 
 /**
  * Étape 4 — archive LinkedIn. Vérifié le 18/11/2026 dans l'aide LinkedIn « Download your account data »

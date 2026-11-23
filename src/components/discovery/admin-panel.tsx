@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Copy, Download, Eye, FileText, HelpCircle, Users } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Input, Skeleton } from "@/components/ui";
 import { formatBytes } from "@/lib/crm/file-rules";
-import { OFFER_QUESTIONS, STEPS, UNKNOWN, type StepKey } from "@/lib/discovery/content";
+import { LEMLIST_INVITE_DEFAULT, OFFER_QUESTIONS, STEPS, UNKNOWN, type StepKey } from "@/lib/discovery/content";
 import { stepProgress, unknownQuestions, type DiscoveryAdmin, type DiscoveryChange, type DiscoveryView, type StepProgress } from "@/lib/discovery/types";
 import { WEBSITE_KEY } from "@/lib/discovery/website";
 import { normDomain } from "@/lib/crm/normalize";
@@ -258,7 +258,7 @@ function SettingsCard({ projectId, value }: { projectId: string; value: string |
       <h3 className="font-display text-base font-bold">Réglage</h3>
       <label className="block text-xs font-semibold text-muted" htmlFor="lemlist-invite">Adresse à inviter dans lemlist (tous les clients)</label>
       <Input id="lemlist-invite" type="email" value={email} maxLength={254} onChange={(e) => setEmail(e.target.value)} placeholder="prenom@votre-domaine.fr" />
-      {!value && <p className="text-xs text-warning">Non renseignée : le client verra « Célien te communiquera l&apos;adresse ».</p>}
+      {!value && <p className="text-xs text-muted">Non renseignée : le client voit l&apos;adresse par défaut, {LEMLIST_INVITE_DEFAULT}.</p>}
       <Button disabled={busy || email.trim() === (value ?? "")} onClick={save}>{busy ? "Enregistrement…" : "Enregistrer"}</Button>
     </Card>
   );
