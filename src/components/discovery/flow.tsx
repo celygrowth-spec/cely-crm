@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Clock, Copy, CornerDownLeft, ExternalLink, ImageIcon, MessageSquare, Plus, X } from "lucide-react";
 import {
-  AFTER_SEND, BLACKLIST_HELP, DOCUMENTS_HELP, LEMLIST_TUTO, LEMLIST_URL, LINKEDIN_EXPORT_URL, LINKEDIN_TUTO, MASCOT_LINES, OFFER, OFFER_QUESTIONS,
+  AFTER_SEND, BLACKLIST_HELP, DOCUMENTS_HELP, LEMLIST_INVITE_DEFAULT, LEMLIST_TUTO, LEMLIST_URL, LINKEDIN_EXPORT_URL, LINKEDIN_TUTO, MASCOT_LINES, OFFER, OFFER_QUESTIONS,
   OWNER_FIRST_NAME, STEPS, TARGET_FIELDS, TIMELINE, UNKNOWN, WEBSITE_FIELD, type StepKey, type TutoStep,
 } from "@/lib/discovery/content";
 import { stepComplete, targetHandled, type DiscoveryTarget, type DiscoveryView, type StepStatus, type TargetField } from "@/lib/discovery/types";
@@ -574,7 +574,7 @@ function Tuto({ steps, alt, slots = false }: { steps: TutoStep[]; alt: string; s
 }
 
 function Lemlist({ view, readOnly, setPrimary, onDone }: { view: DiscoveryView; readOnly: boolean; setPrimary: SetPrimary; onDone: () => Promise<void> }) {
-  const email = view.settings.lemlist_invite_email;
+  const email = view.settings.lemlist_invite_email || LEMLIST_INVITE_DEFAULT;
   const done = view.steps.lemlist?.status === "done";
   const [copied, setCopied] = useState(false);
   const { run } = useOnce(onDone);
@@ -590,14 +590,12 @@ function Lemlist({ view, readOnly, setPrimary, onDone }: { view: DiscoveryView; 
       <Tuto steps={LEMLIST_TUTO} alt="lemlist" slots />
       <div className="rounded-lg border border-line p-4">
         <p className="text-sm font-semibold">L&apos;adresse à inviter</p>
-        {email ? (
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
             <code className="rounded-lg bg-surface px-3 py-2 text-base font-semibold break-all" data-invite-email>{email}</code>
             <button type="button" onClick={() => navigator.clipboard.writeText(email).then(() => setCopied(true), () => undefined)} className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm font-semibold text-violet-strong hover:underline">
               {copied ? <><Check size={14} aria-hidden /> Copiée</> : <><Copy size={14} aria-hidden /> Copier</>}
             </button>
-          </div>
-        ) : <p className="mt-1 text-sm text-muted">{OWNER_FIRST_NAME} te communiquera l&apos;adresse à inviter.</p>}
+        </div>
       </div>
       <Actions>
         <Primary onClick={run} disabled={readOnly} data-lemlist-done>{done ? <><CheckCircle2 size={18} aria-hidden /> C&apos;est fait (confirmé)</> : <>C&apos;est fait <Check size={18} aria-hidden /></>}</Primary>
