@@ -5,11 +5,13 @@
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Copy, Download, Eye, FileText, Users } from "lucide-react";
+import { Copy, Download, Eye, FileText, HelpCircle, Users } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Input, Skeleton } from "@/components/ui";
 import { formatBytes } from "@/lib/crm/file-rules";
-import { OFFER_QUESTIONS, STEPS, type StepKey } from "@/lib/discovery/content";
-import { stepProgress, type DiscoveryAdmin, type DiscoveryChange, type DiscoveryView, type StepProgress } from "@/lib/discovery/types";
+import { OFFER_QUESTIONS, STEPS, UNKNOWN, type StepKey } from "@/lib/discovery/content";
+import { stepProgress, unknownQuestions, type DiscoveryAdmin, type DiscoveryChange, type DiscoveryView, type StepProgress } from "@/lib/discovery/types";
+import { WEBSITE_KEY } from "@/lib/discovery/website";
+import { normDomain } from "@/lib/crm/normalize";
 import { discoveryOp, portalOnboardingPath, useDiscoveryAdmin, useRefreshDiscovery } from "./admin-client";
 import { TargetsEditor } from "./targets-editor";
 
@@ -43,6 +45,9 @@ function Panel({ projectId, a }: { projectId: string; a: Extract<DiscoveryAdmin,
   const refresh = useRefreshDiscovery(projectId);
   const link = typeof window === "undefined" ? portalOnboardingPath(projectId) : `${window.location.origin}${portalOnboardingPath(projectId)}`;
   const state = a.sent_at ? "Envoyé" : a.started_at ? "En cours" : "Non commencé";
+  const toComplete = unknownQuestions(a);
+  const site = a.answers[WEBSITE_KEY]?.value || null;
+  const siteOnRecord = !!site && normDomain(site) === normDomain(a.company_website);
   return (
     <div className="grid max-w-6xl gap-4 lg:grid-cols-[minmax(0,1fr)_320px]" data-discovery-panel>
       <div className="min-w-0 space-y-4">
@@ -65,6 +70,15 @@ function Panel({ projectId, a }: { projectId: string; a: Extract<DiscoveryAdmin,
             <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm" data-discovery-changed>
               <strong>Modifié après l&apos;envoi</strong> (dernière modification le {dt(a.changed_after_send_at)}) : voir « Changements depuis l&apos;envoi ».
             </p>
+          )}
+          {toComplete.length > 0 && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm" data-discovery-to-complete>
+              <p className="flex items-center gap-1.5 font-semibold text-warning"><HelpCircle size={15} aria-hidden /> {UNKNOWN.crm} ({toComplete.length})</p>
+              <p className="mt-0.5 text-xs text-muted">Le client a coché « {UNKNOWN.label} » : à lui demander de vive voix.</p>
+              <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
+                {toComplete.map((qq) => <li key={qq.key}>{qq.title}</li>)}
+              </ul>
+            </div>
           )}
           <ol className="mt-4 grid gap-2 sm:grid-cols-2" data-discovery-steps>
             {STEPS.filter((s) => s.key !== "welcome").map((s, i) => {
@@ -90,13 +104,29 @@ function Panel({ projectId, a }: { projectId: string; a: Extract<DiscoveryAdmin,
               return (
                 <div key={qq.key}>
                   <dt className="text-xs font-semibold text-muted">{qq.title}</dt>
-                  <dd className="mt-0.5 whitespace-pre-wrap text-sm">{ans?.value ? ans.value : <span className="text-muted italic">Pas encore de réponse</span>}</dd>
-                  {ans?.value && <dd className="text-[11px] text-muted">{ans.by ?? "Client"} · {dt(ans.at)}</dd>}
+                  <dd className="mt-0.5 whitespace-pre-wrap text-sm" data-answer={qq.key} data-unknown={ans?.unknown ? "" : undefined}>
+                    {ans?.value ? ans.value
+                      : ans?.unknown ? <Badge tone="warning"><HelpCircle size={11} aria-hidden /> {UNKNOWN.crm}</Badge>
+                      : <span className="text-muted italic">Pas encore de réponse</span>}
+                  </dd>
+                  {ans && (ans.value || ans.unknown) && <dd className="text-[11px] text-muted">{ans.unknown && !ans.value ? `« ${UNKNOWN.label} » coché par ${ans.by ?? "le client"}` : ans.by ?? "Client"} · {dt(ans.at)}</dd>}
                 </div>
               );
             })}
           </dl>
-          <p className="mt-3 border-t border-line pt-3 text-sm">
+          <p className="mt-3 border-t border-line pt-3 text-sm" data-discovery-website>
+            <strong>Site du client :</strong>{" "}
+            {site ? (
+              <>
+                <a href={site} target="_blank" rel="noopener noreferrer" className="font-semibold text-violet-strong hover:underline">{site}</a>
+                <span className="block text-xs text-muted">
+                  {siteOnRecord ? "Présent sur la fiche de l'entreprise." : a.company_website ? `Non recopié : la fiche indique déjà ${a.company_website}.` : "Pas encore sur la fiche."}
+                  {a.company_id && <> <Link href={`/fiches/${a.company_id}`} className="font-semibold text-violet-strong hover:underline">Ouvrir la fiche</Link></>}
+                </span>
+              </>
+            ) : <span className="text-muted">non renseigné</span>}
+          </p>
+          <p className="mt-2 text-sm">
             <strong>lemlist :</strong> {a.steps.lemlist?.status === "done" ? <>invitation confirmée par {a.steps.lemlist.by ?? "le client"} ({dt(a.steps.lemlist.at)})</> : <span className="text-muted">pas encore confirmée</span>}
           </p>
         </Card>
@@ -181,6 +211,7 @@ function FilesCard({ projectId, a }: { projectId: string; a: DiscoveryView }) {
 
 const CHANGE_LABELS: Record<string, string> = Object.fromEntries([
   ...OFFER_QUESTIONS.map((q) => [q.key, q.title]),
+  [WEBSITE_KEY, "Lien du site"],
   ...STEPS.map((s) => [s.key, s.title]),
 ]);
 const VALUE_LABELS: Record<string, string> = { done: "fait", none: "sans objet", later: "plus tard" };

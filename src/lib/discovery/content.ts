@@ -3,8 +3,8 @@
 // enregistré en base ; ne pas la changer pour une question qui a déjà des réponses).
 //
 // Captures d'écran des tutos : déposer les images dans public/onboarding/ et renseigner `image` sur l'étape
-// (ex. "/onboarding/lemlist-1.png"). Tant que `image` est vide, un emplacement réservé s'affiche.
-// `review: true` = étape à relire (non vérifiée dans la documentation officielle au moment de l'écriture).
+// (ex. "/onboarding/lemlist-1-connexion.png"). Sans `image`, un emplacement réservé affiche la légende `capture`
+// (la capture exacte à faire). `review: true` = étape à relire (non vérifiée dans la documentation officielle).
 
 export const OWNER_FIRST_NAME = "Célien";
 
@@ -32,6 +32,22 @@ export const STEPS: { key: StepKey; title: string; short: string; optional?: boo
 ];
 
 export type Question = { key: string; title: string; help: string; placeholder: string; example?: string; optional?: boolean; multiline?: boolean };
+
+/** Case proposée sous chaque question : cochée, le client passe à la suite et la question ressort dans mon panneau. */
+export const UNKNOWN = {
+  label: "Je ne sais pas",
+  hint: "Pas de souci : on complétera ensemble.",
+  /** Libellé côté CRM (panneau de suivi, connecteur Claude). */
+  crm: "À compléter avec le client",
+  needed: "Écris ta réponse, ou coche « Je ne sais pas » pour passer à la suite.",
+} as const;
+
+/** Champ facultatif affiché sous la question 4 (clé `recent_clients`). Le lien arrive sur la fiche entreprise. */
+export const WEBSITE_FIELD = {
+  question: "recent_clients",
+  label: "Lien de votre site (si vous en avez un)",
+  placeholder: "https://www.exemple.fr",
+} as const;
 
 /** Étape 1. Ces réponses servent à écrire des messages personnalisés : ton, preuves, angle, interdits. */
 export const OFFER_QUESTIONS: Question[] = [
@@ -87,31 +103,51 @@ export const OFFER_QUESTIONS: Question[] = [
   },
 ];
 
-export type TutoStep = { title: string; body: string; image?: string; review?: boolean };
+/**
+ * Étape d'un tuto. `image` : capture affichée (fichier dans public/onboarding/). `capture` : légende exacte de la
+ * capture attendue ; sans `image`, c'est elle qui s'affiche dans l'emplacement réservé. `source` : d'où vient le visuel.
+ */
+export type TutoStep = { title: string; body: string; image?: string; capture: string; source?: string; review?: boolean };
 
 /**
- * Étape 2 — lemlist. Étapes 2 à 4 vérifiées le 18/11/2026 dans le centre d'aide lemlist :
- * help.lemlist.com/en/articles/8548092 (Manage agency roles and permissions) et 4452805 (Manage team members).
- * Étape 1 (inscription) et le choix « utilisateur payant / gratuit » : à relire.
+ * Étape 2 — lemlist. Procédure et captures vérifiées le 22/11/2026 dans le centre d'aide officiel de lemlist :
+ *  - « Manage agency roles and permissions » (help.lemlist.com/en/articles/8548092) : profil en bas à gauche ›
+ *    Settings › Team settings › Billing & Users › onglet Users › Invite user › email › « Add as paying user » ou
+ *    « Add as free user » › Invite. Captures des étapes 2, 3 et 4.
+ *  - « Manage team members (add or remove) » (help.lemlist.com/en/articles/4452805) : un utilisateur payant occupe
+ *    une place de l'abonnement ; un utilisateur gratuit accède à lemlist mais ne peut pas envoyer de campagnes.
+ *  - « Use SSO in lemlist (Google/Microsoft)… » (help.lemlist.com/en/articles/13285392) : inscription avec Google,
+ *    Microsoft ou email et mot de passe. Capture de l'étape 1.
+ * Les libellés entre guillemets sont ceux de l'interface lemlist (en anglais).
  */
 export const LEMLIST_TUTO: TutoStep[] = [
   {
     title: "Crée ton compte lemlist",
-    body: "Va sur app.lemlist.com et inscris-toi avec ton adresse professionnelle. Une fois connecté, tu arrives sur ton tableau de bord.",
-    review: true,
+    body: "Ouvre app.lemlist.com et clique sur « Create account for free ». Inscris-toi avec ton adresse professionnelle : « Google », « Microsoft », ou email et mot de passe. Tu as déjà un compte ? Connecte-toi simplement.",
+    image: "/onboarding/lemlist-1-connexion.png",
+    capture: "Page de connexion de lemlist, avec les boutons « Google » et « Microsoft » et le lien « Create account for free »",
+    source: "https://help.lemlist.com/en/articles/13285392-use-sso-in-lemlist-google-microsoft-and-switch-back-to-password-login",
   },
   {
     title: "Ouvre les réglages",
-    body: "Clique sur ta photo de profil en bas à gauche, puis sur « Settings ».",
+    body: "Une fois connecté, clique sur ton nom, tout en bas à gauche de l'écran, puis sur « Settings ».",
+    image: "/onboarding/lemlist-2-settings.png",
+    capture: "Menu du profil ouvert en bas à gauche de lemlist, entrée « Settings » encadrée",
+    source: "https://help.lemlist.com/en/articles/8548092-manage-agency-roles-and-permissions",
   },
   {
-    title: "Va dans « Billing & Users › Users »",
-    body: "Dans les réglages de l'équipe, ouvre « Billing & Users », puis l'onglet « Users », et clique sur « Invite user ».",
+    title: "Va dans « Billing & Users », onglet « Users »",
+    body: "Dans la colonne de gauche, sous « Team settings », clique sur « Billing & Users ». Ouvre l'onglet « Users » en haut, puis clique sur le bouton « Invite user » à droite.",
+    image: "/onboarding/lemlist-3-users.png",
+    capture: "Réglages lemlist : « Billing & Users » dans la colonne de gauche, onglet « Users » et bouton « Invite user » encadrés",
+    source: "https://help.lemlist.com/en/articles/8548092-manage-agency-roles-and-permissions",
   },
   {
     title: "Invite-moi",
-    body: "Colle l'adresse ci-dessous, choisis « Add as paying user » pour que je puisse lancer les campagnes depuis ton compte, puis clique sur « Invite ». Si tu as un doute sur l'abonnement, choisis « free user » : on ajuste ensemble.",
-    review: true,
+    body: "Dans la fenêtre « Invite co-workers to your team », colle l'adresse ci-dessous dans « Email », puis choisis « Add as paying user » : c'est ce qui me permet de lancer les campagnes (une place de ton abonnement lemlist). Avec « Add as free user », je vois ton espace mais je ne peux rien envoyer. Termine avec « Invite ». Un doute sur l'abonnement ? Choisis « free user », on ajuste ensemble.",
+    image: "/onboarding/lemlist-4-invitation.png",
+    capture: "Fenêtre « Invite co-workers to your team » : champ « Email », choix « Add as paying user » / « Add as free user », bouton « Invite »",
+    source: "https://help.lemlist.com/en/articles/8548092-manage-agency-roles-and-permissions",
   },
 ];
 export const LEMLIST_URL = "https://app.lemlist.com";
@@ -126,20 +162,24 @@ export const LINKEDIN_TUTO: TutoStep[] = [
   {
     title: "Sur ordinateur, ouvre la page « Télécharger vos données »",
     body: "Le plus simple : le bouton ci-dessous. Sinon : ta photo « Vous » en haut de LinkedIn › « Préférences et confidentialité » › « Confidentialité des données » › « Télécharger vos données ». Pas possible depuis l'application mobile.",
+    capture: "LinkedIn sur ordinateur : menu « Vous » › « Préférences et confidentialité » › « Confidentialité des données » › « Télécharger vos données »",
     review: true,
   },
   {
     title: "Choisis l'archive complète",
     body: "Sélectionne la première option, le téléchargement le plus volumineux (connexions, messages et le reste), puis « Demander l'archive ». LinkedIn peut te redemander ton mot de passe.",
+    capture: "Page LinkedIn « Télécharger vos données » : première option (archive complète) sélectionnée et bouton « Demander l'archive »",
     review: true,
   },
   {
     title: "Attends l'email de LinkedIn (jusqu'à 24 h)",
     body: "L'archive complète arrive par email, souvent plus vite, mais LinkedIn annonce jusqu'à 24 h. Le lien de téléchargement n'est valable que 72 h : télécharge-la dès réception.",
+    capture: "Email de LinkedIn annonçant que l'archive est prête, avec le lien de téléchargement",
   },
   {
     title: "Dépose le fichier ZIP ici",
     body: "Ne le décompresse pas : dépose le .zip tel quel. Si plusieurs personnes de ton équipe prospectent, ajoute une archive par compte.",
+    capture: "Fichier ZIP de l'archive LinkedIn dans le dossier Téléchargements, non décompressé",
   },
 ];
 export const LINKEDIN_EXPORT_URL = "https://www.linkedin.com/psettings/data-privacy/";
@@ -168,6 +208,7 @@ export const MASCOT_LINES = {
   offerAnswered: ["Noté !", "J'adore.", "Très clair.", "Ça va m'aider.", "Bien vu."],
   later: "Pas de souci : l'étape reste ouverte, tu pourras revenir quand LinkedIn t'aura envoyé l'archive.",
   none: "Pas de souci, on passe à la suite.",
+  unknown: "Pas de souci, on verra ça ensemble.",
   conflict: "Oups, quelqu'un de ton équipe vient de modifier cette réponse. Choisis la version à garder.",
   recap: "Dernière ligne droite : relis, corrige si besoin, et envoie !",
   sent: "C'est envoyé ! Je m'occupe du reste.",

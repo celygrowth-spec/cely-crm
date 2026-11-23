@@ -1,77 +1,89 @@
 "use client";
 
-// Mascotte Cely de l'onboarding. Aucune illustration officielle n'existe dans le dépôt : ce dessin SVG est PROVISOIRE.
-// Pour la remplacer : déposer le fichier (SVG ou PNG transparent, carré) dans public/brand/ et renseigner MASCOT_SRC
-// dans src/components/portal/mascot.tsx (même réglage que la mascotte du portail). Les humeurs restent animées en CSS.
+// Cély, la mascotte officielle de Cely Growth, dans l'onboarding. Le dessin reprend à l'identique le « rig » SVG
+// du site celygrowth.com (même tracé du corps, mêmes proportions, mêmes couleurs : rose #E88BF7, prune #1A1128) ;
+// seules les poses par humeur sont choisies ici. Aucun fichier image : le SVG est construit par ce composant.
+// Les mouvements (flottement, petit saut) restent en CSS et sont coupés si l'utilisateur réduit les animations.
 import { useEffect, useState } from "react";
-import { MASCOT_SRC } from "@/components/portal/mascot";
 import "./onboarding.css";
 
 export type Mood = "idle" | "happy" | "cheer" | "think" | "wave";
 const MOOD_CLASS: Record<Mood, string> = { idle: "cob-idle", happy: "cob-happy", cheer: "cob-cheer", think: "cob-think", wave: "cob-wave" };
 
-export function Mascot({ mood = "idle", size = 96 }: { mood?: Mood; size?: number }) {
-  if (MASCOT_SRC) {
-    return (
-      <span className={`cob-mascot ${MOOD_CLASS[mood]} inline-block`} aria-hidden>
-        {/* eslint-disable-next-line @next/next/no-img-element -- visuel de marque statique */}
-        <img src={MASCOT_SRC} alt="" width={size} height={size} draggable={false} />
-      </span>
-    );
-  }
-  const smile = mood === "think" ? "M40 66 Q50 64 60 66" : mood === "cheer" || mood === "happy" ? "M37 62 Q50 76 63 62" : "M39 63 Q50 71 61 63";
+const PINK = "#E88BF7";
+const PRUNE = "#1A1128";
+const BODY = "M-30 -38C-30 -56-23.5-62-9-62H9C23.5-62 30-56 30-38V-23C30-9.5 24-4 11-4H-11C-24-4-30-9.5-30-23Z";
+/** Cadre du dessin sur le site : 132 × 112. */
+const BOX = { x: -66, y: -104, w: 132, h: 112 };
+
+/** Paramètres d'une pose (mêmes noms que sur le site) : mains gauche / droite, courbure des bras, regard, sourcils, bouche. */
+type Pose = { lx: number; ly: number; lb: number; rx: number; ry: number; rb: number; gx: number; gy: number; by: number; bt: number; mw: number; mh: number };
+const REST: Pose = { lx: -37, ly: -9, lb: 4, rx: 37, ry: -9, rb: -4, gx: 0, gy: 0, by: 0, bt: 0, mw: 1, mh: 7 };
+const POSES: Record<Mood, Pose> = {
+  idle: REST,
+  // salut du site (« wave ») : bras droit levé
+  wave: { ...REST, rx: 36, ry: -66, rb: 10, gx: 0.2, gy: 0.1, by: -2, mw: 1.1, mh: 9 },
+  happy: { ...REST, by: -2, mw: 1.1, mh: 9 },
+  // satisfaction du site (« celebrate ») : les deux bras levés
+  cheer: { ...REST, lx: -30, ly: -70, lb: -6, rx: 30, ry: -70, rb: 6, by: -3, mw: 1.15, mh: 10 },
+  think: { ...REST, gx: 0.6, gy: -0.7, by: -1.5, bt: 2, mw: 0.7, mh: 3 },
+};
+
+const f2 = (n: number) => Math.round(n * 100) / 100;
+function arm(side: -1 | 1, hx: number, hy: number, bend: number) {
+  const sx = side * 28.5, sy = -28;
+  const dx = hx - sx, dy = hy - sy, len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const cx = sx + dx / 2 + (-dy / len) * bend, cy = sy + dy / 2 + (dx / len) * bend;
+  return `M${f2(sx)} ${f2(sy)}Q${f2(cx)} ${f2(cy)} ${f2(hx)} ${f2(hy)}`;
+}
+
+export function Mascot({ mood = "idle", size = 64 }: { mood?: Mood; size?: number }) {
+  const P = POSES[mood];
+  const gl = Math.sqrt(P.gx * P.gx + P.gy * P.gy), gk = gl > 1 ? 1 / gl : 1, ox = P.gx * gk * 3.3, oy = P.gy * gk * 3.3;
+  const mw = 9.2 * P.mw, mh = Math.max(0.8, P.mh), my = -26;
+  const stroke = { stroke: PRUNE, strokeLinecap: "round" as const, fill: "none" };
   return (
-    <svg viewBox="0 0 100 100" width={size} height={size} className={`cob-mascot ${MOOD_CLASS[mood]}`} aria-hidden data-mascot={mood}>
-      <defs>
-        <radialGradient id="cely-body" cx="40%" cy="35%" r="70%">
-          <stop offset="0%" stopColor="#a78bfa" />
-          <stop offset="100%" stopColor="#6d28d9" />
-        </radialGradient>
-      </defs>
-      <g className={"cob-sprout"}>
-        <path d="M50 22 C50 14 50 10 50 8" stroke="#16a34a" strokeWidth="3" strokeLinecap="round" fill="none" />
-        <path d="M50 12 C42 4 34 8 34 12 C40 15 46 15 50 12Z" fill="#22c55e" />
-        <path d="M50 10 C58 1 67 5 67 9 C61 13 54 13 50 10Z" fill="#4ade80" />
+    <svg viewBox={`${BOX.x} ${BOX.y} ${BOX.w} ${BOX.h}`} width={size} height={Math.round((size * BOX.h) / BOX.w)} className={`cob-mascot ${MOOD_CLASS[mood]}`}
+      aria-hidden focusable="false" data-mascot={mood} style={{ overflow: "visible" }}>
+      <ellipse cx={0} cy={1.5} rx={29} ry={4.2} fill={PRUNE} fillOpacity={0.13} />
+      <path d={arm(-1, P.lx, P.ly, P.lb)} {...stroke} strokeWidth={3.4} />
+      <circle cx={P.lx} cy={P.ly} r={5.2} fill={PINK} stroke={PRUNE} strokeWidth={2.8} />
+      <g className="cob-arm">
+        <path d={arm(1, P.rx, P.ry, P.rb)} {...stroke} strokeWidth={3.4} />
+        <circle cx={P.rx} cy={P.ry} r={5.2} fill={PINK} stroke={PRUNE} strokeWidth={2.8} />
       </g>
-      <ellipse cx="50" cy="92" rx="22" ry="4" fill="#0f172a" opacity=".08" />
-      <path d="M50 20 C74 20 86 38 86 58 C86 78 70 90 50 90 C30 90 14 78 14 58 C14 38 26 20 50 20Z" fill="url(#cely-body)" />
-      <path d="M22 60 C14 62 10 70 14 74" stroke="#6d28d9" strokeWidth="6" strokeLinecap="round" fill="none" />
-      <g className={"cob-arm"}>
-        <path d={mood === "cheer" || mood === "wave" ? "M78 58 C88 50 92 40 88 34" : "M78 60 C86 62 90 70 86 74"} stroke="#6d28d9" strokeWidth="6" strokeLinecap="round" fill="none" />
+      <ellipse cx={-14} cy={-2} rx={9.5} ry={5.4} fill={PRUNE} />
+      <ellipse cx={14} cy={-2} rx={9.5} ry={5.4} fill={PRUNE} />
+      <path d={BODY} fill={PINK} stroke={PRUNE} strokeWidth={4.2} strokeLinejoin="round" />
+      <ellipse cx={-17} cy={-54.5} rx={7} ry={3.2} transform="rotate(-22 -17 -54.5)" fill="#F7D2FC" />
+      <path d={`M-18.5 ${f2(-52 + P.by)}L-6.5 ${f2(-53.5 + P.by - P.bt)}`} {...stroke} strokeWidth={4} />
+      <path d={`M6.5 ${f2(-53.5 + P.by - P.bt)}L18.5 ${f2(-52 + P.by)}`} {...stroke} strokeWidth={4} />
+      <g className="cob-eyes">
+        {[-11.5, 11.5].map((x) => (
+          <g key={x}>
+            <circle cx={x} cy={-38} r={8.9} fill="#FFFFFF" stroke={PRUNE} strokeWidth={3} />
+            <circle cx={f2(x + ox)} cy={f2(-38 + oy)} r={4.4} fill={PRUNE} />
+            <circle cx={f2(x + ox - 1.4)} cy={f2(-39.6 + oy)} r={1.3} fill="#FFFFFF" />
+          </g>
+        ))}
       </g>
-      <g className={"cob-eyes"}>
-        {mood === "cheer" ? (
-          <>
-            <path d="M33 47 Q38 41 43 47" stroke="#1e1b4b" strokeWidth="3.5" strokeLinecap="round" fill="none" />
-            <path d="M57 47 Q62 41 67 47" stroke="#1e1b4b" strokeWidth="3.5" strokeLinecap="round" fill="none" />
-          </>
-        ) : (
-          <>
-            <ellipse cx="38" cy="47" rx="5.5" ry="6.5" fill="#fff" />
-            <ellipse cx="62" cy="47" rx="5.5" ry="6.5" fill="#fff" />
-            <circle cx={mood === "think" ? 40 : 39} cy={mood === "think" ? 45 : 48} r="3" fill="#1e1b4b" />
-            <circle cx={mood === "think" ? 64 : 63} cy={mood === "think" ? 45 : 48} r="3" fill="#1e1b4b" />
-          </>
-        )}
-      </g>
-      <circle cx="29" cy="60" r="4" fill="#f9a8d4" opacity=".7" />
-      <circle cx="71" cy="60" r="4" fill="#f9a8d4" opacity=".7" />
-      <path d={smile} stroke="#1e1b4b" strokeWidth="3" strokeLinecap="round" fill={mood === "cheer" || mood === "happy" ? "#1e1b4b" : "none"} />
+      <path d={`M${f2(-mw)} ${my}Q${f2(-mw * 0.95)} ${f2(my + mh * 1.15)} 0 ${f2(my + mh)}Q${f2(mw * 0.95)} ${f2(my + mh * 1.15)} ${f2(mw)} ${my}Z`}
+        fill={PRUNE} stroke={PRUNE} strokeWidth={2} strokeLinejoin="round" />
     </svg>
   );
 }
 
-const COLORS = ["#7c3aed", "#a78bfa", "#22c55e", "#f59e0b", "#ec4899", "#38bdf8"];
-/** Petite pluie de confettis (CSS). `burst` change → nouvelle salve. Rien si l'utilisateur réduit les mouvements. */
+const COLORS = ["#682dfe", "#8b5bff", "#E88BF7", "#1f9d5c", "#e9d7ff"];
+/** Confettis (CSS), réservés à l'envoi final. `burst` change → nouvelle salve. Rien si l'utilisateur réduit les mouvements. */
 export function Confetti({ burst }: { burst: number }) {
   const [pieces, setPieces] = useState<{ x: number; y: number; r: number; d: number; c: string }[]>([]);
   useEffect(() => {
     if (!burst) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduce) return;
-    const next = Array.from({ length: 18 }, (_, i) => ({
-      x: Math.round(Math.cos((i / 18) * Math.PI * 2) * (60 + Math.random() * 90)),
-      y: Math.round(Math.sin((i / 18) * Math.PI * 2) * (40 + Math.random() * 70) - 40),
+    const next = Array.from({ length: 14 }, (_, i) => ({
+      x: Math.round(Math.cos((i / 14) * Math.PI * 2) * (60 + Math.random() * 90)),
+      y: Math.round(Math.sin((i / 14) * Math.PI * 2) * (40 + Math.random() * 70) - 40),
       r: Math.round(Math.random() * 540 - 270),
       d: Math.round(Math.random() * 120),
       c: COLORS[i % COLORS.length],
@@ -90,19 +102,15 @@ export function Confetti({ burst }: { burst: number }) {
   );
 }
 
-/** La mascotte et sa bulle. `say` change → la bulle réapparaît. */
-export function Guide({ mood, say, burst, size = 88 }: { mood: Mood; say: string; burst: number; size?: number }) {
+/** Cély et ce qu'elle dit, sur une ligne discrète. `say` change → le texte réapparaît (annoncé aux lecteurs d'écran). */
+export function Guide({ mood, say, burst, size = 56 }: { mood: Mood; say: string; burst: number; size?: number }) {
   return (
-    <div className="flex items-end gap-3" data-guide>
+    <div className="flex items-center gap-3" data-guide>
       <span className="relative shrink-0">
-        <Mascot mood={mood} size={size} key={`${mood}-${burst}`} />
+        <Mascot mood={mood} size={size} key={mood} />
         <Confetti burst={burst} />
       </span>
-      {say && (
-        <p key={say} role="status" aria-live="polite" className={`cob-bubble relative mb-6 max-w-sm rounded-2xl rounded-bl-sm bg-white px-4 py-2.5 text-[15px] leading-snug font-medium text-ink shadow-[0_6px_24px_-8px_rgba(76,29,149,.35)] ring-1 ring-violet-100`}>
-          {say}
-        </p>
-      )}
+      {say && <p key={say} role="status" aria-live="polite" className="cob-bubble max-w-md text-[15px] leading-snug text-muted">{say}</p>}
     </div>
   );
 }

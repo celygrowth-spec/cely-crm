@@ -88,7 +88,7 @@ const screenId = (p) => p.locator("[data-discovery-flow]").getAttribute("data-sc
     "[TEST] -30 % d'arrêts en 6 mois.",
   ];
   for (const a of answers) {
-    await cp.locator("[data-question] input, [data-question] textarea").first().fill(a);
+    await cp.locator("[data-question] [data-answer]").fill(a);
     await cp.keyboard.press("Enter");
     await cp.waitForTimeout(350);
   }
@@ -97,13 +97,13 @@ const screenId = (p) => p.locator("[data-discovery-flow]").getAttribute("data-sc
   log("   écran avant interruption :", await screenId(cp), "· réponses en base :", (await one(`select count(*)::int n from discovery_answers where project_id = $1`, [pid])).n);
 
   // 3. Interruption : on ferme l'onglet au milieu d'une saisie (brouillon local), puis reprise
-  await cp.locator("[data-question] textarea").fill("[TEST] Brouillon tapé juste avant la coupure");
+  await cp.locator("[data-question] [data-answer]").fill("[TEST] Brouillon tapé juste avant la coupure");
   await cp.close();
   cp = watch(await cctx.newPage(), "claire");
   await cp.goto(`${APP}/portail/p/${pid}/onboarding`, { waitUntil: "networkidle" });
-  log("3. reprise sur :", await screenId(cp), "· brouillon retrouvé :", await cp.locator("[data-question] textarea").inputValue());
+  log("3. reprise sur :", await screenId(cp), "· brouillon retrouvé :", await cp.locator("[data-question] [data-answer]").inputValue());
   for (const a of ["[TEST] Un DAF d'ETI agroalimentaire, choisi pour notre réactivité.", "[TEST] Concurrent X ; nous, on s'engage sur les résultats.", "", "[TEST] Ne jamais promettre de délai ; pas de tutoiement."]) {
-    await cp.locator("[data-question] input, [data-question] textarea").first().fill(a);
+    await cp.locator("[data-question] [data-answer]").fill(a);
     await cp.keyboard.press("Enter");
     await cp.waitForTimeout(400);
   }
@@ -173,10 +173,10 @@ const screenId = (p) => p.locator("[data-discovery-flow]").getAttribute("data-sc
   await cp.locator('[data-question="offer_pitch"]').waitFor();
   await mp.locator("[data-review]").click(); await mp.waitForTimeout(300);
   await mp.locator('[data-recap="offer:0"] button', { hasText: "Corriger" }).click();
-  await mp.locator('[data-question="offer_pitch"] input').fill("[TEST] Version de Marc : maintenance prédictive pour PME.");
+  await mp.locator('[data-question="offer_pitch"] [data-answer]').fill("[TEST] Version de Marc : maintenance prédictive pour PME.");
   await mp.locator("[data-ok]").click(); await mp.waitForTimeout(600);
   await shot(mp, "mobile-2-question.png");
-  await cp.locator('[data-question="offer_pitch"] input').fill("[TEST] Version de Claire, écrite en même temps.");
+  await cp.locator('[data-question="offer_pitch"] [data-answer]').fill("[TEST] Version de Claire, écrite en même temps.");
   await cp.keyboard.press("Enter");
   await cp.locator("[data-conflict]").waitFor({ timeout: 10000 });
   await shot(cp, "client-8-conflit.png");

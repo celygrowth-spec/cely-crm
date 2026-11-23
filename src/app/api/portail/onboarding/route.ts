@@ -9,13 +9,14 @@ import { env } from "@/lib/env";
 import { PortalError, portalRpc } from "@/lib/projects/portal";
 import { portalFailure, reply, sameOrigin } from "@/lib/projects/portal-http";
 import { mimeFromName } from "@/lib/discovery/files";
+import { WEBSITE_ERROR, WEBSITE_KEY, normalizeWebsite } from "@/lib/discovery/website";
 
 const BUCKET = "company-files";
 const id = z.uuid();
 const body = z.discriminatedUnion("op", [
   z.object({ op: z.literal("get"), project: id }),
   z.object({ op: z.literal("position"), project: id, screen: z.string().regex(/^[a-z0-9_:.-]{1,60}$/) }),
-  z.object({ op: z.literal("answer"), project: id, key: z.string().regex(/^[a-z0-9_]{1,60}$/), value: z.string().max(5000), rev: z.number().int().min(0) }),
+  z.object({ op: z.literal("answer"), project: id, key: z.string().regex(/^[a-z0-9_]{1,60}$/), value: z.string().max(5000), rev: z.number().int().min(0), unknown: z.boolean().optional() }),
   z.object({ op: z.literal("step"), project: id, step: z.string().max(20), status: z.enum(["done", "none", "later"]).nullable() }),
   z.object({ op: z.literal("file_start"), project: id, step: z.enum(["blacklist", "linkedin", "documents"]), name: z.string().trim().min(1).max(255), size: z.number().int().positive(), account: z.string().trim().max(120).nullable() }),
   z.object({ op: z.literal("file_resume"), file: id }),
@@ -49,7 +50,16 @@ export async function POST(req: NextRequest) {
         await portalRpc("portal_discovery_position", { p_project: b.project, p_screen: b.screen });
         return reply({ ok: true });
       case "answer":
-        return reply(await portalRpc("portal_discovery_answer", { p_project: b.project, p_key: b.key, p_value: b.value, p_base_rev: b.rev }));
+      {
+        let value = b.value;
+        if (b.key === WEBSITE_KEY) {
+          // lien du site : remis au propre ici (« exemple.fr » → « https://exemple.fr »), revérifié en base
+          const site = normalizeWebsite(b.value);
+          if (site === null) return reply({ error: WEBSITE_ERROR }, 400);
+          value = site;
+        }
+        return reply(await portalRpc("portal_discovery_answer", { p_project: b.project, p_key: b.key, p_value: value, p_base_rev: b.rev, p_unknown: b.unknown ?? false }));
+      }
       case "step":
         return reply(await portalRpc("portal_discovery_step", { p_project: b.project, p_step: b.step, p_status: b.status }));
       case "file_start": {

@@ -115,28 +115,28 @@ export function UploadBox({ api, projectId, step, files, account, multiple, onCh
         onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
         onDragLeave={() => setDrag(false)}
         onDrop={(e) => { e.preventDefault(); setDrag(false); add(e.dataTransfer.files); }}
-        className={`rounded-2xl border-2 border-dashed px-4 py-6 text-center transition-colors ${drag ? "border-violet-500 bg-violet-50" : "border-violet-200 bg-white/70"}`}
+        className={`rounded-lg border border-dashed px-4 py-6 text-center transition-colors ${drag ? "border-violet bg-violet-soft" : "border-line bg-surface"}`}
       >
         <input ref={input} type="file" className="sr-only" accept={rules.accept} multiple={multiple} onChange={(e) => add(e.target.files)} disabled={disabled} data-upload-input />
-        <button type="button" disabled={disabled} onClick={() => input.current?.click()} className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-base font-bold text-white shadow-sm hover:bg-violet-700 disabled:opacity-50">
-          <Upload size={18} aria-hidden /> {multiple ? "Choisir des fichiers" : "Choisir le fichier"}
+        <button type="button" disabled={disabled} onClick={() => input.current?.click()} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line bg-white px-4 text-sm font-semibold text-ink hover:border-violet disabled:opacity-50">
+          <Upload size={16} aria-hidden /> {multiple ? "Choisir des fichiers" : "Choisir le fichier"}
         </button>
         <p className="mt-2 text-sm text-muted"><span className="hidden sm:inline">ou glisse-le ici · </span>{rules.label}</p>
       </div>
-      {error && <p className="flex items-start gap-2 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800" role="alert"><AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden /> {error}</p>}
+      {error && <p className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800" role="alert"><AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden /> {error}</p>}
 
       {jobs.map((j) => {
         const pct = j.file.size ? Math.min(100, Math.round((j.sent / j.file.size) * 100)) : 0;
         return (
-          <div key={j.key} className="rounded-xl bg-white p-3 shadow-sm ring-1 ring-violet-100" data-upload-job={j.state}>
+          <div key={j.key} className="rounded-lg border border-line bg-white p-3" data-upload-job={j.state}>
             <div className="flex items-center gap-2 text-sm">
-              <FileArchive size={16} className="shrink-0 text-violet-600" aria-hidden />
+              <FileArchive size={16} className="shrink-0 text-muted" aria-hidden />
               <span className="min-w-0 flex-1 truncate font-semibold">{j.account ? `${j.account} · ` : ""}{j.file.name}</span>
               <span className="shrink-0 text-xs text-muted tabular-nums">{formatBytes(j.sent)} / {formatBytes(j.file.size)}</span>
               {j.state !== "done" && <button type="button" onClick={() => cancel(j)} className="rounded p-1 text-muted hover:bg-surface" aria-label="Annuler l'envoi"><X size={14} /></button>}
             </div>
-            <div className="mt-2 h-2 overflow-hidden rounded-full bg-violet-100" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Envoi de ${j.file.name}`}>
-              <div className={`cob-progress h-full rounded-full ${j.state === "failed" ? "bg-red-400" : j.state === "retrying" ? "bg-amber-400" : j.state === "done" ? "bg-emerald-500" : "bg-violet-600"}`} style={{ width: `${pct}%` }} />
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Envoi de ${j.file.name}`}>
+              <div className={`cob-progress h-full rounded-full ${j.state === "failed" ? "bg-red-400" : j.state === "retrying" ? "bg-amber-400" : j.state === "done" ? "bg-success" : "bg-violet-strong"}`} style={{ width: `${pct}%` }} />
             </div>
             <p className="mt-1.5 text-xs text-muted" aria-live="polite">
               {j.state === "uploading" && <>{pct} % · garde cette page ouverte</>}
@@ -157,10 +157,10 @@ export function UploadBox({ api, projectId, step, files, account, multiple, onCh
       })}
 
       {files.length > 0 && (
-        <ul className="space-y-1.5" data-upload-files>
+        <ul className="divide-y divide-line border-y border-line" data-upload-files>
           {files.map((f) => (
-            <li key={f.id} className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm">
-              <CheckCircle2 size={16} className="shrink-0 text-emerald-600" aria-hidden />
+            <li key={f.id} className="flex items-center gap-2 py-2 text-sm">
+              <CheckCircle2 size={16} className="shrink-0 text-success" aria-hidden />
               <button type="button" onClick={() => download(f)} className="min-w-0 flex-1 truncate text-left font-semibold hover:underline" title="Télécharger">
                 {f.account ? `${f.account} · ` : ""}{f.name}
               </button>

@@ -29,10 +29,25 @@ coupure, reprise exacte par contact. Deux contacts en même temps : une réponse
 
 ## Contenus à modifier sans toucher à la logique
 `src/lib/discovery/content.ts` : questions (`OFFER_QUESTIONS`), tutos lemlist et LinkedIn (étapes marquées
-`review: true` = à relire), textes de la mascotte, déroulé des 28 jours, prénom affiché (« Envoyer à Célien »).
-Captures des tutos : déposer les images dans `public/onboarding/` et renseigner `image` sur l'étape.
-**Mascotte** : aucune illustration dans le dépôt, dessin SVG provisoire. Déposer le fichier dans `public/brand/` et
-renseigner `MASCOT_SRC` dans `src/components/portal/mascot.tsx` (le portail et l'onboarding l'utilisent).
+`review: true` = à relire), textes de la mascotte, déroulé des 28 jours, prénom affiché (« Envoyer à Célien »),
+libellés de « Je ne sais pas » (`UNKNOWN`) et du lien du site (`WEBSITE_FIELD`).
+Captures des tutos : déposer les images dans `public/onboarding/` et renseigner `image` sur l'étape ; sans image,
+l'emplacement affiche la légende `capture` (la capture exacte à faire). Les 4 captures lemlist viennent du centre
+d'aide officiel de lemlist (adresse dans `source`, vérifiées le 22/11/2026).
+**Mascotte** : Cély, la mascotte du site celygrowth.com, redessinée à l'identique en SVG dans
+`src/components/discovery/mascot.tsx` (même tracé, mêmes couleurs ; poses par humeur). La mascotte de la timeline
+du portail (`MASCOT_SRC`, `src/components/portal/mascot.tsx`) reste désactivée : elle attend un fichier image.
+
+## « Je ne sais pas » et lien du site
+- Sous chaque question, la case **Je ne sais pas** : cochée, le client passe à la suite sans répondre. Une question
+  obligatoire laissée vide sans la case demande l'un ou l'autre (« Plus tard » reste possible). S'il répond ensuite,
+  la case se décoche (dans l'écran, et en base : une réponse saisie l'emporte toujours).
+- Côté CRM, ces questions ressortent en tête du panneau, bloc **À compléter avec le client**, et portent un badge
+  dans la liste des réponses. Le connecteur Claude renvoie `a_completer_avec_le_client` et `je_ne_sais_pas`.
+- Question 4 : champ facultatif **Lien de votre site (si vous en avez un)**. « exemple.fr » devient
+  « https://exemple.fr » ; un lien invalide est refusé (navigateur, route, base). Le lien est recopié sur la fiche
+  (site web) si elle n'en a pas, ou si son site venait déjà de l'onboarding ; un site que j'ai saisi n'est jamais
+  écrasé (le panneau l'indique). L'historique de la fiche note « Site web renseigné par le client ».
 
 ## Fichiers lourds
 - Limites par étape, contrôlées en base : blacklist 50 Mo (CSV, Excel, TXT), archive LinkedIn 1 Go (ZIP),
@@ -53,7 +68,12 @@ téléchargements par liens de 60 s. Aucun contenu de fichier ni réponse n'est 
 Aucune variable d'environnement nouvelle (le portail utilise déjà `APPOINTMENTS_SECRET`, `SUPABASE_URL`,
 `SUPABASE_PUBLISHABLE_KEY`).
 
-## Migration
+## Migrations
+`20261128090000_onboarding_je_ne_sais_pas.sql` (additive, après `20261127100500`) : colonne
+`discovery_answers.unknown` (fausse par défaut : les réponses déjà enregistrées restent valides), paramètre
+`p_unknown` facultatif sur `portal_discovery_answer`, lien du site recopié sur la fiche, site de la fiche dans
+`discovery_admin`. À appliquer avant de déployer l'application (l'ancienne application fonctionne avec).
+
 `20261123150000_onboarding_offre_decouverte.sql` (additive, après `20261122001000`). Elle relève aussi la limite de
 `company_files.size_bytes` et du bucket `company-files` à 1 Gio ; les autres circuits gardent leurs 25 Mo
 (fonctions du portail, application).
@@ -64,4 +84,6 @@ APPOINTMENTS_SECRET=<secret de test> npm run test-env
 ```
 puis `node tests/e2e/onboarding-decouverte-crm.cjs` et
 `APPOINTMENTS_SECRET=<le même> node tests/e2e/onboarding-decouverte-client.cjs`.
-Tests base : `npx vitest run tests/db/onboarding-decouverte.test.ts`.
+« Je ne sais pas », lien du site, captures lemlist, double clic, mobile, vue CRM :
+`APPOINTMENTS_SECRET=<le même> node tests/e2e/onboarding-je-ne-sais-pas.cjs`.
+Tests base : `npx vitest run tests/db/onboarding-decouverte.test.ts tests/db/onboarding-je-ne-sais-pas.test.ts`.
