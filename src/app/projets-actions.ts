@@ -7,7 +7,7 @@ import { z } from "zod";
 import { run } from "@/lib/action";
 import { CrmError } from "@/lib/crm/service";
 import { appUrl } from "@/lib/appointments/config";
-import { codeHash, generateCode } from "@/lib/projects/portal-auth";
+import { previewInvitation, sendInvitation, type InvitationKind, type SendInvitationInput } from "@/lib/projects/invitations";
 import { companyPeople } from "@/lib/projects/owner";
 import { meetingCreateSchema, type meetingPatchSchema, type MeetingCreateInput, type MilestoneInput, type PhaseInput, type ProjectCreateInput, type ProjectPatch, type RecapInput, type TaskPatch } from "@/lib/projects/schemas";
 import * as svc from "@/lib/projects/service";
@@ -55,17 +55,17 @@ export async function removeMemberAction(projectId: string, personId: string) {
   });
 }
 
+/** Aperçu exact du mail d'invitation (ou de réinitialisation) ; le lien affiché est factice. */
+export async function invitationPreviewAction(kind: InvitationKind, personId: string, projectId: string) {
+  return run(async (sb) => previewInvitation(sb, v(z.enum(["invitation", "reset"]), kind), personId, projectId, await origin()));
+}
+
 /**
- * Génère (ou régénère) le code d'accès d'une personne. Le code n'est renvoyé qu'ici, une seule fois :
- * la base n'en garde que l'empreinte. Régénérer invalide l'ancien code et ferme les sessions ouvertes.
+ * Envoie l'invitation : le vrai lien est créé ici. Renvoyer invalide la précédente. En cas d'échec de l'envoi,
+ * l'invitation créée est invalidée et l'erreur est remontée (rien n'est présenté comme envoyé).
  */
-export async function issueAccessAction(personId: string, expiresAt: string | null) {
-  return run(async (sb) => {
-    const exp = expiresAt ? v(z.iso.datetime({ offset: true }), expiresAt) : null;
-    const { code, hint } = generateCode();
-    await rpc(sb, "portal_access_issue", { p_person: idv(personId), p_code_hash: codeHash(code), p_code_hint: hint, p_expires_at: exp });
-    return { code, url: `${await origin()}/portail` };
-  });
+export async function sendInvitationAction(input: SendInvitationInput) {
+  return run(async (sb) => sendInvitation(sb, input, await origin()));
 }
 
 export async function setAccessExpiryAction(personId: string, expiresAt: string | null) {
