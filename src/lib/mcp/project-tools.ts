@@ -1,13 +1,37 @@
 // Outils MCP des espaces client (module Projets). Mêmes opérations que l'application (lib/projects/service).
 // Tout ce qui devient visible du client, tout retrait et toute suppression demandent confirmed_by_user=true :
 // sans lui, rien n'est écrit et la réponse le dit. C'est une consigne suivie par Claude, pas un verrou.
-// Restent dans l'application : générer un code d'accès (il apparaîtrait dans la conversation), effacer
-// définitivement un fichier, créer, reporter ou annuler un rendez-vous (Google Agenda, module Rendez-vous).
+// Restent dans l'application : envoyer une invitation au portail (aperçu puis envoi par mail ; la base refuse
+// l'envoi de mail par Claude), effacer définitivement un fichier, créer, reporter ou annuler un rendez-vous.
+// Claude lit l'état de l'accès de chaque contact (invitation envoyée, compte activé…), jamais un code ni un lien.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { CrmError, friendlyError } from "@/lib/crm/service";
 import { startUpload } from "@/lib/crm/files";
 import { getProject, linkableBookings, listProjects, projectMeetings, projectMembers, projectPlanning, projectTasks, taskDetail } from "@/lib/projects/owner";
+import { accessStatus, type Member } from "@/lib/projects/types";
+
+/** Contact d'un projet tel que Claude le voit : état de l'accès, sans aucune empreinte, code ni lien. */
+function contactForMcp(m: Member) {
+  const st = accessStatus(m, Date.now());
+  const a = m.access;
+  return {
+    person_id: m.person_id, first_name: m.first_name, last_name: m.last_name, email: m.email,
+    acces: {
+      etat: st.key,
+      libelle: st.date ? `${st.label} le ${st.date.slice(0, 10)}` : st.label,
+      invitation_envoyee_le: m.invitation?.sent_at ?? null,
+      invitation_expire_le: m.invitation && !m.invitation.used_at && !m.invitation.invalidated_at ? m.invitation.expires_at : null,
+      compte_active_le: a?.activated_at ?? null,
+      mot_de_passe_oublie_demande_le: a?.reset_requested_at ?? null,
+      ancien_code_actif: !!(a && !a.revoked_at && a.code_hint),
+      expire_le: a?.expires_at ?? null,
+      revoque_le: a?.revoked_at ?? null,
+      derniere_connexion: a?.last_used_at ?? null,
+      envoi_a_faire_dans_l_application: st.action === "reset" ? "lien de réinitialisation" : st.action === "invitation" ? "invitation" : null,
+    },
+  };
+}
 import * as svc from "@/lib/projects/service";
 import { discoveryForMcp } from "@/lib/discovery/mcp";
 import { DATA_NOTE, once, requestId, text, uuid, waiting } from "./helpers";
@@ -93,7 +117,7 @@ export function registerProjectTools(tool: RegisterTool) {
       return text(
         {
           projet: project,
-          contacts: members,
+          contacts: members.map(contactForMcp),
           planning,
           points: meetings,
           taches: tasks,
@@ -164,7 +188,7 @@ export function registerProjectTools(tool: RegisterTool) {
     "create_project",
     {
       title: "Créer un espace client",
-      description: "Crée un espace client sur une fiche existante, avec les contacts choisis (identifiants de get_company). Il reste invisible du client tant qu'il n'est pas publié avec update_project. Aucun code d'accès n'est généré.",
+      description: "Crée un espace client sur une fiche existante, avec les contacts choisis (identifiants de get_company). Il reste invisible du client tant qu'il n'est pas publié avec update_project. Aucune invitation n'est envoyée : elle s'envoie depuis l'application (Accès client).",
       inputSchema: z.object({
         company_id: uuid,
         name: z.string().min(1).max(160),
@@ -216,13 +240,14 @@ export function registerProjectTools(tool: RegisterTool) {
     "add_project_member",
     {
       title: "Ajouter un contact à un espace client",
-      description: "Ajoute un contact de la même fiche. Sur un projet publié, un contact qui a déjà un code voit aussitôt le projet : confirmed_by_user=true est demandé. Le code d'accès se génère dans l'application.",
+      description: "Ajoute un contact de la même fiche. Sur un projet publié, un contact qui a déjà un accès (compte activé ou ancien code) voit aussitôt le projet : confirmed_by_user=true est demandé. Renvoie l'état de son accès ; une invitation éventuelle s'envoie depuis l'application (aperçu puis envoi).",
       inputSchema: z.object({ project_id: uuid, person_id: uuid, confirmed_by_user }),
     },
     async ({ project_id, person_id, confirmed_by_user: ok }, sb) => {
-      if (!ok && (await published(sb, project_id))) return waiting("Ce contact pourra voir ce projet publié dès qu'il a un code d'accès.");
+      if (!ok && (await published(sb, project_id))) return waiting("Ce contact verra ce projet publié dès qu'il a un accès au portail.");
       await svc.addMember(sb, project_id, person_id);
-      return text({ resultat: "contact ajouté au projet" });
+      const m = (await projectMembers(sb, project_id)).find((x) => x.person_id === person_id);
+      return text({ resultat: "contact ajouté au projet", acces: m ? contactForMcp(m).acces : null });
     },
   );
 
@@ -259,11 +284,11 @@ export function registerProjectTools(tool: RegisterTool) {
     "revoke_portal_access",
     {
       title: "Révoquer un accès",
-      description: "Coupe l'accès d'un contact à tous ses projets et ferme ses sessions. Seul un nouveau code, généré dans l'application, le rétablit. Demande confirmed_by_user=true.",
+      description: "Coupe l'accès d'un contact à tous ses projets, ferme ses sessions et annule son invitation en attente. Seule une nouvelle invitation, envoyée depuis l'application, le rétablit. Demande confirmed_by_user=true.",
       inputSchema: z.object({ person_id: uuid, confirmed_by_user }),
     },
     async ({ person_id, confirmed_by_user: ok }, sb) => {
-      if (!ok) return waiting("Ce contact ne pourra plus rien voir sur aucun de ses projets ; seul un nouveau code rétablit l'accès.");
+      if (!ok) return waiting("Ce contact ne pourra plus rien voir sur aucun de ses projets ; seule une nouvelle invitation, envoyée depuis l'application, rétablit l'accès.");
       await svc.revokeAccess(sb, person_id);
       return text({ resultat: "accès révoqué" });
     },

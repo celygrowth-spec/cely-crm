@@ -46,11 +46,30 @@ export type Project = {
 export type PortalAccess = {
   id: string;
   person_id: string;
-  code_hint: string;
+  /** Ancien code d'accès (4 derniers caractères) ; `null` quand il n'y en a pas ou qu'il a été désactivé. */
+  code_hint: string | null;
   code_generated_at: string;
   expires_at: string | null;
   revoked_at: string | null;
   last_used_at: string | null;
+  /** Compte créé par le contact (mot de passe choisi par lui). */
+  activated_at: string | null;
+  /** « Mot de passe oublié » demandé depuis le portail, pas encore traité. */
+  reset_requested_at: string | null;
+};
+
+/** Dernière invitation (ou lien de réinitialisation) envoyée à un contact. Le jeton n'est jamais lisible. */
+export type PortalInvitation = {
+  id: string;
+  person_id: string;
+  kind: "invitation" | "reset";
+  email: string;
+  created_at: string;
+  expires_at: string;
+  sent_at: string | null;
+  used_at: string | null;
+  invalidated_at: string | null;
+  invalidated_reason: "resent" | "revoked" | "email_changed" | "send_failed" | "activated" | null;
 };
 
 export type Member = {
@@ -59,7 +78,32 @@ export type Member = {
   last_name: string | null;
   email: string | null;
   access: PortalAccess | null;
+  invitation: PortalInvitation | null;
 };
+
+export type AccessStatusKey = "none" | "invited" | "invitation_expired" | "invitation_cancelled" | "activated" | "legacy_code" | "revoked" | "expired";
+
+/**
+ * État de l'accès d'un contact, tel que l'écran Accès client et le connecteur Claude le présentent.
+ * `action` : envoi proposé (« invitation » ou lien de réinitialisation), ou `null` quand il n'y en a pas.
+ */
+export function accessStatus(m: Pick<Member, "access" | "invitation">, now: number): {
+  key: AccessStatusKey; label: string; tone: "neutral" | "success" | "warning" | "danger" | "violet"; date: string | null; action: "invitation" | "reset" | null;
+} {
+  const a = m.access;
+  const inv = m.invitation?.kind === "invitation" ? m.invitation : null;
+  if (a?.revoked_at) return { key: "revoked", label: "Révoqué", tone: "danger", date: a.revoked_at, action: "invitation" };
+  if (a?.expires_at && Date.parse(a.expires_at) <= now) return { key: "expired", label: "Accès expiré", tone: "warning", date: a.expires_at, action: null };
+  if (a?.activated_at) return { key: "activated", label: "Compte activé", tone: "success", date: a.activated_at, action: a.reset_requested_at ? "reset" : null };
+  if (inv && !inv.used_at && !inv.invalidated_at && inv.sent_at) {
+    return Date.parse(inv.expires_at) <= now
+      ? { key: "invitation_expired", label: "Invitation expirée", tone: "warning", date: inv.expires_at, action: "invitation" }
+      : { key: "invited", label: "Invitation envoyée", tone: "violet", date: inv.sent_at, action: "invitation" };
+  }
+  if (inv?.invalidated_reason === "email_changed") return { key: "invitation_cancelled", label: "Email modifié : invitation annulée", tone: "warning", date: inv.invalidated_at, action: "invitation" };
+  if (a?.code_hint) return { key: "legacy_code", label: "Ancien code d'accès", tone: "neutral", date: a.code_generated_at, action: "invitation" };
+  return { key: "none", label: "Aucun accès", tone: "neutral", date: null, action: "invitation" };
+}
 
 /** Ce que reçoit le portail (aucun champ interne). */
 export type PortalProject = {
