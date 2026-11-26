@@ -31,3 +31,15 @@ Les migrations sont appliquées **à la main dans le SQL Editor de Supabase**, u
 La CLI considérera toutes les migrations comme non appliquées. Avant le premier `db push`, marquez-les appliquées
 sans les exécuter : `supabase migration repair --status applied <version>` pour chaque version déjà présente en
 production (la liste est celle des fichiers jusqu'à la dernière migration appliquée à la main).
+
+## Ouverture du connecteur Claude (26/11/2026)
+- `20261129090000_onboarding_ensure_reparation.sql` : recrée `onboarding_ensure` (introuvable par l'API en
+  production), remet ses droits et termine par `notify pgrst, 'reload schema'`. Rejouable sans risque.
+- `20261129100000_mcp_ouverture.sql` : onboarding de l'offre découverte en écriture (origine de chaque valeur, voir
+  `docs/onboarding-offre-decouverte.md`) et lecture des appels et emails d'une fiche (`company_calls`,
+  `company_call_transcript`, `company_mail_list`, `company_mail_thread`). `discovery_target_save` change de signature
+  (anciens paramètres conservés, deux nouveaux facultatifs) : l'ancienne fonction est supprimée dans la même migration
+  pour ne pas laisser deux variantes que l'API ne saurait pas départager.
+- **Après toute migration appliquée dans le SQL Editor qui crée ou modifie une fonction**, exécutez
+  `notify pgrst, 'reload schema';` : sans cela, l'API peut répondre « Could not find the function … in the schema
+  cache » alors que la fonction existe.

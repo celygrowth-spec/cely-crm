@@ -79,11 +79,11 @@ describe("réglage « Offre découverte »", () => {
     expect((await db.query(`select * from discovery_answers`)).rows).toEqual([]);
   });
 
-  test("seule l'application coche la case ; un inconnu, anon ou Claude ne peuvent pas", async () => {
+  test("seul le propriétaire coche la case (application ou connecteur Claude, depuis 20261129100000) ; ni un inconnu, ni anon", async () => {
     await db.as("stranger");
     expect(await err(db.rpc("discovery_set_enabled", { p_project: pid, p_enabled: true }))).toBe("42501");
     await db.as("claude");
-    expect(await err(db.rpc("discovery_set_enabled", { p_project: pid, p_enabled: true }))).toBe("42501");
+    expect(await db.rpc("discovery_set_enabled", { p_project: pid, p_enabled: true })).toEqual({ enabled: true });
     await db.as("anon");
     expect(await err(db.rpc("discovery_set_enabled", { p_project: pid, p_enabled: true }))).not.toBeNull();
     await db.as("anon");
@@ -202,7 +202,7 @@ describe("envoi", () => {
 describe("cibles", () => {
   beforeEach(() => enable());
 
-  test("préparation par moi : tout peut rester vide, enregistrer sans changement ne touche à rien ; Claude et anon ne préparent pas", async () => {
+  test("préparation par moi : tout peut rester vide, enregistrer sans changement ne touche à rien ; Claude prépare aussi (connecteur), anon jamais", async () => {
     await db.as("owner");
     expect(await db.rpc("discovery_target_save", { p_project: pid, p_position: 3, p_data: JSON.stringify({ name: "", notes: "" }) })).toMatchObject({ changed: false, rev: 1 });
     expect(await db.rpc("discovery_target_save", { p_project: pid, p_position: 3, p_data: JSON.stringify({ name: "  Agences  ", roles: "Fondateurs" }) })).toMatchObject({ changed: true, rev: 2, validation_dropped: false });
@@ -210,7 +210,7 @@ describe("cibles", () => {
     expect(await err(db.rpc("discovery_target_save", { p_project: pid, p_position: 4, p_data: "{}" }))).toBe("22023");
     expect(await err(db.rpc("discovery_target_save", { p_project: pid, p_position: 1, p_data: JSON.stringify({ name: "x".repeat(121) }) }))).not.toBeNull();
     await db.as("claude");
-    expect(await err(db.rpc("discovery_target_save", { p_project: pid, p_position: 1, p_data: JSON.stringify({ name: "Claude" }) }))).toBe("42501");
+    expect(await db.rpc("discovery_target_save", { p_project: pid, p_position: 1, p_data: JSON.stringify({ name: "Claude" }), p_origin: "claude", p_overwrite: false })).toMatchObject({ changed: true, origin: "claude" });
     await db.as("anon");
     expect(await err(db.rpc("discovery_target_save", { p_project: pid, p_position: 1, p_data: JSON.stringify({ name: "Anon" }) }))).not.toBeNull();
   });

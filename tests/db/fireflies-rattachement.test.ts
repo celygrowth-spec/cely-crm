@@ -463,12 +463,12 @@ describe("historique des appels", () => {
     const { rows } = await db.query<{ proname: string }>(`
       select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.prosrc ilike '%fireflies%' and p.proname not like 'fireflies\\_%' and p.proname not like 'onboarding\\_%' and p.proname not like 'generator\\_%'
-         and p.proname not in ('merge_preview', 'nav_counters', 'tg_people_rematch_calls')`);
+         and p.proname not in ('merge_preview', 'nav_counters', 'tg_people_rematch_calls', 'company_calls', 'company_call_transcript')`);
     expect(rows).toEqual([]);
-    // la préparation des projets, les générateurs (proposition, onboarding), l'aperçu de fusion et le compteur du menu (comptes) lisent les appels, mais ne sont ouverts qu'au propriétaire connecté
+    // la préparation des projets, les générateurs (proposition, onboarding), l'aperçu de fusion, le compteur du menu (comptes) et la lecture des appels d'une fiche par le connecteur (company_calls, company_call_transcript) lisent les appels, mais ne sont ouverts qu'au propriétaire connecté
     const open = await db.query(`
       select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-       where n.nspname = 'public' and (p.proname like 'onboarding\\_%' or p.proname like 'generator\\_%' or p.proname in ('merge_preview', 'nav_counters', 'tg_people_rematch_calls')) and p.prosrc ilike '%fireflies%' and has_function_privilege('anon', p.oid, 'execute')`);
+       where n.nspname = 'public' and (p.proname like 'onboarding\\_%' or p.proname like 'generator\\_%' or p.proname in ('merge_preview', 'nav_counters', 'tg_people_rematch_calls', 'company_calls', 'company_call_transcript')) and p.prosrc ilike '%fireflies%' and has_function_privilege('anon', p.oid, 'execute')`);
     expect(open.rows).toEqual([]);
   });
 

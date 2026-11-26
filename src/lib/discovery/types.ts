@@ -45,6 +45,14 @@ export type DiscoveryAdmin =
       company_id?: string | null;
       company_website?: string | null;
       sent_task_id: string | null;
+      /** Qui a marqué l'envoi, et origine de chaque valeur : client (portail), owner (moi) ou claude (proposition). */
+      sent_origin?: "client" | "owner" | "claude" | null;
+      origins?: {
+        answers: Record<string, "client" | "owner" | "claude">;
+        steps: Record<string, "client" | "owner" | "claude">;
+        files: Record<string, "client" | "owner" | "claude">;
+        targets: Record<string, TargetField[]>;
+      };
       changes: DiscoveryChange[];
       contacts: { id: string; name: string | null; position: string | null; seen_at: string | null }[];
     });
