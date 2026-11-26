@@ -42,6 +42,37 @@ export const saveDiscoveryTarget = (sb: SupabaseClient, projectId: string, posit
     p_project: uuid.parse(projectId), p_position: z.number().int().min(1).max(3).parse(position), p_data: targetSchema.parse(data),
   });
 
+// Écritures du propriétaire ouvertes au connecteur Claude ----------------------------------------------------
+// origin : « owner » (valeur dictée par moi) ou « claude » (proposition de Claude). overwrite = false : une valeur
+// saisie par le client ou par moi n'est pas remplacée ; la fonction renvoie alors la valeur en place (status kept).
+
+export type Origin = "client" | "owner" | "claude";
+export type OwnerOrigin = "owner" | "claude";
+type Current = { value?: string; unknown?: boolean; status?: string; origin: Origin; by: string | null; at: string };
+export type SaveResult = { status: "saved" | "unchanged" | "kept"; origin?: Origin; current?: Current; replaced?: Current | null; fiche?: string | null };
+export type TargetField = { field: string; current?: string; before?: string; origin: Origin };
+export type TargetResult = { rev: number; changed: boolean; validation_dropped?: boolean; kept?: TargetField[]; replaced?: TargetField[] };
+
+export const saveDiscoveryAnswer = (sb: SupabaseClient, projectId: string, a: { key: string; value: string; unknown?: boolean }, origin: OwnerOrigin, overwrite: boolean) =>
+  rpc<SaveResult>(sb, "discovery_answer_save", { p_project: uuid.parse(projectId), p_key: a.key, p_value: a.value, p_unknown: a.unknown ?? false, p_origin: origin, p_overwrite: overwrite });
+
+export const saveDiscoveryStep = (sb: SupabaseClient, projectId: string, step: string, status: "done" | "none" | "later" | null, origin: OwnerOrigin, overwrite: boolean) =>
+  rpc<SaveResult>(sb, "discovery_step_save", { p_project: uuid.parse(projectId), p_step: step, p_status: status, p_origin: origin, p_overwrite: overwrite });
+
+export const markDiscoverySent = (sb: SupabaseClient, projectId: string, sent: boolean, origin: OwnerOrigin) =>
+  rpc<{ status: "saved" | "unchanged"; sent_at?: string | null; sent_origin?: Origin; sent_by?: string | null }>(sb, "discovery_mark_sent", { p_project: uuid.parse(projectId), p_sent: sent, p_origin: origin });
+
+export const saveDiscoveryTargetGuarded = (sb: SupabaseClient, projectId: string, position: number, data: unknown, origin: OwnerOrigin, overwrite: boolean) =>
+  rpc<TargetResult>(sb, "discovery_target_save", {
+    p_project: uuid.parse(projectId), p_position: z.number().int().min(1).max(3).parse(position), p_data: targetSchema.parse(data), p_origin: origin, p_overwrite: overwrite,
+  });
+
+export const attachDiscoveryFile = (sb: SupabaseClient, projectId: string, step: string, fileId: string, account: string | null, origin: OwnerOrigin) =>
+  rpc<{ status: "saved" | "unchanged"; id: string; name?: string }>(sb, "discovery_file_attach", { p_project: uuid.parse(projectId), p_step: step, p_file: uuid.parse(fileId), p_account: account, p_origin: origin });
+
+export const detachDiscoveryFile = (sb: SupabaseClient, discoveryFileId: string) =>
+  rpc<{ status: "saved"; name: string | null }>(sb, "discovery_file_detach", { p_id: uuid.parse(discoveryFileId) });
+
 /** Lien de téléchargement court d'un dépôt d'onboarding (le chemin de stockage ne quitte jamais le serveur). */
 export async function discoveryFileUrl(sb: SupabaseClient, projectId: string, discoveryFileId: string) {
   const { data, error } = await sb.from("discovery_files").select("file:company_files!inner(storage_path, display_name, status)")

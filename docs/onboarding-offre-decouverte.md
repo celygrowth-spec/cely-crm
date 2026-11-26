@@ -19,7 +19,8 @@ tout ce qu'il faut pour lancer le test ; tout arrive rangé dans le CRM.
   même au double clic), une action par commentaire du client sur une cible, et une seule action « Onboarding modifié
   après envoi » ouverte à la fois. L'historique de la fiche note « Onboarding offre découverte reçu ».
 - **Connecteur Claude** : `get_project` renvoie `onboarding_offre_decouverte` (état, réponses, noms des fichiers,
-  cibles, commentaires, changements), en lecture seule ; ni lien ni chemin de fichier.
+  cibles, commentaires, changements) avec l'**origine** de chaque valeur ; ni lien ni chemin de fichier.
+  Claude peut aussi écrire à ma place (voir « Écritures par le connecteur Claude » plus bas).
 
 ## Côté client (portail)
 Onglet **Onboarding** (si la case est cochée) → page plein écran : bienvenue, 7 questions, lemlist, blacklist,
@@ -50,6 +51,23 @@ du portail (`MASCOT_SRC`, `src/components/portal/mascot.tsx`) reste désactivée
   (site web) si elle n'en a pas, ou si son site venait déjà de l'onboarding ; un site que j'ai saisi n'est jamais
   écrasé (le panneau l'indique). L'historique de la fiche note « Site web renseigné par le client ».
 
+## Écritures par le connecteur Claude
+Outils (`src/lib/mcp/discovery-tools.ts`) : `set_discovery_enabled`, `save_discovery_answers` (réponses, « je ne sais
+pas », lien du site), `save_discovery_targets`, `set_discovery_steps` (offer, lemlist, blacklist, linkedin, documents,
+targets, recap), `start_discovery_file_upload` + `confirm_discovery_file_upload` (25 Mo au plus), `remove_discovery_file`,
+`save_discovery_settings`.
+- **Origine** de chaque valeur, posée en base : `client` (portail), `owner` (dictée par moi) ou `claude` (proposition).
+  Colonnes `origin` (réponses, étapes, fichiers), `claude_filled` (champs d'une cible), `sent_origin` (envoi).
+  Le client ne voit jamais ces origines ; s'il corrige une valeur, elle redevient la sienne.
+- **Jamais d'écrasement silencieux** : une valeur saisie par le client ou par moi est conservée et renvoyée à Claude ;
+  elle n'est remplacée qu'avec `overwrite=true`, et la valeur remplacée est renvoyée.
+- **Accord** : dès que l'offre est cochée et le projet publié, toute écriture demande `confirmed_by_user=true` ;
+  sans lui, rien n'est écrit et l'outil décrit l'effet de chaque valeur. `recap` (marquer l'onboarding envoyé sans le
+  clic du client) le demande toujours ; un envoi fait par le client ne s'annule pas.
+- **Journal** : chaque écriture de Claude arrive dans `activity_log` (table, ligne, origine). Aucun message n'est envoyé.
+- Les fichiers déposés par Claude vont dans le dossier interne du projet, comme ceux du client ; ceux du client ne se
+  retirent pas par le connecteur. Aucun outil ne télécharge un fichier d'onboarding (données personnelles).
+
 ## Fichiers lourds
 - Limites par étape, contrôlées en base : blacklist 50 Mo (CSV, Excel, TXT), archive LinkedIn 1 Go (ZIP),
   documents 100 Mo. Type déduit de l'extension par le serveur.
@@ -70,6 +88,11 @@ Aucune variable d'environnement nouvelle (le portail utilise déjà `APPOINTMENT
 `SUPABASE_PUBLISHABLE_KEY`).
 
 ## Migrations
+`20261129100000_mcp_ouverture.sql` (additive, après `20261129090000`) : origines, fonctions `discovery_answer_save`,
+`discovery_step_save`, `discovery_mark_sent`, `discovery_file_attach`, `discovery_file_detach`, ouverture à Claude de
+`discovery_set_enabled`, `discovery_settings_save` et `discovery_target_save` (deux paramètres facultatifs de plus),
+`origins` dans `discovery_admin`. À appliquer avant de déployer (l'application actuelle fonctionne avec).
+
 `20261128090000_onboarding_je_ne_sais_pas.sql` (additive, après `20261127100500`) : colonne
 `discovery_answers.unknown` (fausse par défaut : les réponses déjà enregistrées restent valides), paramètre
 `p_unknown` facultatif sur `portal_discovery_answer`, lien du site recopié sur la fiche, site de la fiche dans
