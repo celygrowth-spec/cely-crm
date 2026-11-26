@@ -438,6 +438,13 @@ function OfferQuestion({ index, view, project, readOnly, conflict, onSubmit, onR
   const [needed, setNeeded] = useState(false);
   const [example, setExample] = useState(false);
   const ref = useRef<HTMLTextAreaElement & HTMLInputElement>(null);
+  // champ d'une ligne : hauteur ajustée au texte (réponse préremplie longue lue en entier)
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || q.multiline) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
+  }, [value, q.multiline]);
   useEffect(() => { if (!isTouch()) ref.current?.focus(); }, []);
   // version adoptée après un conflit : le champ suit la réponse retenue
   const [seenRev, setSeenRev] = useState(saved?.rev ?? 0);
@@ -499,8 +506,9 @@ function OfferQuestion({ index, view, project, readOnly, conflict, onSubmit, onR
           <textarea id={`q-${q.key}`} ref={ref} value={value} rows={4} maxLength={5000} disabled={readOnly} onChange={(e) => onChange(e.target.value)} onKeyDown={onKey}
             placeholder={unknown ? "" : q.placeholder} aria-describedby={needed ? `need-${q.key}` : undefined} className={`${FIELD} min-h-32 resize-y`} data-answer />
         ) : (
-          <input id={`q-${q.key}`} type="text" ref={ref} value={value} maxLength={5000} disabled={readOnly} onChange={(e) => onChange(e.target.value)} onKeyDown={onKey}
-            placeholder={unknown ? "" : q.placeholder} aria-describedby={needed ? `need-${q.key}` : undefined} className={FIELD} enterKeyHint="next" data-answer />
+          // une ligne qui s'agrandit avec le texte : une réponse préremplie se lit en entier (Entrée valide toujours)
+          <textarea id={`q-${q.key}`} ref={ref} value={value} rows={1} maxLength={5000} disabled={readOnly} onChange={(e) => onChange(e.target.value)} onKeyDown={onKey}
+            placeholder={unknown ? "" : q.placeholder} aria-describedby={needed ? `need-${q.key}` : undefined} className={`${FIELD} resize-none overflow-hidden`} enterKeyHint="next" data-answer />
         )}
         {q.example && (
           <p className="text-sm text-muted">
