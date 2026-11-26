@@ -31,19 +31,33 @@ vérifiées en base (fonctions `portal_*`), pas seulement masquées dans l'inter
 Archivage : statut « Archivé » ; choisir *lecture seule* (le client consulte encore) ou *accès fermé*.
 L'historique est conservé.
 
-## Générer, régénérer, révoquer un accès
+## Inviter un contact, révoquer un accès
 
-1. Projet › **Accès client** › **Générer un accès** à côté du contact (expiration facultative).
-2. Copier le **lien** (`https://…/portail`) et le **code** (ou « Copier un message prêt à envoyer »).
-   Le code n'est affiché **qu'une fois** ; idéalement, transmettre lien et code par deux canaux.
-3. Le contact ouvre le lien, saisit son code, et voit **tous les projets publiés dont il est membre**.
+1. Projet › **Accès client** › **Prévisualisation du mail** à côté du contact : aperçu exact (destinataire =
+   email de la fiche, expéditeur = boîte Gmail connectée, objet, corps, lien factice), expiration facultative.
+2. **Envoyer** : le vrai lien est créé à ce moment et part par le module Mail (historique de la fiche).
+3. Le contact ouvre le lien : page **Créer mon accès**, identifiant (son email) prérempli et verrouillé, il
+   choisit son mot de passe et arrive sur **tous les projets publiés dont il est membre**.
+4. Ensuite : connexion par email et mot de passe sur `/portail`.
 
-- **Régénérer** : l'ancien code cesse immédiatement de fonctionner, ses sessions sont fermées.
-- **Révoquer** : plus aucune lecture ni écriture, sur tous ses projets, dès la requête suivante.
+- États : **Invitation envoyée le …** (Renvoyer l'invitation), **Invitation expirée**, **Compte activé le …**,
+  **Email modifié : invitation annulée**, **Ancien code d'accès**, **Révoqué**, **Accès expiré**.
+- Lien : usage unique, 7 jours. **Renvoyer** annule le lien précédent. Changer l'email de la fiche annule
+  l'invitation en attente. Un échec d'envoi annule l'invitation créée : rien n'est affiché comme envoyé.
+- Un contact = un compte, quel que soit le nombre de projets : ajouter un contact déjà activé à un autre projet
+  suffit. Un même email ne peut pas être l'identifiant de deux fiches personnes.
+- **Mot de passe oublié** (portail) : réponse identique que l'email existe ou non. La demande apparaît dans
+  *Accès client* (« Mot de passe oublié demandé le … ») : **Envoyer le lien de réinitialisation** (aperçu puis
+  envoi, lien valable 24 heures). Le CRM n'envoie pas de mail sans votre session (règle du module Mail).
+- **Anciens codes** : ils restent valables jusqu'à l'activation d'un compte par invitation, puis sont désactivés
+  et leurs sessions fermées. *Envoyer l'invitation* les fait passer au nouveau fonctionnement ; rien n'est
+  envoyé automatiquement. Sur la page de connexion : « J'ai reçu un code d'accès ».
+- **Révoquer** : plus aucune lecture ni écriture, sur tous ses projets, dès la requête suivante ; l'invitation
+  en attente est annulée. Une nouvelle invitation recrée l'accès (ni l'ancien code ni l'ancien mot de passe).
 - **Retirer du projet** : il perd l'accès à ce projet uniquement.
-- La liste indique l'état (actif, expiré, révoqué), les 4 derniers caractères du code et la dernière connexion.
+- Vous ne voyez jamais le mot de passe du contact ; il n'est jamais envoyé par mail.
 
-Aucun email n'est envoyé automatiquement (voir « Intégrations »).
+Aucun email n'est envoyé automatiquement : chaque invitation part après votre aperçu (voir « Intégrations »).
 
 ## Partager un point, un récapitulatif, un fichier
 
@@ -77,7 +91,7 @@ Aucun email n'est envoyé automatiquement (voir « Intégrations »).
   repère « En cours · phase » (une phase peut se poursuivre après sa fin prévue : dépassement hachuré).
   La liste chronologique reste affichée sous la frise.
 - **Aperçu** : *Prévisualiser le portail* montre la vue d'ensemble telle qu'un contact la voit (mêmes
-  fonctions de visibilité). Cela ne remplace pas un essai avec un vrai code.
+  fonctions de visibilité). Cela ne remplace pas un essai avec un vrai compte.
 
 ## Depuis Claude (connecteur MCP)
 
@@ -87,7 +101,7 @@ journalisée dans `activity_log`, rattachée à la fiche.
 
 | Sans accord | Après votre accord (`confirmed_by_user`) | Dans l'application uniquement |
 | --- | --- | --- |
-| Lire : `list_projects`, `get_project`, `get_project_task`, `preview_client_portal`, `list_linkable_bookings`, `get_project_file_url` | Publier, dépublier, archiver ; modifier ce que le client voit d'un projet publié (`update_project`) | Générer ou régénérer un code d'accès : il apparaîtrait dans la conversation |
+| Lire : `list_projects`, `get_project`, `get_project_task`, `preview_client_portal`, `list_linkable_bookings`, `get_project_file_url` | Publier, dépublier, archiver ; modifier ce que le client voit d'un projet publié (`update_project`) | Envoyer une invitation ou un lien de réinitialisation (la base refuse l'envoi de mail par Claude) ; `get_project` donne l'état de l'accès de chaque contact |
 | `create_project` (non publié) ; note interne et blocage (`update_project`) | Contacts d'un projet publié ; retirer un contact ; expiration et révocation d'un accès | Effacer définitivement un fichier |
 | Tâches, jalons, points, dossiers, fichiers **internes** ; planning et idées d'un projet **non publié** ; brouillon de récapitulatif (`save_meeting_recap`) ; envoi d'un fichier dans un dossier interne | Rendre visible : tâche, jalon, point, dossier, fichier ; publier un récapitulatif ; `task_from_recap` ; idées, commentaires et planning d'un projet publié | Créer, reporter, annuler un rendez-vous, réconcilier Google (Claude ne fait que rattacher un rendez-vous existant) |
 | | Supprimer : tâche, phase, jalon, dossier (documents déplacés) ; détacher un point (récapitulatif effacé) ; retirer un fichier du projet | Supprimer un projet (n'existe pas : archivage) |
@@ -107,8 +121,16 @@ journalisée dans `activity_log`, rattachée à la fiche.
   fonctions `portal_*` avec la clé publique, la **clé serveur** dérivée de `APPOINTMENTS_SECRET`
   (empreinte enregistrée en base, comme pour la réservation publique) et l'empreinte du jeton de session.
   Chaque fonction revérifie session, accès, appartenance au projet, publication et archivage.
-- **Code** : 20 caractères aléatoires (alphabet Crockford, ~100 bits). Seul un HMAC poivré est stocké.
-  Saisi dans le corps d'une requête POST : jamais dans l'URL, les journaux ou le stockage du navigateur.
+- **Invitation** : jeton aléatoire de 256 bits, seul son HMAC poivré est stocké ; usage unique, 7 jours
+  (24 heures pour une réinitialisation). Il est placé dans le **fragment** du lien (`/portail/activer#…`) :
+  le navigateur ne l'envoie jamais au serveur dans l'URL, la page l'efface de la barre d'adresse et le
+  transmet dans le corps d'une requête POST. L'identifiant affiché vient de l'invitation, lu en base.
+- **Mot de passe** : 12 caractères minimum, une lettre et un chiffre. Empreinte scrypt (N=16384, r=8, p=1,
+  sel aléatoire) calculée par le serveur Next ; la base ne reçoit que l'empreinte, illisible par l'API.
+  Connexion : 8 échecs par adresse IP et 8 par compte en 15 minutes ; même réponse et même calcul pour
+  un email inconnu. Mot de passe oublié : 5 demandes par adresse IP et par heure.
+- **Ancien code** : 20 caractères aléatoires (alphabet Crockford, ~100 bits). Seul un HMAC poivré est stocké.
+  Désactivé à l'activation d'un compte.
 - **Session** : jeton de 256 bits en cookie `httpOnly`, `SameSite=Lax`, `Secure` en HTTPS, 30 jours
   maximum (borné par l'expiration de l'accès) ; seule son empreinte est en base. Écritures : même origine
   exigée. Tentatives : 8 échecs par adresse IP en 15 minutes (empreinte de l'IP seulement).
@@ -131,6 +153,7 @@ journalisée dans `activity_log`, rattachée à la fiche.
 | `20261107000500_projets_idees.sql` | idées, commentaires, idée → tâche |
 | `20261107000600_projets_dossiers_points.sql` | dossiers partagés / internes, dépôt par dossier, déplacements confirmés, « Mes prochains points » |
 | `20261110000200_mcp_espaces_client.sql` | ouverture des espaces client au connecteur Claude, journal de ses écritures |
+| `20261130100000_portail_invitations.sql` | invitations par mail, compte par mot de passe, mot de passe oublié (additive : codes existants conservés) |
 
 Toutes sont additives. Elles ajoutent des colonnes à des tables existantes : `company_files`
 (`uploaded_by_*`), `appt_bookings` (`google_drift*`), `appt_google_connection` (jeton de synchronisation).
@@ -155,9 +178,10 @@ répond « service indisponible ».
   à valider sur le vrai compte.
 - **Fichiers** : module existant réutilisé (table `company_files`, bucket `company-files`, envoi direct
   navigateur → Storage, vérification de l'objet, nettoyage des transferts abandonnés).
-- **Mail** : non utilisé. Le portail fonctionne sans email ; aucun envoi parallèle n'a été créé.
-  Raccordement possible plus tard (à faire avec `sendMail`, session du propriétaire) : envoi du lien
-  d'accès depuis *Accès client* ; notifications (nouveau récapitulatif, tâche attribuée). En attente.
+- **Mail** : invitations et liens de réinitialisation envoyés par `sendMail` (session du propriétaire, boîte
+  Gmail connectée, clé de déduplication par invitation, historique de la fiche). Le lien pointe vers
+  `APP_URL` (sinon l'adresse de la requête). Le nettoyage HTML du module Mail ne garde pas de styles : le
+  « bouton » d'activation est un lien en gras. Notifications (récapitulatif, tâche attribuée) : en attente.
 - **Mascotte** : aucun visuel dans le dépôt (et le site celygrowth.com n'est pas joignable depuis
   l'environnement de développement). Tout est prêt : position près de la phase en cours, arrivée animée,
   petit saut quand une étape vient d'être terminée, animations coupées si l'utilisateur réduit les
