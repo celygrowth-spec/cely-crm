@@ -43,3 +43,17 @@ production (la liste est celle des fichiers jusqu'à la dernière migration appl
 - **Après toute migration appliquée dans le SQL Editor qui crée ou modifie une fonction**, exécutez
   `notify pgrst, 'reload schema';` : sans cela, l'API peut répondre « Could not find the function … in the schema
   cache » alors que la fonction existe.
+
+## Rattrapage de la préparation de projet (26/11/2026)
+- **Constat** : la production avait reçu la première version du module (`20261112000100_projet_onboarding`, fondée
+  sur `deal_closings`). Le fichier a ensuite été réécrit et renommé `20261114000100` (fondé sur les ventes) sans être
+  rejoué en base. Les migrations suivantes s'appliquaient sans erreur, mais tout ce qui lit
+  `project_onboarding.sale_id` échouait à l'exécution.
+- `20261129110000_projet_onboarding_rattrapage.sql` amène cette base à l'état du dépôt : colonne `sale_id` (remplie
+  d'après les ventes), vue `project_onboarding_status` recréée (et `sales_overview`, qui la lit, à l'identique),
+  déclencheur `sales_onboarding`, `onboarding_prepare` et `onboarding_prep_failed` redéfinies, ancien circuit
+  (`project_win_deal`, `tg_deal_closing_reopen`) retiré. `deal_closings` et `closing_id` sont conservés, inutilisés.
+  Sans effet sur une base déjà à jour. Test : `tests/db/projet-onboarding-rattrapage.test.ts`, qui reconstruit l'état
+  de la production à partir de `tests/db/fixtures/projet_onboarding_ancienne_version.sql`.
+- **Règle** : une migration déjà appliquée en production ne se réécrit jamais. Toute correction passe par une
+  nouvelle migration, sinon la base et le dépôt divergent sans qu'aucune erreur ne le signale.
